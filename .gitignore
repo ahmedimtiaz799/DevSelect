@@ -1,0 +1,39 @@
+# ─── Python virtual environment ──────────────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+
+# ─── Environment variables (NEVER commit these) ──────────────────────────────
+.env
+.env.local
+.env.production
+
+# ─── Python compiled files ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# ─── Distribution / packaging ────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+
+# ─── Testing ─────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ─── IDEs ────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── OS files ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Uploaded files (CVs from recruiters) ───────────
+uploads/
