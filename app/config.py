@@ -1,0 +1,35 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    """
+    All application configuration loaded from environment variables.
+    
+    pydantic-settings reads these automatically from the .env file.
+    If any required variable is missing, the app will fail at startup
+    with a clear error message not silently at runtime.
+    """
+      
+    SUPABASE_URL: str
+    SUPABASE_ANON_KEY: str
+    SUPABASE_SERVICE_ROLE_KEY: str
+    SUPABASE_JWT_SECRET: str
+
+    DATABASE_URL: str
+
+    GEMINI_API_KEY: str
+    LLAMAPARSE_API_KEY: str
+    HUGGINGFACE_API_TOKEN: str
+
+    GITHUB_TOKEN: str
+
+    UPSTASH_REDIS_REST_URL: str
+    UPSTASH_REDIS_REST_TOKEN: str
+
+    SENTRY_DSN: str | None = None
+
+    FRONTEND_URL: str
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+
+settings = Settings()
