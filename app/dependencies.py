@@ -1,19 +1,48 @@
-from fastapi import HTTPException, status, Security
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends,HTTPException,status
+from fastapi.security import HTTPBearer,HTTPAuthorizationCredentials
+from jose import ExpiredSignatureError,JWTError,jwt
 
-bearer_scheme = HTTPBearer(auto_error=False)
+from app.config import settings
 
-async def verify_jwt_token(
-        credentials: HTTPAuthorizationCredentials | None = Security(bearer_scheme)
-) -> dict:
+bearer_scheme= HTTPBearer(auto_error=False)
+
+async def verify_token(
+        credentials: HTTPAuthorizationCredentials |None = Depends(bearer_scheme),
+)->str:
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header missing. Please include Authorization header with Bearer token.",
+            detail="Authorization header missing",
             headers={"WWW-Authenticate":"Bearer"},
         )
+    token=credentials.credentials
 
-  
-    raise NotImplementedError(
-        "Jwt Verification is not implemented yet."
-    )
+    try:
+        payload=jwt.decode(
+            token,
+            settings.SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            options={"verify_aud":False}
+        )
+
+    except ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+            headers={"WWW-Authenticate":"Bearer"},
+        )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate":"Bearer"},
+        )
+    user_id:str|None=payload.get("sub")
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate":"Bearer"},
+        )
+    return user_id
+
