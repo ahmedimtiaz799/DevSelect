@@ -1,0 +1,111 @@
+from fastapi import APIRouter,UploadFile,File,Form,Depends,HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel,HttpUrl
+from typing import Optional
+from uuid import uuid4
+
+from app.config import settings
+from app.agents.graph import build_graph
+from app.dependencies import verify_token
+
+router=APIRouter(prefix="/api/chat",tags=["evaluation"])
+
+class ResumeRequest(BaseModel):
+    thread_id:str
+    selected_profile:Optional[HttpUrl]=None
+
+@router.post("/{chat_id}/upload")
+async def upload_cv(
+    chat_id:str,
+    file:UploadFile=File(...),
+    thread_id:Optional[str]=Form(None),
+    user_id:str=Depends(verify_token),
+):
+    if file.size and file.size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File should be less than 10Mb.")
+    
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Invalid file type.")
+    
+    magic=await file.read(4)
+    if magic != b"%PDF":
+        raise HTTPException(status_code=400, detail="Invalid file type.")
+    
+    await file.seek(0)
+
+    original_name=file.filename or "upload.pdf"
+    safe_name = "".join(
+        c for c in original_name
+        if c.isalnum() or c in ("-", "_", ".")
+    )
+    safe_name = safe_name[:100]
+    if not safe_name:
+        safe_name = "upload.pdf"
+
+    pdf_bytes=await file.read()
+    thread_id=thread_id or str(uuid4())
+
+    initial_state={
+        "pdf_bytes":pdf_bytes,
+        "thread_id":thread_id,
+        "raw_cv_text":"",
+        "candidate":None,
+        "github_analysis":None,
+        "report":None,
+        "error":None
+    }
+
+    graph=await build_graph()
+    result=await graph.ainvoke(
+        initial_state,
+        config={"configurable":{"thread_id":thread_id}}
+    )
+
+    interrupt_payload=result.get("__interrupt__",[{}])[0]
+    if hasattr(interrupt_payload,"value"):
+        interrupt_payload=interrupt_payload.value
+
+    scenario=interrupt_payload.get("scenario")
+
+    if scenario=="MULTIPLE_FOUND":
+        return JSONResponse(
+            status_code=202,
+            content={
+                "thread_id":thread_id,
+                "profiles":interrupt_payload.get("profiles",[]),
+            },
+        )
+    
+    return JSONResponse(
+        status_code=200,
+        content={
+            "thread_id":thread_id,
+            "status":"ready_to_stream",
+            "resume_payload":interrupt_payload,
+        },
+    )
+
+@router.post("/{chat_id}/resume")
+async def resume_evaluation(
+    chat_id:str,
+    body:ResumeRequest,
+    user_id:str=Depends(verify_token),
+):
+    resume_payload={
+        "github_url":str(body.selected_profile),
+        "scenario":"ACCESSIBLE",
+    }
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "thread_id":body.thread_id,
+            "status":"ready_to_stream",
+            "resume_payload":resume_payload,
+        },
+    )
+
+
+    
+
+    
