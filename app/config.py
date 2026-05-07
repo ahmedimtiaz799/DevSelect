@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     UPSTASH_REDIS_REST_URL: str
     UPSTASH_REDIS_REST_TOKEN: str
+    ADMIN_SECRET: str
 
     SENTRY_DSN: str | None = None
 
