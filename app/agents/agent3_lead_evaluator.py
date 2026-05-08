@@ -1,22 +1,31 @@
+import logging
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage,HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.agents.state import DevSelectState
+from app.config import settings
 from app.prompts.agent3_prompt import AGENT3_SYSTEM_PROMPT
 
-async def agent_3_lead_evaluator(state:DevSelectState)->dict:
-    candidate=state.get("candidate")
-    github=state.get("github_analysis")
-    error=state.get("error")
+logger = logging.getLogger("devselect")
 
-    llm=ChatGoogleGenerativeAI(
+
+async def agent_3_lead_evaluator(state: DevSelectState) -> dict:
+    thread_id = state.get("thread_id", "unknown")
+    candidate = state.get("candidate")
+    github = state.get("github_analysis")
+    error = state.get("error")
+
+    logger.info(f"Agent 3 generating report for thread {thread_id}")
+
+    llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-pro",
+        google_api_key=settings.GEMINI_API_KEY,
         temperature=0.2,
         streaming=True,
     )
 
-    candidate_section=_format_candidate(candidate)
-    github_section=_format_github(github)
+    candidate_section = _format_candidate(candidate)
+    github_section = _format_github(github)
 
     user_message = f"""
 Please evaluate the following candidate and generate a structured hiring report.
@@ -28,23 +37,29 @@ Please evaluate the following candidate and generate a structured hiring report.
 {github_section}
 """
 
-    messages=[
+    messages = [
         SystemMessage(content=AGENT3_SYSTEM_PROMPT),
         HumanMessage(content=user_message),
     ]
 
-    report_text=""
-    async for chunk in llm.astream(messages):
-        if chunk.content:
-            report_text+=chunk.content
+    report_text = ""
+    try:
+        async for chunk in llm.astream(messages):
+            if chunk.content:
+                report_text += chunk.content
+    except Exception as e:
+        logger.error(f"Gemini call failed: {e}")
+        raise
 
-    return{
-        "report":report_text,
-        "error":error,
+    logger.info(f"Agent 3 completed report for thread {thread_id}")
+
+    return {
+        "report": report_text,
+        "error": error,
     }
 
 
-def _format_candidate(candidate)->str:
+def _format_candidate(candidate) -> str:
     if not candidate:
         return "Candidate extraction failed because no data is available in CV."
 
@@ -67,11 +82,11 @@ Summary:
 """.strip()
 
 
-def _format_github(github)->str:
+def _format_github(github) -> str:
     if not github:
         return "Github analysis was not performed."
 
-    scenario=github.scenario
+    scenario = github.scenario
 
     if scenario == "NOT_FOUND":
         return "GitHub Not Found. No GitHub link was present in the CV."
@@ -104,7 +119,7 @@ Raw Analysis Notes:
 """.strip()
 
 
-def _format_experience(work_experience)->str:
+def _format_experience(work_experience) -> str:
     if not work_experience:
         return "Work experience is not found in CV."
 
@@ -117,7 +132,7 @@ def _format_experience(work_experience)->str:
     return "\n".join(lines)
 
 
-def _format_repos(repositories)->str:
+def _format_repos(repositories) -> str:
     if not repositories:
         return "Repository data is not available."
 
@@ -129,9 +144,3 @@ def _format_repos(repositories)->str:
             f"Description: {repo.description or 'None'}"
         )
     return "\n".join(lines)
-        
-        
-
-
-
-
