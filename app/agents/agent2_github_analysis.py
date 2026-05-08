@@ -18,7 +18,7 @@ from app.models.candidate import GitHubAnalysis
 from app.prompts.agent2_prompt import AGENT2_PROMPT
 from app.utils.json_parser import parse_llm_json
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("devselect")
 
 GITHUB_GRAPHQL_QUERY = """
 query FetchDeveloperProfile($login: String!) {
@@ -242,7 +242,7 @@ def _pre_score_profile(raw_data: dict) -> dict:
 async def _analyse_with_gemini(raw_github_data: dict, cv_skills: list[str]) -> str:
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
-        google_api_key=settings.GOOGLE_API_KEY,
+        google_api_key=settings.GEMINI_API_KEY,
         temperature=0.2,
         timeout=30,
         max_retries=0,
