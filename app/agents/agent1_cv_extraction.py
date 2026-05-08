@@ -20,7 +20,7 @@ from app.models.candidate import CandidateExtraction
 from app.prompts.agent1_prompt import AGENT1_PROMPT
 from app.utils.json_parser import parse_llm_json
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("devselect")
 
 
 class LlamaParseTimeoutError(Exception):
