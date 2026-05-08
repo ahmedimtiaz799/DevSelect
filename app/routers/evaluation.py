@@ -199,9 +199,10 @@ async def stream_evaluation(
         raise HTTPException(status_code=404, detail="No evaluation checkpoint found. Run /upload first.")
 
     state = snapshot.values
+    candidate = state.get("candidate")
     meta = {
-        "candidate_name": state.get("candidate_name", "Unknown Candidate"),
-        "role": state.get("role", "Unknown Role"),
+        "candidate_name": candidate.full_name if candidate else "Unknown Candidate",
+        "role": candidate.role if candidate else "Unknown Role",
     }
 
     return StreamingResponse(
@@ -212,10 +213,6 @@ async def stream_evaluation(
             "X-Accel-Buffering": "no",
         },
     )
-
-
-    
-
 
 
 
