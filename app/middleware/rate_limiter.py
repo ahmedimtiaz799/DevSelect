@@ -14,6 +14,8 @@ logger = logging.getLogger("devselect")
 BUCKET_CAPACITY = 10
 REFILL_RATE = 1 / 6
 
+_http_client = httpx.AsyncClient(timeout=5.0)
+
 RATE_LIMIT_LUA = """
 local key         = KEYS[1]
 local now         = tonumber(ARGV[1])
@@ -49,21 +51,14 @@ end
 
 
 async def _run_lua_on_upstash(key: str, now: float) -> tuple[str, int]:
-    url = f"{settings.UPSTASH_REDIS_REST_URL}/eval"
-
-    payload = {
-        "script": RATE_LIMIT_LUA,
-        "keys": [key],
-        "args": [str(now), str(BUCKET_CAPACITY), str(REFILL_RATE)],
-    }
-
+    url = settings.UPSTASH_REDIS_REST_URL
+    payload = ["EVAL", RATE_LIMIT_LUA, 1, key, str(now), str(BUCKET_CAPACITY), str(REFILL_RATE)]
     headers = {
         "Authorization": f"Bearer {settings.UPSTASH_REDIS_REST_TOKEN}",
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=2.0) as client:
-        response = await client.post(url, json=payload, headers=headers)
+    response = await _http_client.post(url, json=payload, headers=headers)
 
     if response.status_code != 200:
         logger.error(f"Upstash Redis unreachable : status={response.status_code}. Failing open.")
@@ -86,17 +81,14 @@ def _extract_user_id_from_header(request: Request) -> str | None:
         payload_segment = token.split(".")[1]
         padding = 4 - len(payload_segment) % 4
         payload_segment += "=" * padding
-
         payload = json.loads(base64.urlsafe_b64decode(payload_segment))
         return payload.get("sub")
-
     except Exception:
         return None
 
 
 class RateLimiterMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-
         if not request.url.path.startswith("/api/chat"):
             return await call_next(request)
 
@@ -132,12 +124,3 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Limit"] = str(BUCKET_CAPACITY)
         response.headers["X-RateLimit-Remaining"] = str(value)
         return response
-
-
-        
-
-
-
-
-
-
