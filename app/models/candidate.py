@@ -1,6 +1,7 @@
 from enum import Enum
 from pydantic import BaseModel, field_validator
 
+
 class GitHubScenario(str, Enum):
     NOT_FOUND = "NOT_FOUND"
     COULD_NOT_BE_ACCESSED = "COULD_NOT_BE_ACCESSED"
@@ -8,49 +9,73 @@ class GitHubScenario(str, Enum):
     MULTIPLE_FOUND = "MULTIPLE_FOUND"
     ACCESSIBLE = "ACCESSIBLE"
 
-class CandidateExtraction(BaseModel):
-    name: str | None
-    role: str
-    seniority: str
-    skills: list[str]
-    github_links: list[str]
-    experience_years: float | None
 
-    @field_validator("seniority")
-    @classmethod
-    def validate_seniority(cls, v: str) -> str:
-        allowed = {"Junior", "Mid Level", "Senior", "Managerial"}
-        normalized = v.strip().title()
-        if normalized not in allowed:
-            raise ValueError(f"Seniority must be one of {allowed}, got '{v}'")
-        return normalized
-    
-    @field_validator("skills", "github_links")
+class WorkExperience(BaseModel):
+    title: str | None = None
+    company: str | None = None
+    duration: str | None = None
+    description: str | None = None
+
+
+class Education(BaseModel):
+    degree: str | None = None
+    institution: str | None = None
+    year: int | None = None
+
+
+class CandidateExtraction(BaseModel):
+    full_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    location: str | None = None
+    years_of_experience: float | None = None
+    current_title: str | None = None
+    summary: str | None = None
+    skills: list[str] = []
+    languages: list[str] = []
+    frameworks: list[str] = []
+    education: list[Education] = []
+    work_experience: list[WorkExperience] = []
+    github_urls: list[str] = []
+    github_url: str | None = None
+    linkedin_url: str | None = None
+    certifications: list[str] = []
+
+    @field_validator("skills", "languages", "frameworks", "certifications")
     @classmethod
     def lists_must_not_be_empty_strings(cls, v: list[str]) -> list[str]:
         return [item.strip() for item in v if item.strip()]
 
+
 class GitHubAnalysis(BaseModel):
     scenario: GitHubScenario
-    selected_url: str | None
-    original_repo_count: int
-    commit_frequency_score: int
-    language_match_score: int
-    readme_quality_score: int
-    complexity_score: int
-    code_quality_score: int
-    recency_score: int
-    commit_message_quality: int
-    summary: str
+    summary: str = ""
+    overall_score: int = 0
+    original_repo_score: int = 0
+    commit_frequency_score: int = 0
+    commit_message_score: int = 0
+    language_relevance_score: int = 0
+    readme_quality_score: int = 0
+    project_complexity_score: int = 0
+    recency_score: int = 0
+    community_score: int = 0
+    strengths: list[str] = []
+    red_flags: list[str] = []
+    top_repos: list[str] = []
+    language_breakdown: dict[str, float] = {}
+    total_commits: int = 0
+    active_days_per_month: float = 0.0
 
     @field_validator(
+        "overall_score",
+        "original_repo_score",
         "commit_frequency_score",
-        "language_match_score",
+        "commit_message_score",
+        "language_relevance_score",
         "readme_quality_score",
-        "complexity_score",
-        "code_quality_score",
+        "project_complexity_score",
         "recency_score",
-        "commit_message_quality",
+        "community_score",
     )
     @classmethod
     def score_must_be_0_to_10(cls, v: int) -> int:
