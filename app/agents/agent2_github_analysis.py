@@ -241,16 +241,20 @@ def _pre_score_profile(raw_data: dict) -> dict:
 )
 async def _analyse_with_gemini(raw_github_data: dict, cv_skills: list[str]) -> str:
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         google_api_key=settings.GEMINI_API_KEY,
         temperature=0.2,
         timeout=30,
         max_retries=0,
     )
 
-    prompt = AGENT2_PROMPT.format(
-        cv_skills=", ".join(cv_skills) if cv_skills else "Not specified",
-        github_data=json.dumps(raw_github_data, indent=2, default=str),
+    cv_skills_str = ", ".join(cv_skills) if cv_skills else "Not specified"
+    github_data_str = json.dumps(raw_github_data, indent=2, default=str)
+
+    prompt = (
+        AGENT2_PROMPT
+        .replace("{cv_skills}", cv_skills_str)
+        .replace("{github_data}", github_data_str)
     )
 
     try:

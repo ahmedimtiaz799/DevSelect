@@ -23,7 +23,7 @@ from app.utils.json_parser import parse_llm_json
 logger = logging.getLogger("devselect")
 
 
-class LlamaParseTimeoutError(Exception):
+class LlamaParseTransientError(Exception):
     pass
 
 
@@ -34,7 +34,7 @@ class GeminiTransientError(Exception):
 @retry(
     stop=stop_after_attempt(2),
     wait=wait_exponential(multiplier=1, min=2, max=8),
-    retry=retry_if_exception_type(Exception),
+    retry=retry_if_exception_type(LlamaParseTransientError),
     reraise=True,
 )
 async def _parse_pdf_with_llamaparse(pdf_bytes: bytes) -> str:
@@ -70,7 +70,7 @@ async def _parse_pdf_with_llamaparse(pdf_bytes: bytes) -> str:
         raise
     except Exception as e:
         logger.error(f"LlamaParse error: {e}")
-        raise
+        raise LlamaParseTransientError(f"LlamaParse transient error: {e}")
 
 
 @retry(
@@ -81,7 +81,7 @@ async def _parse_pdf_with_llamaparse(pdf_bytes: bytes) -> str:
 )
 async def _extract_with_gemini(markdown_text: str) -> str:
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         google_api_key=settings.GEMINI_API_KEY,
         temperature=0.2,
         timeout=30,
@@ -176,14 +176,9 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
     github_urls: list[str] = candidate.github_urls or []
     github_urls = [u for u in github_urls if "github.com" in u.lower()]
 
-    partial_state = {
-        "raw_cv_text": raw_cv_text,
-        "candidate": candidate,
-    }
-
     if len(github_urls) == 0:
         logger.info("Agent 1: No GitHub URLs found")
-        interrupt({
+        resume_value = interrupt({
             "github_url": None,
             "scenario": "NOT_FOUND",
             "candidate_name": candidate.full_name,
@@ -192,12 +187,15 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
                 "You can provide a GitHub URL manually or proceed without one."
             ),
         })
+        selected_url = resume_value.get("github_url") if isinstance(resume_value, dict) else None
+        if selected_url:
+            candidate = candidate.model_copy(update={"github_url": selected_url})
 
     elif len(github_urls) == 1:
         url = normalize_github_url(github_urls[0])
         if is_valid_github_url(url):
             logger.info(f"Agent 1: One valid URL found — {url}")
-            interrupt({
+            resume_value = interrupt({
                 "github_url": url,
                 "scenario": "ACCESSIBLE",
                 "candidate_name": candidate.full_name,
@@ -206,9 +204,11 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
                     "Please confirm this is the correct profile."
                 ),
             })
+            selected_url = resume_value.get("github_url") if isinstance(resume_value, dict) else url
+            candidate = candidate.model_copy(update={"github_url": selected_url})
         else:
             logger.warning(f"Agent 1: Malformed URL found — {url}")
-            interrupt({
+            resume_value = interrupt({
                 "github_url": url,
                 "scenario": "COULD_NOT_BE_ACCESSED",
                 "candidate_name": candidate.full_name,
@@ -217,11 +217,14 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
                     "Please provide the correct GitHub URL manually."
                 ),
             })
+            selected_url = resume_value.get("github_url") if isinstance(resume_value, dict) else None
+            if selected_url:
+                candidate = candidate.model_copy(update={"github_url": selected_url})
 
     else:
         normalised = [normalize_github_url(u) for u in github_urls]
         logger.info(f"Agent 1: Multiple URLs found — {normalised}")
-        interrupt({
+        resume_value = interrupt({
             "profiles": normalised,
             "scenario": "MULTIPLE_FOUND",
             "candidate_name": candidate.full_name,
@@ -230,10 +233,10 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
                 "Please select the correct one."
             ),
         })
+        selected_url = resume_value.get("github_url") if isinstance(resume_value, dict) else None
+        candidate = candidate.model_copy(update={"github_url": selected_url})
 
-    return partial_state
-
-
-
-            
- 
+    return {
+        "raw_cv_text": raw_cv_text,
+        "candidate": candidate,
+    }

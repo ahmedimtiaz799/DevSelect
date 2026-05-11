@@ -8,21 +8,48 @@ from app.prompts.agent3_prompt import AGENT3_SYSTEM_PROMPT
 
 logger = logging.getLogger("devselect")
 
+PRIMARY_MODEL = "gemini-2.5-pro"
+FALLBACK_MODEL = "gemini-2.5-flash"
 
-async def agent_3_lead_evaluator(state: DevSelectState) -> dict:
+
+async def _stream_with_fallback(messages: list) -> str:
+    for model_name in [PRIMARY_MODEL, FALLBACK_MODEL]:
+        llm = ChatGoogleGenerativeAI(
+            model=model_name,
+            google_api_key=settings.GEMINI_API_KEY,
+            temperature=0.2,
+            streaming=True,
+            max_retries=0,
+        )
+        try:
+            report_text = ""
+            async for chunk in llm.astream(messages):
+                if chunk.content:
+                    report_text += chunk.content
+            if model_name == FALLBACK_MODEL:
+                logger.warning(f"Agent 3: used fallback model {FALLBACK_MODEL} — primary quota exhausted.")
+            return report_text
+        except Exception as e:
+            error_str = str(e).lower()
+            is_quota_error = "429" in error_str or "quota" in error_str or "resource_exhausted" in error_str
+            if is_quota_error and model_name == PRIMARY_MODEL:
+                logger.warning(f"Agent 3: {PRIMARY_MODEL} quota exhausted, retrying with {FALLBACK_MODEL}.")
+                continue
+            raise
+
+    raise RuntimeError(
+        f"Both {PRIMARY_MODEL} and {FALLBACK_MODEL} failed due to quota limits. "
+        "Please try again later or enable billing on your Google AI project."
+    )
+
+
+async def agent3_lead_evaluator(state: DevSelectState) -> dict:
     thread_id = state.get("thread_id", "unknown")
     candidate = state.get("candidate")
     github = state.get("github_analysis")
     error = state.get("error")
 
     logger.info(f"Agent 3 generating report for thread {thread_id}")
-
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-pro",
-        google_api_key=settings.GEMINI_API_KEY,
-        temperature=0.2,
-        streaming=True,
-    )
 
     candidate_section = _format_candidate(candidate)
     github_section = _format_github(github)
@@ -42,13 +69,10 @@ Please evaluate the following candidate and generate a structured hiring report.
         HumanMessage(content=user_message),
     ]
 
-    report_text = ""
     try:
-        async for chunk in llm.astream(messages):
-            if chunk.content:
-                report_text += chunk.content
+        report_text = await _stream_with_fallback(messages)
     except Exception as e:
-        logger.error(f"Gemini call failed: {e}")
+        logger.error(f"Agent 3 failed for thread {thread_id}: {e}")
         raise
 
     logger.info(f"Agent 3 completed report for thread {thread_id}")
@@ -63,15 +87,23 @@ def _format_candidate(candidate) -> str:
     if not candidate:
         return "Candidate extraction failed because no data is available in CV."
 
+    education_str = (
+        "; ".join(
+            f"{e.degree or 'N/A'} from {e.institution or 'N/A'} ({e.year or 'N/A'})"
+            for e in candidate.education
+        )
+        if candidate.education
+        else "Not found"
+    )
+
     return f"""
-Name:           {candidate.name or 'Not found'}
+Name:           {candidate.full_name or 'Not found'}
 Email:          {candidate.email or 'Not found'}
 Phone:          {candidate.phone or 'Not found'}
-Role:           {candidate.role or 'Not detected'}
-Seniority:      {candidate.seniority or 'Not detected'}
+Role:           {candidate.current_title or 'Not detected'}
 Years of Exp:   {candidate.years_of_experience or 'Not found'}
 Skills:         {', '.join(candidate.skills) if candidate.skills else 'None listed'}
-Education:      {candidate.education or 'Not found'}
+Education:      {education_str}
 GitHub URL:     {str(candidate.github_url) if candidate.github_url else 'Not found'}
 
 Work Experience:
@@ -99,23 +131,25 @@ def _format_github(github) -> str:
 
     return f"""
 Scenario:               {scenario}
-Profile URL:            {github.profile_url or 'N/A'}
-Total Repositories:     {github.total_repos}
-Original Repos:         {github.original_repos}
-Forked Repos:           {github.forked_repos}
-Primary Languages:      {', '.join(github.primary_languages) if github.primary_languages else 'None detected'}
-Last Active:            {github.last_active or 'Unknown'}
-Account Created:        {github.account_created or 'Unknown'}
+Overall Score:          {github.overall_score}/10
+Summary:                {github.summary}
 Total Commits:          {github.total_commits}
-Commit Consistency:     {github.commit_consistency or 'Not assessed'}
-README Quality:         {github.readme_quality or 'Not assessed'}
-Avg Commit Msg Quality: {github.avg_commit_message_quality or 'Not assessed'}
+Active Days/Month:      {github.active_days_per_month}
 
-Repository Highlights:
-{_format_repos(github.repositories)}
+Scores:
+  Original Repos:       {github.original_repo_score}/10
+  Commit Frequency:     {github.commit_frequency_score}/10
+  Commit Messages:      {github.commit_message_score}/10
+  Language Relevance:   {github.language_relevance_score}/10
+  README Quality:       {github.readme_quality_score}/10
+  Project Complexity:   {github.project_complexity_score}/10
+  Recency:              {github.recency_score}/10
+  Community:            {github.community_score}/10
 
-Raw Analysis Notes:
-{github.raw_analysis or 'None'}
+Language Breakdown:     {github.language_breakdown}
+Top Repos:              {', '.join(github.top_repos) if github.top_repos else 'None identified'}
+Strengths:              {'; '.join(github.strengths) if github.strengths else 'None noted'}
+Red Flags:              {'; '.join(github.red_flags) if github.red_flags else 'None'}
 """.strip()
 
 
@@ -125,22 +159,8 @@ def _format_experience(work_experience) -> str:
 
     lines = []
     for job in work_experience:
-        lines.append(
-            f"  - {job.title} at {job.company} "
-            f"({job.start_date} — {job.end_date or 'Present'})"
-        )
-    return "\n".join(lines)
-
-
-def _format_repos(repositories) -> str:
-    if not repositories:
-        return "Repository data is not available."
-
-    lines = []
-    for repo in repositories[:5]:
-        lines.append(
-            f"  - {repo.name} | Stars: {repo.stars} | "
-            f"Language: {repo.language} | "
-            f"Description: {repo.description or 'None'}"
-        )
+        title = job.title or "Unknown Title"
+        company = job.company or "Unknown Company"
+        duration = job.duration or "N/A"
+        lines.append(f"  - {title} at {company} ({duration})")
     return "\n".join(lines)

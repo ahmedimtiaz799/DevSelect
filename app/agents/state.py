@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TypedDict
+from app.models.candidate import CandidateExtraction, GitHubAnalysis
 
-from app.models import CandidateExtraction,GitHubAnalysis,HiringReport
 
 class DevSelectState(TypedDict):
     pdf_bytes: bytes
@@ -9,5 +9,5 @@ class DevSelectState(TypedDict):
     raw_cv_text: str
     candidate: CandidateExtraction | None
     github_analysis: GitHubAnalysis | None
-    report: HiringReport | None
+    report: str | None
     error: str | None
