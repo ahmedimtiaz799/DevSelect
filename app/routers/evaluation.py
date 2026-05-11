@@ -1,6 +1,5 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, HttpUrl
 from typing import Optional, AsyncGenerator
 from uuid import uuid4
 import json
@@ -8,23 +7,18 @@ import urllib.parse
 import logging
 from langgraph.types import Command
 
-from app.config import settings
-from app.agents.graph import build_graph
 from app.dependencies import verify_token
+from app.models.requests import ResumeRequest
 
 logger = logging.getLogger("devselect")
 
 router = APIRouter(prefix="/api/chat", tags=["evaluation"])
 
 
-class ResumeRequest(BaseModel):
-    thread_id: str
-    selected_profile: Optional[HttpUrl] = None
-
-
 @router.post("/{chat_id}/upload")
 async def upload_cv(
     chat_id: str,
+    request: Request,
     file: UploadFile = File(...),
     thread_id: Optional[str] = Form(None),
     user_id: str = Depends(verify_token),
@@ -60,13 +54,13 @@ async def upload_cv(
         "candidate": None,
         "github_analysis": None,
         "report": None,
-        "error": None
+        "error": None,
     }
 
-    graph = await build_graph()
+    graph = request.app.state.graph
     result = await graph.ainvoke(
         initial_state,
-        config={"configurable": {"thread_id": thread_id}}
+        config={"configurable": {"thread_id": thread_id}},
     )
 
     interrupt_payload = result.get("__interrupt__", [{}])[0]
@@ -101,7 +95,7 @@ async def resume_evaluation(
     user_id: str = Depends(verify_token),
 ):
     resume_payload = {
-        "github_url": str(body.selected_profile),
+        "github_url": str(body.selected_profile) if body.selected_profile else None,
         "scenario": "ACCESSIBLE",
     }
 
@@ -164,11 +158,12 @@ async def evaluation_stream_generator(
 @router.get("/{chat_id}/stream")
 async def stream_evaluation(
     chat_id: str,
+    request: Request,
     thread_id: str = Query(..., description="LangGraph thread id"),
     resume_payload_str: str = Query(
         ...,
         alias="resume_payload",
-        description="URL encoded json from /upload or /resume response"
+        description="URL encoded json from /upload or /resume response",
     ),
     user_id: str = Depends(verify_token),
 ):
@@ -186,7 +181,7 @@ async def stream_evaluation(
             detail="resume_payload must contain a 'scenario' field.",
         )
 
-    graph = await build_graph()
+    graph = request.app.state.graph
     config = {"configurable": {"thread_id": thread_id}}
 
     try:
@@ -198,11 +193,26 @@ async def stream_evaluation(
     if snapshot is None or not snapshot.values:
         raise HTTPException(status_code=404, detail="No evaluation checkpoint found. Run /upload first.")
 
-    state = snapshot.values
-    candidate = state.get("candidate")
+    candidate_name = "Unknown Candidate"
+    role = "Unknown Role"
+
+    candidate = snapshot.values.get("candidate")
+    if candidate:
+        candidate_name = candidate.full_name or "Unknown Candidate"
+        role = candidate.current_title or "Unknown Role"
+    else:
+        for task in (snapshot.tasks or []):
+            for interrupt_obj in (getattr(task, "interrupts", None) or []):
+                interrupt_val = getattr(interrupt_obj, "value", None)
+                if isinstance(interrupt_val, dict):
+                    name = interrupt_val.get("candidate_name")
+                    if name:
+                        candidate_name = name
+                    break
+
     meta = {
-        "candidate_name": candidate.full_name if candidate else "Unknown Candidate",
-        "role": candidate.role if candidate else "Unknown Role",
+        "candidate_name": candidate_name,
+        "role": role,
     }
 
     return StreamingResponse(
@@ -213,9 +223,3 @@ async def stream_evaluation(
             "X-Accel-Buffering": "no",
         },
     )
-
-
-
-    
-
-    

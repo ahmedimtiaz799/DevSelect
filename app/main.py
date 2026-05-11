@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from app.config import settings
 from app.routers import health
@@ -13,8 +14,10 @@ from app.middleware.error_handler import init_sentry, register_exception_handler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.graph = await build_graph()
-    yield
+    async with AsyncPostgresSaver.from_conn_string(settings.DATABASE_URL) as checkpointer:
+        await checkpointer.setup()
+        app.state.graph = build_graph(checkpointer)
+        yield
 
 
 app = FastAPI(
