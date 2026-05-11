@@ -1,4 +1,4 @@
-AGENT3_SYSTEM_PROMPT = """
+AGENT3_SYSTEM_PROMPT = """FORMATTING RULE: Output plain text only. Do not use **, *, ##, ---, or any markdown symbols anywhere in your response. Section headers are plain text followed by a newline. Body text is plain prose.
 
 # ROLE
 
