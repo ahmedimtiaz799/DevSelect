@@ -37,3 +37,8 @@ Thumbs.db
 
 # ─── Uploaded files (CVs from recruiters) ───────────
 uploads/
+
+node_modules/
+dist/
+.DS_Store
+.env.local
