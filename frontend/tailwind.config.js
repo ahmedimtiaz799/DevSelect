@@ -1,0 +1,70 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          dark:          '#2b2d42',
+          muted:         '#5b5d74',
+          body:          '#2d3435',
+          secondary:     '#475569',
+          sidebarActive: '#3d4057',
+          userBubble:    '#e8e9ef',
+          inputBg:       '#f5f5f5',
+          textLoading:   '#808080',
+          iconGray:      '#596061',
+          scrollbar:     '#aeabab',
+        },
+        page: {
+          default: '#f5f5f5',
+          auth:    '#ffffff',
+          chat:    '#f9f9f9',
+        },
+      },
+      fontSize: {
+        'hero':     ['72px',  { lineHeight: '72px',   letterSpacing: '-3.6px', fontWeight: '800' }],
+        'display':  ['48px',  { lineHeight: '60px',   letterSpacing: '-1.5px', fontWeight: '800' }],
+        'price':    ['48px',  { lineHeight: '48px',                            fontWeight: '900' }],
+        'badge':    ['12px',  { lineHeight: '16px',   letterSpacing: '1.2px',  fontWeight: '700' }],
+        'btn-lg':   ['18px',  { lineHeight: '28px',                            fontWeight: '600' }],
+        'btn-md':   ['16px',  { lineHeight: '24px',   letterSpacing: '0.4px',  fontWeight: '700' }],
+        'btn-sm':   ['14px',  { lineHeight: '20px',                            fontWeight: '600' }],
+        'body-lg':  ['20px',  { lineHeight: '32.5px',                          fontWeight: '400' }],
+        'body':     ['18px',  { lineHeight: '32px',                            fontWeight: '400' }],
+        'msg':      ['16px',  { lineHeight: '26px',                            fontWeight: '400' }],
+        'ui':       ['14px',  { lineHeight: '20px',   letterSpacing: '-0.35px'                  }],
+        'search':   ['13px',  { lineHeight: '20px',                            fontWeight: '400' }],
+        'logo-chat':['18px',  { lineHeight: '28px',   letterSpacing: '1.8px',  fontWeight: '800' }],
+      },
+      borderRadius: {
+        'pill':   '9999px',
+        'card':   '32px',
+        'chat':   '18px',
+        'input':  '16px',
+        'search': '18px',
+        'bubble': '18px',
+        'btn':    '48px',
+      },
+      boxShadow: {
+        'sm':   '0px 1px 2px 0px rgba(0,0,0,0.05)',
+        'card': '0px 2px 12px 0px rgba(0,0,0,0.08)',
+      },
+      maxWidth: {
+        'hero':     '896px',
+        'subtitle': '672px',
+        'auth':     '384px',
+        'chat':     '896px',
+        'bubble':   '665.6px',
+        'ai-msg':   '748.8px',
+      },
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
+      },
+    },
+  },
+  plugins: [],
+};
