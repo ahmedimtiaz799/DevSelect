@@ -1,44 +1,31 @@
-# ─── Python virtual environment ──────────────────────────────────────────────
-venv/
-.venv/
-env/
-.env/
-
 # ─── Environment variables (NEVER commit these) ──────────────────────────────
 .env
 .env.local
 .env.production
 
-# ─── Python compiled files ───────────────────────────────────────────────────
+# ─── Python backend ──────────────────────────────────────────────────────────
+venv/
+.venv/
 __pycache__/
 *.py[cod]
 *$py.class
 *.pyc
+uploads/
 
-# ─── Distribution / packaging ────────────────────────────────────────────────
+# ─── React frontend ──────────────────────────────────────────────────────────
+node_modules/
 dist/
 build/
-*.egg-info/
 
 # ─── Testing ─────────────────────────────────────────────────────────────────
 .pytest_cache/
 .coverage
 htmlcov/
 
-# ─── IDEs ────────────────────────────────────────────────────────────────────
+# ─── IDEs & OS files ─────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# ─── OS files ────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-
-# ─── Uploaded files (CVs from recruiters) ───────────
-uploads/
-
-node_modules/
-dist/
-.DS_Store
-.env.local
