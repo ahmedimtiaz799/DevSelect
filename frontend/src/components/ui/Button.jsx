@@ -1,4 +1,4 @@
-function Button({ children, variant = 'primary', size = 'md', onClick, disabled, type = 'button' }) {
+function Button({ children, variant = 'primary', size = 'md', onClick, disabled, type = 'button', className = '' }) {
 
   const base = 'inline-flex items-center justify-center rounded-btn font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed'
 
@@ -20,7 +20,7 @@ function Button({ children, variant = 'primary', size = 'md', onClick, disabled,
       onClick={onClick}
       disabled={disabled}
       aria-disabled={disabled}
-      className={`${base} ${variants[variant]} ${sizes[size]}`}
+      className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
     >
       {children}
     </button>
