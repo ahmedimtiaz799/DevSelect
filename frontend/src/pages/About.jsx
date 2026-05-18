@@ -1,6 +1,6 @@
 import Navbar from '../components/layout/Navbar'
 
-function About() {
+export function About() {
   return (
     <div className="min-h-screen bg-white">
       <Navbar />
@@ -19,5 +19,3 @@ function About() {
     </div>
   )
 }
-
-export default About

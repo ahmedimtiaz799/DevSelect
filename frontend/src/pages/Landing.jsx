@@ -3,7 +3,7 @@ import Navbar from '../components/layout/Navbar'
 import Button from '../components/ui/Button'
 import TypewriterText from '../components/ui/TypewriterText'
 
-function Landing() {
+export function Landing() {
   const navigate = useNavigate()
 
   return (
@@ -30,5 +30,3 @@ function Landing() {
     </div>
   )
 }
-
-export default Landing

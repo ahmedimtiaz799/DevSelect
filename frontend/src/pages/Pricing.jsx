@@ -3,7 +3,7 @@ import Navbar from '../components/layout/Navbar'
 import Button from '../components/ui/Button'
 import { CheckCircle } from 'lucide-react'
 
-function Pricing() {
+export function Pricing() {
   const navigate = useNavigate()
 
   const features = [
@@ -58,5 +58,3 @@ function Pricing() {
     </div>
   )
 }
-
-export default Pricing
