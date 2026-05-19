@@ -5,7 +5,7 @@ export function BackArrow() {
 
   return (
     <button
-      onClick={() => navigate(-1)}
+      onClick={() => navigate('/')}
       className="absolute top-6 left-6 flex items-center gap-2 text-brand-dark hover:opacity-70 transition-opacity"
     >
       <svg
