@@ -4,16 +4,9 @@ import { Pricing } from './pages/Pricing'
 import { About } from './pages/About'
 import { Login } from './pages/Login'
 import { SignUp } from './pages/SignUp'
+import { Chat } from './pages/Chat'
 import { ProtectedRoute } from './routes/ProtectedRoute'
 import { PublicOnlyRoute } from './routes/PublicOnlyRoute'
-
-function ChatPlaceholder() {
-  return (
-    <div className="min-h-screen bg-white flex items-center justify-center">
-      <p className="text-brand-dark font-medium">Chat — coming in Chat 8</p>
-    </div>
-  )
-}
 
 export default function App() {
   return (
@@ -28,7 +21,8 @@ export default function App() {
       </Route>
 
       <Route element={<ProtectedRoute />}>
-        <Route path="/chat" element={<ChatPlaceholder />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/chat/:chatId" element={<Chat />} />
       </Route>
     </Routes>
   )
