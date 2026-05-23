@@ -12,7 +12,7 @@ function getGreeting() {
   if (hour < 12) return 'Good morning'
   if (hour < 17) return 'Good afternoon'
   if (hour < 21) return 'Good evening'
-  return 'Good night'
+  return 'Hello'
 }
 
 function getFirstName(user) {
