@@ -4,7 +4,7 @@ import { CyclingTypewriter } from '../ui/CyclingTypewriter'
 const PROMPTS = [
   'Upload a candidate CV to begin.',
   'Evaluates CVs and GitHub profiles in seconds.',
-  'Supports all tech roles — engineers, designers, PMs.',
+  'Supports all tech roles : engineers, designers, PMs.',
 ]
 
 function getGreeting() {

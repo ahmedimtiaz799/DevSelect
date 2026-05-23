@@ -4,11 +4,10 @@ import { useAuth } from '../../hooks/useAuth'
 import { useChatHistory } from '../../hooks/useChatHistory'
 import { SidebarItem } from './SidebarItem'
 
-export function Sidebar({ mobileOpen, onMobileClose }) {
+export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollapse }) {
   const { signOut } = useAuth()
   const { chats, createNewChat, deleteChat, renameChat } = useChatHistory()
   const [search, setSearch] = useState('')
-  const [isCollapsed, setIsCollapsed] = useState(false)
 
   const filtered = chats.filter((c) =>
     c.title.toLowerCase().includes(search.toLowerCase())
@@ -24,27 +23,38 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
       )}
 
       <aside
-        className={`fixed top-0 left-0 h-full bg-brand-dark flex flex-col z-30 transition-all duration-300
+        className={`fixed top-0 left-0 h-full bg-brand-dark border-r border-white/10 flex flex-col z-30 transition-all duration-300
           ${isCollapsed ? 'w-16' : 'w-64'}
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0`}
       >
-        <div className={`px-3 pt-6 pb-4 flex flex-col gap-4 ${isCollapsed ? 'items-center' : ''}`}>
-          {!isCollapsed && (
-            <span className="text-logo-chat text-white uppercase tracking-widest">
-              DevSelect
-            </span>
-          )}
+        <div className="px-3 pt-6 pb-4 flex flex-col gap-4">
+          <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+            {!isCollapsed && (
+              <span className="text-logo-chat text-white uppercase tracking-widest">
+                DevSelect
+              </span>
+            )}
+            <button
+              onClick={onToggleCollapse}
+              className="hidden md:flex items-center justify-center text-white/50 hover:text-white transition-colors"
+              title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+          </div>
 
-          <button
-            onClick={createNewChat}
-            className={`bg-white text-brand-dark text-btn-sm font-semibold rounded-pill py-2 hover:opacity-90 transition-opacity
-              ${isCollapsed ? 'w-10 h-10 flex items-center justify-center p-0 text-lg' : 'w-full'}`}
-          >
-            {isCollapsed ? '+' : '+ New Chat'}
-          </button>
+          <div className={`flex ${isCollapsed ? 'justify-center' : ''}`}>
+            <button
+              onClick={createNewChat}
+              className={`bg-white text-brand-dark text-btn-sm font-semibold rounded-pill py-2 hover:bg-gray-100 transition-colors
+                ${isCollapsed ? 'w-10 h-10 flex items-center justify-center p-0 text-lg' : 'w-full'}`}
+            >
+              {isCollapsed ? '+' : '+ New Chat'}
+            </button>
+          </div>
 
-          {!isCollapsed && (
+          {!isCollapsed && chats.length > 0 && (
             <div className="flex items-center gap-2 bg-white/10 rounded-search px-3 py-2 border border-white/20">
               <Search size={14} className="text-white/40 shrink-0" />
               <input
@@ -69,33 +79,14 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
           ))}
         </div>
 
-        <div className={`px-3 py-4 border-t border-white/10 flex ${isCollapsed ? 'justify-center' : 'justify-between'} items-center`}>
-          {!isCollapsed && (
-            <button
-              onClick={signOut}
-              className="flex items-center gap-2 text-white/50 hover:text-white text-ui transition-colors"
-            >
-              <LogOut size={16} />
-              Log out
-            </button>
-          )}
-
-          {isCollapsed && (
-            <button
-              onClick={signOut}
-              className="text-white/50 hover:text-white transition-colors"
-              title="Log out"
-            >
-              <LogOut size={16} />
-            </button>
-          )}
-
+        <div className="px-3 py-4 border-t border-white/10 flex justify-start items-center">
           <button
-            onClick={() => setIsCollapsed((prev) => !prev)}
-            className="hidden md:flex items-center justify-center text-white/50 hover:text-white transition-colors"
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            onClick={signOut}
+            className="flex items-center gap-2 text-white/80 hover:text-white text-ui transition-colors"
+            title="Log out"
           >
-            {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            <LogOut size={16} />
+            {!isCollapsed && 'Log out'}
           </button>
         </div>
       </aside>

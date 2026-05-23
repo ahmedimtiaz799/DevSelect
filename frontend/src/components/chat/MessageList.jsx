@@ -12,7 +12,7 @@ export function MessageList() {
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto px-4 md:px-12 py-6 flex flex-col gap-6 pb-[229px]"
+      className="flex-1 overflow-y-auto bg-white px-4 md:px-12 py-6 flex flex-col gap-6 pb-[229px]"
     >
       {activeMessages.length === 0
         ? <EmptyState />
