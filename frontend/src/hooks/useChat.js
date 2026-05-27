@@ -3,7 +3,7 @@ import { useChatStore } from '../store/chatStore';
 import { useChatHistory } from './useChatHistory';
 import { streamChatResponse } from '../lib/streaming';
 import { uploadCV, resumePipeline } from '../lib/api';
-import { generateTempId } from '../lib/chatUtils';
+import { generateTempId, extractGitHubUsername } from '../lib/chatUtils';
 import { supabase } from '../lib/supabase';
 
 export function useChat(chatId) {
@@ -50,8 +50,28 @@ export function useChat(chatId) {
       setIsLoading(false);
 
       if (response.status === 202) {
+        const profiles = response.data.profiles;
+        const uniqueUsernames = [
+          ...new Set(profiles.map(extractGitHubUsername)),
+        ];
+
         setThreadId(chatId, response.data.thread_id);
-        setPendingProfiles(chatId, response.data.profiles);
+
+        if (uniqueUsernames.length === 1) {
+          const resolvedUrl = `https://github.com/${uniqueUsernames[0]}`;
+          const result = await resumePipeline(
+            chatId,
+            response.data.thread_id,
+            resolvedUrl
+          );
+          await startSSEStream(result.thread_id, result.resume_payload);
+          return;
+        }
+
+        const cleanProfiles = uniqueUsernames.map(
+          (username) => `https://github.com/${username}`
+        );
+        setPendingProfiles(chatId, cleanProfiles);
         return;
       }
 

@@ -30,3 +30,10 @@ export function formatDate(isoString) {
 export function generateTempId() {
   return 'temp_' + Date.now()
 }
+
+export function extractGitHubUsername(url) {
+  const cleaned = url
+    .replace(/^https?:\/\/github\.com\//, '')
+    .replace(/^github\.com\//, '');
+  return cleaned.split('/')[0].toLowerCase();
+}
