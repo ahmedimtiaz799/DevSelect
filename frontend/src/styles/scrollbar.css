@@ -1,6 +1,6 @@
 * {
   scrollbar-width: thin;
-  scrollbar-color: #aeabab transparent;
+  scrollbar-color: #c4c4ce transparent;
 }
 
 *::-webkit-scrollbar {
@@ -12,10 +12,21 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #aeabab;
+  background-color: #c4c4ce;
   border-radius: 9999px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: #969393;
+  background-color: #a0a0b0;
+}
+
+@media (max-width: 767px) {
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+  }
 }
