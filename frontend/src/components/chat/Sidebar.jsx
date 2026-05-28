@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Search, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Search, LogOut, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useChatHistory } from '../../hooks/useChatHistory'
 import { SidebarItem } from './SidebarItem'
@@ -8,6 +8,17 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
   const { signOut } = useAuth()
   const { chats, createNewChat, deleteChat, renameChat } = useChatHistory()
   const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchRef = useRef(null)
+
+  useEffect(() => {
+    if (searchOpen) searchRef.current?.focus()
+  }, [searchOpen])
+
+  function handleSearchClose() {
+    setSearchOpen(false)
+    setSearch('')
+  }
 
   const filtered = chats.filter((c) =>
     c.title.toLowerCase().includes(search.toLowerCase())
@@ -55,19 +66,45 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
           </div>
 
           {!isCollapsed && chats.length > 0 && (
-            <div className="flex items-center gap-2 bg-white/10 rounded-search px-3 py-2 border border-white/20">
-              <Search size={14} className="text-white/40 shrink-0" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search chats..."
-                className="bg-transparent text-search text-white placeholder-white/30 outline-none w-full"
-              />
+            <div className="flex items-center">
+              {searchOpen ? (
+                <div className="flex items-center gap-2 bg-white/[0.07] rounded-search px-3 py-2 border border-white/30 w-full focus-within:border-white/50 transition-colors">
+                  <Search size={13} className="text-white/60 shrink-0" />
+                  <input
+                    ref={searchRef}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') handleSearchClose()
+                    }}
+                    placeholder="Search chats..."
+                    className="bg-transparent text-search text-white placeholder-white/50 outline-none w-full"
+                  />
+                  {search.length > 0 && (
+                    <button onClick={handleSearchClose}>
+                      <X size={13} className="text-white/60 hover:text-white transition-colors" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setSearchOpen(true)}
+                  className="flex items-center gap-2 w-full px-3 py-2 rounded-search border border-white/20 hover:border-white/35 bg-white/[0.04] hover:bg-white/[0.07] text-white/60 hover:text-white/80 transition-all text-search"
+                >
+                  <Search size={14} className="shrink-0" />
+                  <span>Search chats...</span>
+                </button>
+              )}
             </div>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 flex flex-col gap-1">
+        <div className="flex-1 overflow-y-auto px-2 flex flex-col gap-1
+          [&::-webkit-scrollbar]:w-[6px]
+          [&::-webkit-scrollbar-track]:bg-transparent
+          [&::-webkit-scrollbar-thumb]:bg-[#c4c4ce]
+          [&::-webkit-scrollbar-thumb]:rounded-full
+          [&::-webkit-scrollbar-thumb:hover]:bg-[#a0a0b0]">
           {filtered.map((chat) => (
             <SidebarItem
               key={chat.id}
