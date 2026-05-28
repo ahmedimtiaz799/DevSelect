@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 
-export function ChatContextMenu({ chatId, currentTitle, onRename, onDelete, onClose }) {
+export function ChatContextMenu({ onRenameClick, onDeleteClick, onClose }) {
   const ref = useRef(null)
-  const [isRenaming, setIsRenaming] = useState(false)
-  const [renameValue, setRenameValue] = useState(currentTitle)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), 10)
+    return () => clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     function handleOutsideClick(e) {
@@ -16,55 +20,35 @@ export function ChatContextMenu({ chatId, currentTitle, onRename, onDelete, onCl
     return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [onClose])
 
-  function handleRenameSubmit() {
-    if (renameValue.trim() && renameValue.trim() !== currentTitle) {
-      onRename(chatId, renameValue.trim())
-    }
-    onClose()
-  }
-
-  function handleDelete() {
-    if (window.confirm('Delete this chat?')) {
-      onDelete(chatId)
-    }
-    onClose()
-  }
-
   return (
     <div
       ref={ref}
-      className="absolute right-0 top-6 z-50 w-36 bg-white rounded-input shadow-card border border-gray-100 overflow-hidden"
+      className={`absolute right-0 top-8 z-50 w-44 bg-[#2b2d42] border border-white/15 rounded-xl shadow-xl overflow-hidden transition-all duration-150 ease-out
+        ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
     >
-      {isRenaming ? (
-        <input
-          autoFocus
-          value={renameValue}
-          onChange={(e) => setRenameValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleRenameSubmit()
-            if (e.key === 'Escape') onClose()
+      <div className="py-1">
+        <button
+          onClick={() => {
+            onRenameClick()
+            onClose()
           }}
-          onBlur={handleRenameSubmit}
-          className="w-full px-3 py-2 text-ui text-brand-body bg-brand-inputBg outline-none"
-        />
-      ) : (
-        <>
-          <button
-            onClick={() => setIsRenaming(true)}
-            className="flex items-center gap-2 w-full px-3 py-2 text-ui text-brand-body hover:bg-brand-inputBg transition-colors"
-          >
-            <Pencil size={13} />
-            Rename
-          </button>
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-2 w-full px-3 py-2 text-ui text-red-500 hover:bg-red-50 transition-colors"
-          >
-            <Trash2 size={13} />
-            Delete
-          </button>
-        </>
-      )}
+          className="flex items-center gap-3 w-full px-4 py-2.5 text-ui text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+        >
+          <Pencil size={14} className="text-white/50 shrink-0" />
+          Rename
+        </button>
+        <div className="mx-3 h-px bg-white/15" />
+        <button
+          onClick={() => {
+            onDeleteClick()
+            onClose()
+          }}
+          className="flex items-center gap-3 w-full px-4 py-2.5 text-ui text-red-400 hover:text-red-300 hover:bg-red-500/15 transition-colors"
+        >
+          <Trash2 size={14} className="shrink-0" />
+          Delete
+        </button>
+      </div>
     </div>
   )
 }
