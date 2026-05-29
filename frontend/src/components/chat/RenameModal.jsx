@@ -19,11 +19,12 @@ export function RenameModal({ chatTitle, onConfirm, onCancel }) {
   }
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
         <h3 className="text-brand-dark font-bold text-lg mb-4">
           Rename this chat
         </h3>
+
         <input
           ref={inputRef}
           value={value}
@@ -34,6 +35,7 @@ export function RenameModal({ chatTitle, onConfirm, onCancel }) {
           }}
           className="w-full px-4 py-3 text-brand-body text-msg border border-gray-200 rounded-input bg-brand-inputBg outline-none focus:border-brand-dark transition-colors mb-6"
         />
+
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
@@ -41,6 +43,7 @@ export function RenameModal({ chatTitle, onConfirm, onCancel }) {
           >
             Cancel
           </button>
+
           <button
             onClick={handleSubmit}
             className="px-4 py-2 text-ui text-white bg-brand-dark rounded-pill hover:opacity-90 transition-opacity"

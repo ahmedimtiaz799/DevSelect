@@ -1,14 +1,20 @@
 import { useState, useRef, useEffect } from 'react'
-import { Search, LogOut, ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { useAuth } from '../../hooks/useAuth'
+import { Search, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useChatHistory } from '../../hooks/useChatHistory'
 import { SidebarItem } from './SidebarItem'
+import { UserMenu } from './UserMenu'
 
-export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollapse }) {
-  const { signOut } = useAuth()
+export function Sidebar({
+  mobileOpen,
+  onMobileClose,
+  isCollapsed,
+  onToggleCollapse,
+}) {
   const { chats, createNewChat, deleteChat, renameChat, pinChat } = useChatHistory()
+
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
+
   const searchRef = useRef(null)
 
   useEffect(() => {
@@ -44,18 +50,27 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
           md:translate-x-0`}
       >
         <div className="px-3 pt-6 pb-4 flex flex-col gap-4">
-          <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+          <div
+            className={`flex items-center ${
+              isCollapsed ? 'justify-center' : 'justify-between'
+            }`}
+          >
             {!isCollapsed && (
               <span className="text-logo-chat text-white uppercase tracking-widest">
                 DevSelect
               </span>
             )}
+
             <button
               onClick={onToggleCollapse}
               className="hidden md:flex items-center justify-center text-white/50 hover:text-white transition-colors"
               title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+              {isCollapsed ? (
+                <ChevronRight size={16} />
+              ) : (
+                <ChevronLeft size={16} />
+              )}
             </button>
           </div>
 
@@ -63,7 +78,11 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
             <button
               onClick={() => createNewChat()}
               className={`bg-white text-brand-dark text-btn-sm font-semibold rounded-pill py-2 hover:bg-gray-100 transition-colors
-                ${isCollapsed ? 'w-10 h-10 flex items-center justify-center p-0 text-lg' : 'w-full'}`}
+                ${
+                  isCollapsed
+                    ? 'w-10 h-10 flex items-center justify-center p-0 text-lg'
+                    : 'w-full'
+                }`}
             >
               {isCollapsed ? '+' : '+ New Chat'}
             </button>
@@ -74,6 +93,7 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
               {searchOpen ? (
                 <div className="flex items-center gap-2 bg-white/[0.07] rounded-search px-3 py-2 border border-white/30 w-full focus-within:border-white/50 transition-colors">
                   <Search size={13} className="text-white/60 shrink-0" />
+
                   <input
                     ref={searchRef}
                     value={search}
@@ -84,9 +104,13 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
                     placeholder="Search chats..."
                     className="bg-transparent text-search text-white placeholder-white/50 outline-none w-full"
                   />
+
                   {search.length > 0 && (
                     <button onClick={handleSearchClose}>
-                      <X size={13} className="text-white/60 hover:text-white transition-colors" />
+                      <X
+                        size={13}
+                        className="text-white/60 hover:text-white transition-colors"
+                      />
                     </button>
                   )}
                 </div>
@@ -103,22 +127,24 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 flex flex-col gap-1
+        <div
+          className="flex-1 overflow-y-auto px-2 flex flex-col gap-1
           [&::-webkit-scrollbar]:w-[6px]
           [&::-webkit-scrollbar-track]:bg-transparent
           [&::-webkit-scrollbar-thumb]:bg-[#c4c4ce]
           [&::-webkit-scrollbar-thumb]:rounded-full
-          [&::-webkit-scrollbar-thumb:hover]:bg-[#a0a0b0]">
-
+          [&::-webkit-scrollbar-thumb:hover]:bg-[#a0a0b0]"
+        >
           {pinnedChats.length > 0 && (
             <>
               {!isCollapsed && (
                 <div className="px-2 pt-2 pb-1">
-                  <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+                  <span className="text-[10px] uppercase tracking-widest text-white/50 font-bold">
                     Pinned
                   </span>
                 </div>
               )}
+
               {pinnedChats.map((chat) => (
                 <SidebarItem
                   key={chat.id}
@@ -134,7 +160,7 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
 
           {hasBothSections && !isCollapsed && (
             <div className="px-2 pt-2 pb-1">
-              <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+              <span className="text-[10px] uppercase tracking-widest text-white/50 font-bold">
                 Recent
               </span>
             </div>
@@ -152,15 +178,8 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
           ))}
         </div>
 
-        <div className="px-3 py-4 border-t border-white/10 flex justify-start items-center">
-          <button
-            onClick={signOut}
-            className="flex items-center gap-2 text-white/80 hover:text-white text-ui transition-colors"
-            title="Log out"
-          >
-            <LogOut size={16} />
-            {!isCollapsed && 'Log out'}
-          </button>
+        <div className="px-3 py-3 border-t border-white/10">
+          <UserMenu isCollapsed={isCollapsed} />
         </div>
       </aside>
     </>
