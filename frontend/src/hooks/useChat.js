@@ -12,9 +12,7 @@ export function useChat(chatId) {
 
   const cleanupRef = useRef(null);
 
-  const messages = useChatStore((s) => s.messages);
   const threadIds = useChatStore((s) => s.threadIds);
-  const pendingProfiles = useChatStore((s) => s.pendingProfiles);
   const addMessage = useChatStore((s) => s.addMessage);
   const setThreadId = useChatStore((s) => s.setThreadId);
   const setPendingProfiles = useChatStore((s) => s.setPendingProfiles);
@@ -31,21 +29,31 @@ export function useChat(chatId) {
     };
   }, []);
 
-  async function sendMessage(file, userText) {
-    if (!file) return;
+  const hasThread = (targetId) => !!threadIds[targetId]
+
+  async function sendMessage(file, userText, overrideChatId) {
+    const targetId = overrideChatId ?? chatId;
+    const threadExists = hasThread(targetId);
+
+    if (!file && !threadExists) return;
 
     const tempId = generateTempId();
-    addMessage(chatId, {
+    addMessage(targetId, {
       id: tempId,
       role: 'user',
       content: userText,
-      chat_id: chatId,
+      chat_id: targetId,
     });
+
+    if (!file && threadExists) {
+      await sendFollowUpMessage(userText, targetId);
+      return;
+    }
 
     setIsLoading(true);
 
     try {
-      const response = await uploadCV(chatId, file, threadIds[chatId]);
+      const response = await uploadCV(targetId, file, threadIds[targetId]);
 
       setIsLoading(false);
 
@@ -55,40 +63,62 @@ export function useChat(chatId) {
           ...new Set(profiles.map(extractGitHubUsername)),
         ];
 
-        setThreadId(chatId, response.data.thread_id);
+        setThreadId(targetId, response.data.thread_id);
 
         if (uniqueUsernames.length === 1) {
           const resolvedUrl = `https://github.com/${uniqueUsernames[0]}`;
           const result = await resumePipeline(
-            chatId,
+            targetId,
             response.data.thread_id,
             resolvedUrl
           );
-          await startSSEStream(result.thread_id, result.resume_payload);
+          await startSSEStream(result.thread_id, result.resume_payload, targetId);
           return;
         }
 
         const cleanProfiles = uniqueUsernames.map(
           (username) => `https://github.com/${username}`
         );
-        setPendingProfiles(chatId, cleanProfiles);
+        setPendingProfiles(targetId, cleanProfiles);
         return;
       }
 
       if (response.status === 200) {
-        setThreadId(chatId, response.data.thread_id);
+        setThreadId(targetId, response.data.thread_id);
         await startSSEStream(
           response.data.thread_id,
-          response.data.resume_payload
+          response.data.resume_payload,
+          targetId
         );
       }
     } catch (err) {
       setIsLoading(false);
-      addMessage(chatId, {
+      addMessage(targetId, {
         id: generateTempId(),
         role: 'assistant',
         content: 'Evaluation failed. Please try again.',
-        chat_id: chatId,
+        chat_id: targetId,
+      });
+    }
+  }
+
+  async function sendFollowUpMessage(userText, targetId) {
+    const threadId = threadIds[targetId];
+    if (!threadId) return;
+
+    setIsLoading(true);
+
+    try {
+      const result = await resumePipeline(targetId, threadId, null, userText);
+      setIsLoading(false);
+      await startSSEStream(result.thread_id, result.resume_payload, targetId);
+    } catch (err) {
+      setIsLoading(false);
+      addMessage(targetId, {
+        id: generateTempId(),
+        role: 'assistant',
+        content: 'Something went wrong. Please try again.',
+        chat_id: targetId,
       });
     }
   }
@@ -103,7 +133,7 @@ export function useChat(chatId) {
         selectedProfile
       );
 
-      await startSSEStream(result.thread_id, result.resume_payload);
+      await startSSEStream(result.thread_id, result.resume_payload, chatId);
     } catch (err) {
       addMessage(chatId, {
         id: generateTempId(),
@@ -114,54 +144,45 @@ export function useChat(chatId) {
     }
   }
 
-  async function startSSEStream(threadId, resumePayload) {
+  async function startSSEStream(threadId, resumePayload, targetId) {
     const { data } = await supabase.auth.getSession();
     const token = data.session.access_token;
 
     setIsStreaming(true);
 
     const assistantTempId = generateTempId();
-    addMessage(chatId, {
+    addMessage(targetId, {
       id: assistantTempId,
       role: 'assistant',
       content: '',
-      chat_id: chatId,
+      chat_id: targetId,
     });
 
-    const cleanup = streamChatResponse(chatId, threadId, resumePayload, token, {
+    const cleanup = streamChatResponse(targetId, threadId, resumePayload, token, {
       onMeta({ candidate_name, role }) {
-        const currentTitle = useChatStore
-          .getState()
-          .chats.find((c) => c.id === chatId)?.title;
-
-        const isDefaultTitle =
-          !currentTitle ||
-          currentTitle === 'New Chat' ||
-          currentTitle === '';
-
-        if (!isDefaultTitle) return;
-
         const title =
           candidate_name && role
             ? `${candidate_name} — ${role}`
-            : candidate_name ?? 'New Evaluation';
+            : candidate_name ?? null;
 
-        updateChatTitle(chatId, title);
-        renameChat(chatId, title);
+        if (!title) return;
+
+        updateChatTitle(targetId, title);
+        renameChat(targetId, title);
       },
 
       onStatus(text) {
-        addMessage(chatId, {
+        addMessage(targetId, {
           id: generateTempId(),
           role: 'status',
           content: text,
-          chat_id: chatId,
+          chat_id: targetId,
         });
       },
 
       onToken(char) {
         useChatStore.setState((state) => {
-          const chatMessages = state.messages[chatId];
+          const chatMessages = state.messages[targetId];
           if (!chatMessages || chatMessages.length === 0) return;
 
           const lastIndex = chatMessages.length - 1;
@@ -175,7 +196,7 @@ export function useChat(chatId) {
           return {
             messages: {
               ...state.messages,
-              [chatId]: updatedMessages,
+              [targetId]: updatedMessages,
             },
           };
         });
@@ -186,14 +207,14 @@ export function useChat(chatId) {
         cleanupRef.current = null;
 
         const chatMessages =
-          useChatStore.getState().messages[chatId] ?? [];
+          useChatStore.getState().messages[targetId] ?? [];
         const lastAssistant = [...chatMessages]
           .reverse()
           .find((m) => m.role === 'assistant');
 
         if (lastAssistant?.content) {
           await supabase.from('messages').insert({
-            chat_id: chatId,
+            chat_id: targetId,
             role: 'assistant',
             content: lastAssistant.content,
           });
@@ -205,23 +226,23 @@ export function useChat(chatId) {
         cleanupRef.current = null;
 
         useChatStore.setState((state) => {
-          const chatMessages = state.messages[chatId] ?? [];
+          const chatMessages = state.messages[targetId] ?? [];
           const filtered = chatMessages.filter(
             (m) => !(m.role === 'assistant' && m.content === '')
           );
           return {
             messages: {
               ...state.messages,
-              [chatId]: filtered,
+              [targetId]: filtered,
             },
           };
         });
 
-        addMessage(chatId, {
+        addMessage(targetId, {
           id: generateTempId(),
           role: 'assistant',
           content: 'Evaluation failed. Please try again.',
-          chat_id: chatId,
+          chat_id: targetId,
         });
       },
     });
@@ -234,5 +255,6 @@ export function useChat(chatId) {
     handleProfileSelect,
     isLoading,
     isStreaming,
+    hasThread,
   };
 }

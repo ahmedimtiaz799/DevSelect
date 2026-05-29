@@ -18,10 +18,12 @@ export function useFileUpload(chatId) {
   function onFileSelect(selectedFile) {
     if (selectedFile.type !== 'application/pdf') {
       setError('Only PDF files are supported.');
+      setTimeout(() => setError(null), 3000);
       return;
     }
     if (selectedFile.size > 10 * 1024 * 1024) {
-      setError('File must be smaller than 10MB.');
+      setError('File must be smaller than 10MB');
+      setTimeout(() => setError(null), 3000);
       return;
     }
     setUploadedFile(chatId, selectedFile);

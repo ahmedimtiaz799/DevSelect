@@ -7,13 +7,15 @@ import { ChatContextMenu } from './ChatContextMenu'
 import { DeleteConfirmModal } from './DeleteConfirmModal'
 import { RenameModal } from './RenameModal'
 
-export function SidebarItem({ chat, onRename, onDelete, isCollapsed }) {
+export function SidebarItem({ chat, onRename, onDelete, onPin, isCollapsed }) {
   const navigate = useNavigate()
   const { activeChatId, setActiveChatId } = useChatStore()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 })
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showRenameModal, setShowRenameModal] = useState(false)
   const [visible, setVisible] = useState(false)
+  const menuButtonRef = useRef(null)
 
   const isActive = activeChatId === chat.id
 
@@ -25,6 +27,16 @@ export function SidebarItem({ chat, onRename, onDelete, isCollapsed }) {
   function handleClick() {
     setActiveChatId(chat.id)
     navigate(`/chat/${chat.id}`)
+  }
+
+  function handleMenuButtonClick(e) {
+    e.stopPropagation()
+    const rect = menuButtonRef.current.getBoundingClientRect()
+    setMenuPosition({
+      top: rect.bottom + 4,
+      left: rect.right - 176,
+    })
+    setMenuOpen((prev) => !prev)
   }
 
   function handleRenameConfirm(newTitle) {
@@ -44,13 +56,13 @@ export function SidebarItem({ chat, onRename, onDelete, isCollapsed }) {
         className={`relative group flex items-center justify-between px-2 py-2 rounded-card cursor-pointer transition-all duration-200 ease-out
           ${visible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}
           ${isActive
-            ? 'bg-brand-sidebarActive text-white font-bold'
-            : 'text-white/50 hover:bg-white/5'
+            ? 'bg-white/10 text-white font-semibold'
+            : 'text-white/75 hover:bg-white/5'
           }
           ${isCollapsed ? 'justify-center' : ''}`}
         onClick={handleClick}
       >
-        <div className={`flex items-center min-w-0 flex-1 ${isCollapsed ? 'justify-center' : ''}`}>
+        <div className={`flex items-center gap-1.5 min-w-0 flex-1 ${isCollapsed ? 'justify-center' : ''}`}>
           {!isCollapsed && (
             <span
               title={chat.title}
@@ -63,24 +75,34 @@ export function SidebarItem({ chat, onRename, onDelete, isCollapsed }) {
 
         {!isCollapsed && (
           <button
-            onClick={(e) => {
-              e.stopPropagation()
-              setMenuOpen((prev) => !prev)
-            }}
+            ref={menuButtonRef}
+            onClick={handleMenuButtonClick}
             className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 shrink-0 p-0.5"
           >
             <MoreVertical size={15} />
           </button>
         )}
-
-        {menuOpen && !isCollapsed && (
-          <ChatContextMenu
-            onRenameClick={() => setShowRenameModal(true)}
-            onDeleteClick={() => setShowDeleteModal(true)}
-            onClose={() => setMenuOpen(false)}
-          />
-        )}
       </div>
+
+      {menuOpen && !isCollapsed && (
+        <ChatContextMenu
+          position={menuPosition}
+          isPinned={chat.is_pinned}
+          onPinClick={() => {
+            onPin(chat.id, !chat.is_pinned)
+            setMenuOpen(false)
+          }}
+          onRenameClick={() => {
+            setShowRenameModal(true)
+            setMenuOpen(false)
+          }}
+          onDeleteClick={() => {
+            setShowDeleteModal(true)
+            setMenuOpen(false)
+          }}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
 
       {showDeleteModal && (
         <DeleteConfirmModal

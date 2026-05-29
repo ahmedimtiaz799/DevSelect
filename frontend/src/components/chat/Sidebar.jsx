@@ -6,7 +6,7 @@ import { SidebarItem } from './SidebarItem'
 
 export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollapse }) {
   const { signOut } = useAuth()
-  const { chats, createNewChat, deleteChat, renameChat } = useChatHistory()
+  const { chats, createNewChat, deleteChat, renameChat, pinChat } = useChatHistory()
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const searchRef = useRef(null)
@@ -23,6 +23,10 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
   const filtered = chats.filter((c) =>
     c.title.toLowerCase().includes(search.toLowerCase())
   )
+
+  const pinnedChats = filtered.filter((c) => c.is_pinned)
+  const unpinnedChats = filtered.filter((c) => !c.is_pinned)
+  const hasBothSections = pinnedChats.length > 0 && unpinnedChats.length > 0
 
   return (
     <>
@@ -57,7 +61,7 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
 
           <div className={`flex ${isCollapsed ? 'justify-center' : ''}`}>
             <button
-              onClick={createNewChat}
+              onClick={() => createNewChat()}
               className={`bg-white text-brand-dark text-btn-sm font-semibold rounded-pill py-2 hover:bg-gray-100 transition-colors
                 ${isCollapsed ? 'w-10 h-10 flex items-center justify-center p-0 text-lg' : 'w-full'}`}
             >
@@ -105,12 +109,44 @@ export function Sidebar({ mobileOpen, onMobileClose, isCollapsed, onToggleCollap
           [&::-webkit-scrollbar-thumb]:bg-[#c4c4ce]
           [&::-webkit-scrollbar-thumb]:rounded-full
           [&::-webkit-scrollbar-thumb:hover]:bg-[#a0a0b0]">
-          {filtered.map((chat) => (
+
+          {pinnedChats.length > 0 && (
+            <>
+              {!isCollapsed && (
+                <div className="px-2 pt-2 pb-1">
+                  <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+                    Pinned
+                  </span>
+                </div>
+              )}
+              {pinnedChats.map((chat) => (
+                <SidebarItem
+                  key={chat.id}
+                  chat={chat}
+                  onRename={renameChat}
+                  onDelete={deleteChat}
+                  onPin={pinChat}
+                  isCollapsed={isCollapsed}
+                />
+              ))}
+            </>
+          )}
+
+          {hasBothSections && !isCollapsed && (
+            <div className="px-2 pt-2 pb-1">
+              <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
+                Recent
+              </span>
+            </div>
+          )}
+
+          {unpinnedChats.map((chat) => (
             <SidebarItem
               key={chat.id}
               chat={chat}
               onRename={renameChat}
               onDelete={deleteChat}
+              onPin={pinChat}
               isCollapsed={isCollapsed}
             />
           ))}

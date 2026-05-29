@@ -15,16 +15,37 @@ export const useChatStore = create(
         state.activeChatId = id
       }),
 
+    setChats: (chats) =>
+      set((state) => {
+        state.chats = chats
+        chats.forEach((chat) => {
+          if (!state.messages[chat.id]) {
+            state.messages[chat.id] = []
+          }
+        })
+      }),
+
     addChat: (chat) =>
       set((state) => {
-        state.chats.unshift(chat)
-        state.messages[chat.id] = []
+        const exists = state.chats.some((c) => c.id === chat.id)
+        if (!exists) {
+          state.chats.unshift(chat)
+        }
+        if (!state.messages[chat.id]) {
+          state.messages[chat.id] = []
+        }
       }),
 
     updateChatTitle: (chatId, title) =>
       set((state) => {
         const chat = state.chats.find((c) => c.id === chatId)
         if (chat) chat.title = title
+      }),
+
+    pinChat: (chatId, isPinned) =>
+      set((state) => {
+        const chat = state.chats.find((c) => c.id === chatId)
+        if (chat) chat.is_pinned = isPinned
       }),
 
     deleteChat: (chatId) =>

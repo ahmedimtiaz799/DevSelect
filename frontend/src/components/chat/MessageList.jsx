@@ -5,7 +5,8 @@ import { AIMessage } from './AIMessage'
 import { EmptyState } from './EmptyState'
 
 export function MessageList() {
-  const { activeChatId, messages } = useChatStore()
+  const activeChatId = useChatStore((s) => s.activeChatId)
+  const messages = useChatStore((s) => s.messages)
   const activeMessages = activeChatId ? (messages[activeChatId] ?? []) : []
   const containerRef = useAutoScroll(activeMessages)
 

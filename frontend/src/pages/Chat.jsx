@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Sidebar } from '../components/chat/Sidebar'
 import { ChatHeader } from '../components/chat/ChatHeader'
 import { MessageList } from '../components/chat/MessageList'
@@ -15,6 +15,7 @@ import { supabase } from '../lib/supabase'
 export function Chat() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const navigate = useNavigate()
 
   const { chatId } = useParams()
 
@@ -31,8 +32,11 @@ export function Chat() {
     .map((m) => m.content)
 
   const { createNewChat } = useChatHistory()
-  const { sendMessage, handleProfileSelect, isLoading, isStreaming } = useChat(chatId)
+  const sendMessageRef = useRef(null)
+  const { sendMessage, handleProfileSelect, isLoading, isStreaming, hasThread } = useChat(chatId)
   const { file, error, onFileSelect, clearFile } = useFileUpload(chatId)
+
+  sendMessageRef.current = sendMessage
 
   useEffect(() => {
     if (chatId) {
@@ -56,19 +60,26 @@ export function Chat() {
     }
   }, [chatId])
 
-  async function handleSend(text) {
-    let activeChatId = chatId
+  async function handleSend(text, fileToSend) {
+    if (!fileToSend && !hasThread(chatId)) return
 
-    if (!activeChatId) {
-      activeChatId = await createNewChat()
+    let targetChatId = chatId
+
+    if (!targetChatId) {
+      const tempTitle = text.trim()
+        ? text.trim()
+        : fileToSend.name.replace(/\.pdf$/i, '')
+      targetChatId = await createNewChat(tempTitle)
+      if (!targetChatId) return
+      navigate(`/chat/${targetChatId}`, { replace: true })
+      await new Promise((resolve) => setTimeout(resolve, 50))
     }
 
-    await sendMessage(file, text)
+    await sendMessageRef.current(fileToSend, text, targetChatId)
     clearFile()
   }
 
-  function handleStop() {
-  }
+  function handleStop() {}
 
   return (
     <div className="flex h-dvh bg-white overflow-hidden overflow-x-hidden">
@@ -105,9 +116,10 @@ export function Chat() {
             isLoading={isLoading}
             isStreaming={isStreaming}
             file={file}
+            threadExists={hasThread(chatId)}
+            fileError={error}
           />
         </div>
-
       </div>
     </div>
   )

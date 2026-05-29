@@ -3,11 +3,21 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useChatStore } from '../store/chatStore'
 import { useAuth } from './useAuth'
+import { truncateTitle } from '../lib/chatUtils'
 
 export function useChatHistory() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { chats, setMessages, addChat, updateChatTitle, deleteChat: deleteChatFromStore, setActiveChatId, activeChatId } = useChatStore()
+  const {
+    chats,
+    setChats,
+    addChat,
+    updateChatTitle,
+    deleteChat: deleteChatFromStore,
+    pinChat: pinChatInStore,
+    setActiveChatId,
+    activeChatId,
+  } = useChatStore()
 
   useEffect(() => {
     if (!user) return
@@ -21,26 +31,27 @@ export function useChatHistory() {
 
       if (error) return
 
-      data.forEach((chat) => {
-        addChat(chat)
-      })
+      setChats(data)
     }
 
     fetchChats()
-  }, [])
+  }, [user])
 
-  async function createNewChat() {
+  async function createNewChat(firstMessage) {
+    const title = firstMessage ? truncateTitle(firstMessage, 40) : 'New Chat'
+
     const { data, error } = await supabase
       .from('chats')
-      .insert({ user_id: user.id, title: 'New Chat' })
+      .insert({ user_id: user.id, title })
       .select()
       .single()
 
-    if (error) return
+    if (error) return null
 
     addChat(data)
     setActiveChatId(data.id)
     navigate(`/chat/${data.id}`)
+    return data.id
   }
 
   async function deleteChat(chatId) {
@@ -69,5 +80,16 @@ export function useChatHistory() {
     updateChatTitle(chatId, newTitle)
   }
 
-  return { chats, createNewChat, deleteChat, renameChat }
+  async function pinChat(chatId, isPinned) {
+    const { error } = await supabase
+      .from('chats')
+      .update({ is_pinned: isPinned })
+      .eq('id', chatId)
+
+    if (error) return
+
+    pinChatInStore(chatId, isPinned)
+  }
+
+  return { chats, createNewChat, deleteChat, renameChat, pinChat }
 }

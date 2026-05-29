@@ -1,8 +1,10 @@
 import { useRef, useState, useEffect } from 'react';
-import { Plus, ArrowUp, Square, FileText, X } from 'lucide-react';
+import { Plus, ArrowUp, Square, FileText, X, AlertCircle } from 'lucide-react';
 
-export function InputBar({ onSend, onStop, onFileSelect, onFileClear, isLoading, isStreaming, file }) {
+export function InputBar({ onSend, onStop, onFileSelect, onFileClear, isLoading, isStreaming, file, threadExists, fileError }) {
   const [text, setText] = useState('');
+  const [fileWarning, setFileWarning] = useState(false);
+  const [noFileWarning, setNoFileWarning] = useState(false);
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -25,7 +27,14 @@ export function InputBar({ onSend, onStop, onFileSelect, onFileClear, isLoading,
 
   function handleSend() {
     if (!canSend) return;
-    onSend(text.trim());
+
+    if (!file && !threadExists) {
+      setNoFileWarning(true);
+      setTimeout(() => setNoFileWarning(false), 3000);
+      return;
+    }
+
+    onSend(text.trim(), file);
     setText('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -35,13 +44,45 @@ export function InputBar({ onSend, onStop, onFileSelect, onFileClear, isLoading,
   function handleFileChange(e) {
     const selected = e.target.files?.[0];
     if (selected) {
+      if (file) {
+        setFileWarning(true);
+        setTimeout(() => setFileWarning(false), 3000);
+        e.target.value = '';
+        return;
+      }
       onFileSelect(selected);
       e.target.value = '';
     }
   }
 
+  const placeholder = threadExists
+    ? 'Ask a follow-up question'
+    : 'Upload a CV to evaluate a candidate'
+
   return (
     <div className="mx-4 md:mx-12 mt-2">
+
+      {fileError && (
+        <div className="flex items-center gap-2 text-amber-700 text-sm mb-2 px-1">
+          <AlertCircle size={13} className="shrink-0" />
+          <span>{fileError}</span>
+        </div>
+      )}
+
+      {fileWarning && (
+        <div className="flex items-center gap-2 text-amber-700 text-sm mb-2 px-1">
+          <AlertCircle size={13} className="shrink-0" />
+          <span>You can only evaluate one CV at a time</span>
+        </div>
+      )}
+
+      {noFileWarning && (
+        <div className="flex items-center gap-2 text-amber-700 text-sm mb-2 px-1">
+          <AlertCircle size={13} className="shrink-0" />
+          <span>Please upload a CV to evaluate a candidate</span>
+        </div>
+      )}
+
       <div className="flex flex-col bg-white ring-1 ring-gray-300 shadow-lg rounded-input px-3 pt-2 pb-2">
 
         {file && (
@@ -80,7 +121,7 @@ export function InputBar({ onSend, onStop, onFileSelect, onFileClear, isLoading,
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Upload a CV to evaluate a candidate"
+            placeholder={placeholder}
             rows={1}
             className="flex-1 bg-transparent outline-none text-base text-brand-body placeholder:text-brand-muted resize-none overflow-hidden leading-6 py-[9px]"
           />
@@ -101,7 +142,6 @@ export function InputBar({ onSend, onStop, onFileSelect, onFileClear, isLoading,
             </button>
           ) : null}
         </div>
-
       </div>
     </div>
   );
