@@ -15,8 +15,8 @@ import { supabase } from '../lib/supabase'
 export function Chat() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const navigate = useNavigate()
 
+  const navigate = useNavigate()
   const { chatId } = useParams()
 
   const setActiveChatId = useChatStore((s) => s.setActiveChatId)
@@ -33,8 +33,21 @@ export function Chat() {
 
   const { createNewChat } = useChatHistory()
   const sendMessageRef = useRef(null)
-  const { sendMessage, handleProfileSelect, isLoading, isStreaming, hasThread } = useChat(chatId)
-  const { file, error, onFileSelect, clearFile } = useFileUpload(chatId)
+
+  const {
+    sendMessage,
+    handleProfileSelect,
+    isLoading,
+    isStreaming,
+    hasThread,
+  } = useChat(chatId)
+
+  const {
+    file,
+    error,
+    onFileSelect,
+    clearFile,
+  } = useFileUpload(chatId)
 
   sendMessageRef.current = sendMessage
 
@@ -58,7 +71,7 @@ export function Chat() {
     } else {
       setActiveChatId(null)
     }
-  }, [chatId])
+  }, [chatId, setActiveChatId, setMessages])
 
   async function handleSend(text, fileToSend) {
     if (!fileToSend && !hasThread(chatId)) return
@@ -69,9 +82,13 @@ export function Chat() {
       const tempTitle = text.trim()
         ? text.trim()
         : fileToSend.name.replace(/\.pdf$/i, '')
+
       targetChatId = await createNewChat(tempTitle)
+
       if (!targetChatId) return
+
       navigate(`/chat/${targetChatId}`, { replace: true })
+
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
 
@@ -90,7 +107,11 @@ export function Chat() {
         onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
       />
 
-      <div className={`flex flex-col flex-1 min-h-0 min-w-0 bg-white transition-all duration-300 ${isCollapsed ? 'md:ml-16' : 'md:ml-64'}`}>
+      <div
+        className={`flex flex-col flex-1 min-h-0 min-w-0 bg-white transition-all duration-300 ${
+          isCollapsed ? 'md:ml-16' : 'md:ml-64'
+        }`}
+      >
         <ChatHeader onMenuClick={() => setMobileOpen(true)} />
 
         <MessageList />
@@ -109,6 +130,7 @@ export function Chat() {
           />
 
           <InputBar
+            chatId={chatId ?? 'new'}
             onSend={handleSend}
             onStop={handleStop}
             onFileSelect={onFileSelect}
