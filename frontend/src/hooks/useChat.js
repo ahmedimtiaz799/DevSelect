@@ -6,6 +6,33 @@ import { uploadCV, resumePipeline } from '../lib/api';
 import { generateTempId, extractGitHubUsername } from '../lib/chatUtils';
 import { supabase } from '../lib/supabase';
 
+const PLACEHOLDER_ROLE_LABELS = new Set([
+  'unknown role',
+  'unknown title',
+  'not detected',
+  'not found',
+  'n/a',
+  'na',
+  'none',
+  'null',
+]);
+
+function cleanMetaText(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function getValidRole(role) {
+  const value = cleanMetaText(role);
+  return value && !PLACEHOLDER_ROLE_LABELS.has(value.toLowerCase())
+    ? value
+    : '';
+}
+
+function getCurrentTitleRole(title) {
+  const parts = cleanMetaText(title).split(' — ');
+  return parts.length > 1 ? getValidRole(parts.slice(1).join(' — ')) : '';
+}
+
 export function useChat(chatId) {
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -353,12 +380,18 @@ export function useChat(chatId) {
       onMeta({ candidate_name, role }) {
         if (!isRunActive(run)) return;
 
-        const title =
-          candidate_name && role
-            ? `${candidate_name} — ${role}`
-            : candidate_name ?? null;
+        const candidateName = cleanMetaText(candidate_name);
+        const validRole = getValidRole(role);
+        const title = validRole
+          ? `${candidateName} — ${validRole}`
+          : candidateName;
 
-        if (!title) return;
+        if (!title || candidateName === 'Unknown Candidate') return;
+
+        const currentTitle =
+          useChatStore.getState().chats.find((c) => c.id === targetId)?.title ?? '';
+        if (!validRole && getCurrentTitleRole(currentTitle)) return;
+        if (currentTitle === title) return;
 
         updateChatTitle(targetId, title);
         renameChat(targetId, title);

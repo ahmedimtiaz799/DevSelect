@@ -5,6 +5,7 @@ from uuid import uuid4
 import json
 import urllib.parse
 import logging
+import re
 from langgraph.types import Command
 
 from app.agents.agent3_lead_evaluator import GeminiQuotaExceededError
@@ -14,6 +15,132 @@ from app.models.requests import ResumeRequest
 logger = logging.getLogger("devselect")
 
 router = APIRouter(prefix="/api/chat", tags=["evaluation"])
+
+UNKNOWN_CANDIDATE = "Unknown Candidate"
+UNKNOWN_ROLE_VALUES = {
+    "unknown role",
+    "unknown title",
+    "not detected",
+    "not found",
+    "n/a",
+    "na",
+    "none",
+    "null",
+}
+DETECTED_ROLE_PATTERN = re.compile(
+    r"^\s*\*{0,2}Detected Role\s*(?::\*{0,2}|\*{0,2}:)\s*(.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _field(value, name: str):
+    if isinstance(value, dict):
+        return value.get(name)
+    return getattr(value, name, None)
+
+
+def _clean_text(value) -> str | None:
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    return text or None
+
+
+def _known_role(value) -> str | None:
+    role = _clean_text(value)
+    if not role or role.lower() in UNKNOWN_ROLE_VALUES:
+        return None
+
+    return role
+
+
+def _candidate_role(candidate) -> str | None:
+    role = _known_role(_field(candidate, "current_title"))
+    if role:
+        return role
+
+    for experience in (_field(candidate, "work_experience") or []):
+        role = _known_role(_field(experience, "title"))
+        if role:
+            return role
+
+    return None
+
+
+def _report_role(report: str | None) -> str | None:
+    if not report:
+        return None
+
+    match = DETECTED_ROLE_PATTERN.search(report)
+    if not match:
+        return None
+
+    role = re.sub(r"[*_`]+", "", match.group(1)).strip()
+    return _known_role(role)
+
+
+def _meta_from_tasks(tasks) -> dict:
+    meta = {}
+
+    for task in (tasks or []):
+        for interrupt_obj in (getattr(task, "interrupts", None) or []):
+            interrupt_val = getattr(interrupt_obj, "value", None)
+            if not isinstance(interrupt_val, dict):
+                continue
+
+            name = _clean_text(interrupt_val.get("candidate_name"))
+            role = (
+                _known_role(interrupt_val.get("role"))
+                or _known_role(interrupt_val.get("candidate_role"))
+                or _known_role(interrupt_val.get("current_title"))
+            )
+
+            if name:
+                meta["candidate_name"] = name
+            if role:
+                meta["role"] = role
+
+            if meta:
+                return meta
+
+    return meta
+
+
+def _candidate_meta(values: dict | None, tasks=None) -> dict:
+    values = values or {}
+    candidate = values.get("candidate")
+    meta = {}
+
+    if candidate:
+        name = _clean_text(_field(candidate, "full_name"))
+        role = _candidate_role(candidate)
+
+        if name:
+            meta["candidate_name"] = name
+        if role:
+            meta["role"] = role
+
+    task_meta = _meta_from_tasks(tasks)
+    meta = {
+        **task_meta,
+        **meta,
+    }
+
+    return {
+        "candidate_name": meta.get("candidate_name") or UNKNOWN_CANDIDATE,
+        "role": meta.get("role"),
+    }
+
+
+def _meta_changed(current: dict, previous: dict) -> bool:
+    if current.get("role") and current.get("role") != previous.get("role"):
+        return True
+
+    return (
+        current.get("candidate_name") != previous.get("candidate_name")
+        and current.get("candidate_name") != UNKNOWN_CANDIDATE
+    )
 
 
 @router.post("/{chat_id}/upload")
@@ -134,6 +261,7 @@ async def evaluation_stream_generator(
 
     yield f"event: meta\ndata: {json.dumps(meta)}\n\n"
     logger.info(f"SSE stream started : thread={thread_id} meta={meta}")
+    last_meta = meta
 
     try:
         config = {"configurable": {"thread_id": thread_id}}
@@ -149,6 +277,11 @@ async def evaluation_stream_generator(
         report_sent = False
 
         async for state_snapshot in result_stream:
+            current_meta = _candidate_meta(state_snapshot)
+            if _meta_changed(current_meta, last_meta):
+                yield f"event: meta\ndata: {json.dumps(current_meta)}\n\n"
+                last_meta = current_meta
+
             if state_snapshot.get("error"):
                 error = state_snapshot["error"]
                 logger.warning(f"SSE pipeline state error : thread={thread_id} error={error}")
@@ -165,11 +298,21 @@ async def evaluation_stream_generator(
                 logger.info(f"Agent 2 completed : thread={thread_id}")
 
             if not agent_3_status_sent and state_snapshot.get("report") is not None:
+                report: str = state_snapshot.get("report", "")
+                report_role = _report_role(report)
+                if report_role:
+                    report_meta = {
+                        "candidate_name": last_meta.get("candidate_name") or UNKNOWN_CANDIDATE,
+                        "role": report_role,
+                    }
+                    if _meta_changed(report_meta, last_meta):
+                        yield f"event: meta\ndata: {json.dumps(report_meta)}\n\n"
+                        last_meta = report_meta
+
                 yield f"event: status\ndata: {json.dumps({'text': 'Generating Recommendation...'})}\n\n"
                 agent_3_status_sent = True
                 logger.info(f"Agent 3 completed : thread={thread_id}")
 
-                report: str = state_snapshot.get("report", "")
                 if report:
                     report_sent = True
                 for char in report:
@@ -238,27 +381,7 @@ async def stream_evaluation(
     if snapshot is None or not snapshot.values:
         raise HTTPException(status_code=404, detail="No evaluation checkpoint found. Run /upload first.")
 
-    candidate_name = "Unknown Candidate"
-    role = "Unknown Role"
-
-    candidate = snapshot.values.get("candidate")
-    if candidate:
-        candidate_name = candidate.full_name or "Unknown Candidate"
-        role = candidate.current_title or "Unknown Role"
-    else:
-        for task in (snapshot.tasks or []):
-            for interrupt_obj in (getattr(task, "interrupts", None) or []):
-                interrupt_val = getattr(interrupt_obj, "value", None)
-                if isinstance(interrupt_val, dict):
-                    name = interrupt_val.get("candidate_name")
-                    if name:
-                        candidate_name = name
-                    break
-
-    meta = {
-        "candidate_name": candidate_name,
-        "role": role,
-    }
+    meta = _candidate_meta(snapshot.values, snapshot.tasks)
 
     return StreamingResponse(
         evaluation_stream_generator(thread_id, resume_payload, meta, graph),
