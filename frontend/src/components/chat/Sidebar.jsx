@@ -128,6 +128,7 @@ export function Sidebar({
         </div>
 
         <div
+          data-sidebar-scroll
           className="flex-1 overflow-y-auto px-2 flex flex-col gap-1
           [&::-webkit-scrollbar]:w-[6px]
           [&::-webkit-scrollbar-track]:bg-transparent

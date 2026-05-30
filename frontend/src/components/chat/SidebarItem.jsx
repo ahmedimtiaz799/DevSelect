@@ -7,6 +7,11 @@ import { ChatContextMenu } from './ChatContextMenu'
 import { DeleteConfirmModal } from './DeleteConfirmModal'
 import { RenameModal } from './RenameModal'
 
+const MENU_WIDTH = 176
+const MENU_HEIGHT = 126
+const MENU_GAP = 4
+const VIEWPORT_PADDING = 8
+
 export function SidebarItem({ chat, onRename, onDelete, onPin, isCollapsed }) {
   const navigate = useNavigate()
   const { activeChatId, setActiveChatId } = useChatStore()
@@ -32,9 +37,30 @@ export function SidebarItem({ chat, onRename, onDelete, onPin, isCollapsed }) {
   function handleMenuButtonClick(e) {
     e.stopPropagation()
     const rect = menuButtonRef.current.getBoundingClientRect()
+    const scrollRect = menuButtonRef.current
+      .closest('[data-sidebar-scroll]')
+      ?.getBoundingClientRect()
+    const boundaryBottom = Math.min(
+      window.innerHeight - VIEWPORT_PADDING,
+      scrollRect?.bottom ?? window.innerHeight - VIEWPORT_PADDING
+    )
+    const spaceBelow = boundaryBottom - rect.bottom
+    const rawTop =
+      spaceBelow >= MENU_HEIGHT + MENU_GAP
+        ? rect.bottom + MENU_GAP
+        : rect.top - MENU_HEIGHT - MENU_GAP
+    const maxTop = Math.max(VIEWPORT_PADDING, boundaryBottom - MENU_HEIGHT)
+    const maxLeft = Math.max(
+      VIEWPORT_PADDING,
+      window.innerWidth - MENU_WIDTH - VIEWPORT_PADDING
+    )
+
     setMenuPosition({
-      top: rect.bottom + 4,
-      left: rect.right - 176,
+      top: Math.min(Math.max(rawTop, VIEWPORT_PADDING), maxTop),
+      left: Math.min(
+        Math.max(rect.right - MENU_WIDTH, VIEWPORT_PADDING),
+        maxLeft
+      ),
     })
     setMenuOpen((prev) => !prev)
   }

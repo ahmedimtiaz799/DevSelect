@@ -28,7 +28,7 @@ export function LoadingStates({ isLoading, statuses = [] }) {
         >
           {index < activeStep ? (
             <>
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500">
                 <Check size={15} strokeWidth={2.4} />
               </span>
               <span className="text-brand-dark">

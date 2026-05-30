@@ -58,7 +58,7 @@ export function AIMessage({ message }) {
           className="opacity-0 group-hover:opacity-100 transition-opacity mt-1 flex items-center gap-1 text-brand-iconGray hover:text-brand-dark"
         >
           {copied ? (
-            <Check size={14} className="text-green-500" />
+            <Check size={14} className="text-gray-500" />
           ) : (
             <Copy size={14} />
           )}

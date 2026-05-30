@@ -56,7 +56,7 @@ export function MessageBubble({ content = '', fileName }) {
             className="absolute -bottom-5 right-0 opacity-0 group-hover:opacity-100 transition-opacity"
           >
             {copied
-              ? <Check size={14} className="text-green-500" />
+              ? <Check size={14} className="text-gray-500" />
               : <Copy size={14} className="text-brand-iconGray" />
             }
           </button>
