@@ -1,38 +1,50 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 export function useAutoScroll(messages) {
   const containerRef = useRef(null)
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+  const shouldAutoScrollRef = useRef(true)
+  const frameRef = useRef(null)
 
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
-    function handleScroll() {
-      const distanceFromBottom =
-        container.scrollHeight - container.scrollTop - container.clientHeight
+    function isNearBottom() {
+      return (
+        container.scrollHeight -
+          container.scrollTop -
+          container.clientHeight <
+        120
+      )
+    }
 
-      if (distanceFromBottom < 100) {
-        setShouldAutoScroll(true)
-      } else {
-        setShouldAutoScroll(false)
-      }
+    function handleScroll() {
+      shouldAutoScrollRef.current = isNearBottom()
     }
 
     container.addEventListener('scroll', handleScroll)
-    return () => container.removeEventListener('scroll', handleScroll)
+    shouldAutoScrollRef.current = isNearBottom()
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current)
+      }
+    }
   }, [])
 
   useEffect(() => {
-    if (!shouldAutoScroll) return
     const container = containerRef.current
-    if (!container) return
+    if (!container || !shouldAutoScrollRef.current) return
 
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: 'smooth',
+    if (frameRef.current) {
+      cancelAnimationFrame(frameRef.current)
+    }
+
+    frameRef.current = requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight
     })
-  }, [messages, shouldAutoScroll])
+  }, [messages])
 
   return containerRef
 }

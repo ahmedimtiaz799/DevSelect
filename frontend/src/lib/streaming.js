@@ -2,7 +2,22 @@ import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 const BASE_URL = import.meta.env.VITE_API_URL;
 
-export async function streamChatResponse(
+function isAbortError(err) {
+  return (
+    err?.name === 'AbortError' ||
+    err?.message?.toLowerCase().includes('aborted')
+  );
+}
+
+function parseEventData(data) {
+  try {
+    return JSON.parse(data);
+  } catch {
+    return {};
+  }
+}
+
+export function streamChatResponse(
   chatId,
   threadId,
   resumePayload,
@@ -12,6 +27,13 @@ export async function streamChatResponse(
   const { onMeta, onStatus, onToken, onDone, onError } = handlers;
 
   const controller = new AbortController();
+  let intentionalAbort = false;
+  let settled = false;
+
+  function abortStream() {
+    intentionalAbort = true;
+    controller.abort();
+  }
 
   const url =
     `${BASE_URL}/api/chat/${chatId}/stream` +
@@ -38,22 +60,42 @@ export async function streamChatResponse(
         return;
       }
       if (event.event === 'done') {
+        settled = true;
         onDone();
-        controller.abort();
+        abortStream();
         return;
       }
       if (event.event === 'error') {
-        onError(JSON.parse(event.data).error);
-        controller.abort();
+        settled = true;
+        onError(parseEventData(event.data));
+        abortStream();
         return;
       }
       console.warn('Unknown SSE event type:', event.event);
     },
     onerror(err) {
-      onError(err?.message ?? 'Stream connection failed');
+      if (intentionalAbort || controller.signal.aborted || isAbortError(err)) {
+        return;
+      }
       throw err;
     },
+    onclose() {
+      if (settled || intentionalAbort || controller.signal.aborted) {
+        return;
+      }
+      settled = true;
+      onError({
+        error: 'Evaluation stopped unexpectedly. Please try again.',
+        code: 'UNEXPECTED_STREAM_END',
+      });
+    },
+  }).catch((err) => {
+    if (intentionalAbort || controller.signal.aborted || isAbortError(err)) {
+      return;
+    }
+    settled = true;
+    onError({ error: err?.message ?? 'Stream connection failed' });
   });
 
-  return () => controller.abort();
+  return abortStream;
 }

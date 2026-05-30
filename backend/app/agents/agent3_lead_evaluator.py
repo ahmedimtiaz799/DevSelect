@@ -10,6 +10,27 @@ logger = logging.getLogger("devselect")
 
 PRIMARY_MODEL = "gemini-2.5-pro"
 FALLBACK_MODEL = "gemini-2.5-flash"
+GEMINI_QUOTA_RETRY_AFTER_SECONDS = 20
+
+
+class GeminiQuotaExceededError(Exception):
+    code = "GEMINI_QUOTA_EXCEEDED"
+    user_message = "Gemini quota reached. Please wait and try again."
+    retry_after_seconds = GEMINI_QUOTA_RETRY_AFTER_SECONDS
+
+    def __init__(self, model_name: str, original_error: Exception):
+        super().__init__(f"Gemini quota exceeded for {model_name}: {original_error}")
+
+
+def _is_gemini_quota_error(error: Exception) -> bool:
+    error_str = str(error).lower()
+    return (
+        "429" in error_str
+        or "quota" in error_str
+        or "resource_exhausted" in error_str
+        or "rate limit" in error_str
+        or "too many requests" in error_str
+    )
 
 
 async def _stream_with_fallback(messages: list) -> str:
@@ -30,17 +51,15 @@ async def _stream_with_fallback(messages: list) -> str:
                 logger.warning(f"Agent 3: used fallback model {FALLBACK_MODEL} — primary quota exhausted.")
             return report_text
         except Exception as e:
-            error_str = str(e).lower()
-            is_quota_error = "429" in error_str or "quota" in error_str or "resource_exhausted" in error_str
-            if is_quota_error and model_name == PRIMARY_MODEL:
-                logger.warning(f"Agent 3: {PRIMARY_MODEL} quota exhausted, retrying with {FALLBACK_MODEL}.")
-                continue
+            if _is_gemini_quota_error(e):
+                logger.warning(f"Agent 3: {model_name} quota/rate limit error: {e}")
+                if model_name == PRIMARY_MODEL:
+                    logger.warning(f"Agent 3: {PRIMARY_MODEL} quota exhausted, retrying with {FALLBACK_MODEL}.")
+                    continue
+                raise GeminiQuotaExceededError(model_name, e) from e
             raise
 
-    raise RuntimeError(
-        f"Both {PRIMARY_MODEL} and {FALLBACK_MODEL} failed due to quota limits. "
-        "Please try again later or enable billing on your Google AI project."
-    )
+    raise GeminiQuotaExceededError(PRIMARY_MODEL, RuntimeError("Fallback was not attempted."))
 
 
 async def agent3_lead_evaluator(state: DevSelectState) -> dict:
@@ -71,8 +90,11 @@ Please evaluate the following candidate and generate a structured hiring report.
 
     try:
         report_text = await _stream_with_fallback(messages)
+    except GeminiQuotaExceededError as e:
+        logger.exception(f"Agent 3 quota exhausted for thread {thread_id}: {e}")
+        raise
     except Exception as e:
-        logger.error(f"Agent 3 failed for thread {thread_id}: {e}")
+        logger.exception(f"Agent 3 failed for thread {thread_id}: {e}")
         raise
 
     logger.info(f"Agent 3 completed report for thread {thread_id}")

@@ -7,6 +7,7 @@ import urllib.parse
 import logging
 from langgraph.types import Command
 
+from app.agents.agent3_lead_evaluator import GeminiQuotaExceededError
 from app.dependencies import verify_token
 from app.models.requests import ResumeRequest
 
@@ -63,9 +64,24 @@ async def upload_cv(
         config={"configurable": {"thread_id": thread_id}},
     )
 
-    interrupt_payload = result.get("__interrupt__", [{}])[0]
+    if result.get("error"):
+        logger.warning(f"Upload evaluation failed before interrupt : thread={thread_id} error={result['error']}")
+        return JSONResponse(
+            status_code=503,
+            content={"error": result["error"]},
+        )
+
+    interrupts = result.get("__interrupt__") or []
+    interrupt_payload = interrupts[0] if interrupts else None
     if hasattr(interrupt_payload, "value"):
         interrupt_payload = interrupt_payload.value
+
+    if not isinstance(interrupt_payload, dict) or "scenario" not in interrupt_payload:
+        logger.error(f"Upload evaluation returned no resume scenario : thread={thread_id}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Evaluation could not be started. Please try again."},
+        )
 
     scenario = interrupt_payload.get("scenario")
 
@@ -130,8 +146,18 @@ async def evaluation_stream_generator(
 
         agent_2_status_sent = False
         agent_3_status_sent = False
+        report_sent = False
 
         async for state_snapshot in result_stream:
+            if state_snapshot.get("error"):
+                error = state_snapshot["error"]
+                logger.warning(f"SSE pipeline state error : thread={thread_id} error={error}")
+                payload = {
+                    "error": error,
+                    "code": "EVALUATION_PIPELINE_ERROR",
+                }
+                yield f"event: error\ndata: {json.dumps(payload)}\n\n"
+                return
 
             if not agent_2_status_sent and state_snapshot.get("github_analysis") is not None:
                 yield f"event: status\ndata: {json.dumps({'text': 'Checking Github Repository...'})}\n\n"
@@ -144,14 +170,33 @@ async def evaluation_stream_generator(
                 logger.info(f"Agent 3 completed : thread={thread_id}")
 
                 report: str = state_snapshot.get("report", "")
+                if report:
+                    report_sent = True
                 for char in report:
                     yield f"event: token\ndata: {json.dumps({'text': char})}\n\n"
+
+        if not report_sent:
+            logger.warning(f"SSE stream ended without report : thread={thread_id}")
+            payload = {
+                "error": "Evaluation stopped unexpectedly. Please try again.",
+                "code": "EVALUATION_STOPPED_UNEXPECTEDLY",
+            }
+            yield f"event: error\ndata: {json.dumps(payload)}\n\n"
+            return
 
         yield f"event: done\ndata: {json.dumps({})}\n\n"
         logger.info(f"SSE stream completed : thread={thread_id}")
 
+    except GeminiQuotaExceededError as e:
+        logger.warning(f"SSE pipeline quota failure : thread={thread_id} error={e}", exc_info=True)
+        payload = {
+            "error": e.user_message,
+            "code": e.code,
+            "retry_after_seconds": e.retry_after_seconds,
+        }
+        yield f"event: error\ndata: {json.dumps(payload)}\n\n"
     except Exception as e:
-        logger.error(f"SSE pipeline failed : thread={thread_id} error={e}")
+        logger.exception(f"SSE pipeline failed : thread={thread_id} error={e}")
         yield f"event: error\ndata: {json.dumps({'error': 'Evaluation failed'})}\n\n"
 
 

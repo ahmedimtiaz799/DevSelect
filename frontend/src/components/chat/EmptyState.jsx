@@ -39,7 +39,7 @@ export function EmptyState() {
   const firstName = getFirstName(user)
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-4 text-center">
+    <div className="flex w-full flex-col items-center px-4 text-center">
       <h2 className="text-display text-brand-dark mb-4">
         {getGreeting()}{firstName ? `, ${firstName}` : ''}
       </h2>

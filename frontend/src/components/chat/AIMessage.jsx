@@ -19,7 +19,7 @@ const markdownComponents = {
     <li className="mb-1">{children}</li>
   ),
   p: ({ children }) => (
-    <p className="text-brand-body text-msg mb-2">{children}</p>
+    <p className="text-brand-body text-msg mb-2 whitespace-pre-line">{children}</p>
   ),
   strong: ({ children }) => (
     <strong className="text-brand-dark font-semibold">{children}</strong>
@@ -38,14 +38,14 @@ export function AIMessage({ message }) {
 
   if (message.role === 'status') {
     return (
-      <div className="w-full md:max-w-ai-msg py-1 px-4 md:px-0">
+      <div className="w-full py-1">
         <p className="text-brand-muted text-msg italic">{message.content}</p>
       </div>
     );
   }
 
   return (
-    <div className="group relative w-full md:max-w-ai-msg">
+    <div className="group relative w-full">
       <div className="prose-none">
         <ReactMarkdown components={markdownComponents}>
           {message.content}

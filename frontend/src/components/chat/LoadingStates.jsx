@@ -1,42 +1,58 @@
+import { Check, Circle, LoaderCircle } from 'lucide-react';
+
 const STEPS = [
-  'Analyzing CV...',
-  'Checking Github Repository...',
-  'Generating Recommendation...',
+  'Analyzing CV',
+  'Checking Github Repository',
+  'Generating Recommendation',
 ];
 
-export function LoadingStates({ isLoading, statuses }) {
-  const hasAnyActivity = isLoading || statuses.length > 0;
-  if (!hasAnyActivity) return null;
+const STATUS_TO_STEP = {
+  'Checking Github Repository...': 1,
+  'Generating Recommendation...': 2,
+};
 
-  const completedStatuses = new Set(statuses);
+export function LoadingStates({ isLoading, statuses = [] }) {
+  if (!isLoading) return null;
 
-  const analyzingDone = statuses.length > 0;
-  const lines = [
-    { label: 'Analyzing CV...', done: analyzingDone },
-    ...STEPS.slice(1).map((step) => ({
-      label: step,
-      done: completedStatuses.has(step),
-      visible: statuses.some((s) => s === step) || analyzingDone,
-    })),
-  ];
-
-  const visibleLines = lines.filter((l, i) => i === 0 || l.visible);
+  const activeStep = statuses.reduce(
+    (highest, status) => Math.max(highest, STATUS_TO_STEP[status] ?? 0),
+    0
+  );
 
   return (
-    <div className="flex flex-col gap-2 px-4 md:px-12 py-2">
-      {visibleLines.map((line) => (
-        <div key={line.label} className="flex items-center gap-2 text-msg">
-          {line.done ? (
+    <div className="w-full max-w-ai-msg py-1" aria-live="polite">
+      {STEPS.map((step, index) => (
+        <div
+          key={step}
+          className="flex min-h-8 items-center gap-3 text-msg"
+        >
+          {index < activeStep ? (
             <>
-              <span className="text-green-500">✓</span>
-              <span className="text-brand-dark/40">
-                {line.label.replace('...', '')}
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600">
+                <Check size={15} strokeWidth={2.4} />
+              </span>
+              <span className="text-brand-dark">
+                {step}
+              </span>
+            </>
+          ) : index === activeStep ? (
+            <>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-dark/10 text-brand-dark">
+                <LoaderCircle size={15} className="animate-spin" strokeWidth={2.4} />
+              </span>
+              <span className="font-medium text-brand-dark">
+                {step}
               </span>
             </>
           ) : (
-            <span className="text-brand-textLoading animate-pulse">
-              {line.label}
-            </span>
+            <>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center text-brand-muted/40">
+                <Circle size={13} strokeWidth={2.2} />
+              </span>
+              <span className="text-brand-muted/50">
+                {step}
+              </span>
+            </>
           )}
         </div>
       ))}

@@ -16,6 +16,7 @@ export function InputBar({
   const [text, setText] = useState('')
   const [fileWarning, setFileWarning] = useState(false)
   const [noFileWarning, setNoFileWarning] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
@@ -23,7 +24,8 @@ export function InputBar({
   const draftKey = `devselect:draft:${chatId ?? 'new'}`
 
   const hasContent = text.trim().length > 0 || !!file
-  const canSend = hasContent && !isLoading && !isStreaming
+  const isProcessing = isLoading || isStreaming || isSubmitting
+  const canSend = hasContent && !isProcessing
 
   useEffect(() => {
     try {
@@ -73,7 +75,19 @@ export function InputBar({
       return
     }
 
-    onSend(text.trim(), file)
+    const textToSend = text.trim()
+    const fileToSend = file
+
+    setIsSubmitting(true)
+    Promise.resolve()
+      .then(() => onSend(textToSend, fileToSend))
+      .finally(() => {
+        setIsSubmitting(false)
+      })
+
+    if (fileToSend) {
+      onFileClear()
+    }
 
     try {
       localStorage.removeItem(draftKey)
@@ -86,6 +100,11 @@ export function InputBar({
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
+  }
+
+  function handleStopClick() {
+    setIsSubmitting(false)
+    onStop()
   }
 
   function handleFileChange(e) {
@@ -175,9 +194,9 @@ export function InputBar({
             className="flex-1 bg-transparent outline-none text-base text-brand-body placeholder:text-brand-muted resize-none overflow-hidden leading-6 py-[9px]"
           />
 
-          {isStreaming ? (
+          {isProcessing ? (
             <button
-              onClick={onStop}
+              onClick={handleStopClick}
               className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-brand-dark text-white rounded-full transition-colors shrink-0"
             >
               <Square size={14} fill="white" />

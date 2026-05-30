@@ -4,7 +4,6 @@ import { Sidebar } from '../components/chat/Sidebar'
 import { ChatHeader } from '../components/chat/ChatHeader'
 import { MessageList } from '../components/chat/MessageList'
 import { InputBar } from '../components/chat/InputBar'
-import { LoadingStates } from '../components/chat/LoadingStates'
 import { GitHubProfileSelector } from '../components/chat/GitHubProfileSelector'
 import { useChat } from '../hooks/useChat'
 import { useFileUpload } from '../hooks/useFileUpload'
@@ -21,24 +20,21 @@ export function Chat() {
 
   const setActiveChatId = useChatStore((s) => s.setActiveChatId)
   const setMessages = useChatStore((s) => s.setMessages)
-  const messagesMap = useChatStore((s) => s.messages)
   const pendingProfiles = useChatStore((s) => s.pendingProfiles)
 
-  const messages = messagesMap[chatId] ?? []
   const profiles = pendingProfiles[chatId] ?? []
-
-  const statusMessages = messages
-    .filter((m) => m.role === 'status')
-    .map((m) => m.content)
 
   const { createNewChat } = useChatHistory()
   const sendMessageRef = useRef(null)
+  const stopRequestedRef = useRef(false)
 
   const {
     sendMessage,
     handleProfileSelect,
     isLoading,
     isStreaming,
+    statusMessages,
+    stopProcessing,
     hasThread,
   } = useChat(chatId)
 
@@ -63,7 +59,20 @@ export function Chat() {
           .order('created_at', { ascending: true })
 
         if (!error && data) {
-          setMessages(chatId, data)
+          const currentMessages =
+            useChatStore.getState().messages[chatId] ?? []
+          const hasOptimisticMessages = currentMessages.some((message) =>
+            String(message.id).startsWith('temp_')
+          )
+
+          if (hasOptimisticMessages) return
+
+          setMessages(
+            chatId,
+            data.filter((message) =>
+              message.role === 'user' || message.role === 'assistant'
+            )
+          )
         }
       }
 
@@ -74,6 +83,8 @@ export function Chat() {
   }, [chatId, setActiveChatId, setMessages])
 
   async function handleSend(text, fileToSend) {
+    stopRequestedRef.current = false
+
     if (!fileToSend && !hasThread(chatId)) return
 
     let targetChatId = chatId
@@ -90,13 +101,17 @@ export function Chat() {
       navigate(`/chat/${targetChatId}`, { replace: true })
 
       await new Promise((resolve) => setTimeout(resolve, 50))
+
+      if (stopRequestedRef.current) return
     }
 
     await sendMessageRef.current(fileToSend, text, targetChatId)
-    clearFile()
   }
 
-  function handleStop() {}
+  function handleStop() {
+    stopRequestedRef.current = true
+    stopProcessing()
+  }
 
   return (
     <div className="flex h-dvh bg-white overflow-hidden overflow-x-hidden">
@@ -114,7 +129,11 @@ export function Chat() {
       >
         <ChatHeader onMenuClick={() => setMobileOpen(true)} />
 
-        <MessageList />
+        <MessageList
+          isLoading={isLoading}
+          isStreaming={isStreaming}
+          statuses={statusMessages}
+        />
 
         <div className="shrink-0 bg-white pt-2 pb-4">
           {profiles.length > 0 && (
@@ -123,11 +142,6 @@ export function Chat() {
               onSelect={handleProfileSelect}
             />
           )}
-
-          <LoadingStates
-            isLoading={isLoading}
-            statuses={statusMessages}
-          />
 
           <InputBar
             chatId={chatId ?? 'new'}

@@ -1,3 +1,5 @@
+import asyncio
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +12,10 @@ from app.agents.graph import build_graph
 from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.middleware.circuit_breaker import CircuitBreakerMiddleware, admin_router
 from app.middleware.error_handler import init_sentry, register_exception_handlers
+
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 @asynccontextmanager
