@@ -13,6 +13,11 @@ from app.agents.agent3_lead_evaluator import GeminiQuotaExceededError
 from app.config import settings
 from app.dependencies import verify_token
 from app.models.requests import ResumeRequest
+from app.utils.budget_limits import (
+    budget_error_payload,
+    estimate_evaluation_budget,
+    record_budget_usage,
+)
 
 logger = logging.getLogger("devselect")
 
@@ -507,6 +512,21 @@ async def upload_cv(
         old_thread_id = thread_id
         thread_id = str(uuid4())
         logger.info(f"Upload requested existing thread : old={old_thread_id} new={thread_id}")
+
+    estimated_budget_tokens = estimate_evaluation_budget(file.size)
+    budget_decision = await record_budget_usage(user_id, estimated_budget_tokens)
+    if not budget_decision.allowed:
+        logger.warning(
+            "Evaluation budget blocked before start : user=%s thread=%s code=%s estimated_tokens=%s",
+            user_id,
+            thread_id,
+            budget_decision.code,
+            budget_decision.estimated_tokens,
+        )
+        return JSONResponse(
+            status_code=429,
+            content=budget_error_payload(budget_decision),
+        )
 
     pdf_bytes = await file.read()
 

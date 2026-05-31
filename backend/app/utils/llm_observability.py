@@ -8,7 +8,14 @@ def estimate_tokens_from_text(text: str | None) -> int:
     if not text:
         return 0
 
-    return max(1, (len(text) + 3) // 4)
+    return estimate_tokens_from_chars(len(text))
+
+
+def estimate_tokens_from_chars(char_count: int | None) -> int:
+    if not char_count or char_count <= 0:
+        return 0
+
+    return max(1, (char_count + 3) // 4)
 
 
 def cap_text_for_llm(text: str | None, max_chars: int) -> tuple[str, int, int, bool]:
