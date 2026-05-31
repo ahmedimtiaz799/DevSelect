@@ -44,6 +44,14 @@ export function AIMessage({ message }) {
     );
   }
 
+  if (message.role === 'system') {
+    return (
+      <div className="w-full py-1">
+        <p className="text-sm text-gray-500">{message.content}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="group relative w-full">
       <div className="prose-none">

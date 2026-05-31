@@ -10,7 +10,9 @@ export function MessageList({ isLoading = false, isStreaming = false, statuses =
   const messages = useChatStore((s) => s.messages)
   const activeMessages = activeChatId
     ? (messages[activeChatId] ?? []).filter((message) =>
-        message.role === 'user' || message.role === 'assistant'
+        message.role === 'user' ||
+        message.role === 'assistant' ||
+        message.role === 'system'
       )
     : []
   const hasActivity = isLoading || isStreaming
