@@ -20,6 +20,7 @@ from app.models.candidate import CandidateExtraction
 from app.prompts.agent1_prompt import AGENT1_PROMPT
 from app.utils.json_parser import parse_llm_json
 from app.utils.llm_observability import (
+    cap_text_for_llm,
     estimate_tokens_from_text,
     log_llm_request,
     log_llm_usage,
@@ -145,6 +146,17 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         logger.info("Agent 1: Sending PDF to LlamaParse...")
         raw_cv_text = await _parse_pdf_with_llamaparse(state["pdf_bytes"])
         logger.info(f"Agent 1: LlamaParse returned {len(raw_cv_text)} characters")
+        gemini_cv_text, original_cv_chars, capped_cv_chars, was_truncated = cap_text_for_llm(
+            raw_cv_text,
+            settings.AGENT1_MAX_INPUT_CHARS,
+        )
+        logger.info(
+            "Agent 1: CV markdown input cap thread=%s original_chars=%s capped_chars=%s truncated=%s",
+            state["thread_id"],
+            original_cv_chars,
+            capped_cv_chars,
+            was_truncated,
+        )
     except Exception as e:
         logger.error(f"Agent 1 failed in Step A: {e}")
         return {
@@ -157,7 +169,7 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
     try:
         logger.info("Agent 1: Sending parsed text to Gemini...")
         raw_json_str = await _extract_with_gemini(
-            raw_cv_text,
+            gemini_cv_text,
             thread_id=state["thread_id"],
         )
         logger.info("Agent 1: Gemini responded")

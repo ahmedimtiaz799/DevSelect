@@ -1,12 +1,30 @@
 from collections.abc import Mapping
 from typing import Any
 
+TRUNCATION_MARKER = "\n\n[Content truncated for token budget]"
+
 
 def estimate_tokens_from_text(text: str | None) -> int:
     if not text:
         return 0
 
     return max(1, (len(text) + 3) // 4)
+
+
+def cap_text_for_llm(text: str | None, max_chars: int) -> tuple[str, int, int, bool]:
+    value = text or ""
+    original_chars = len(value)
+
+    if max_chars <= 0 or original_chars <= max_chars:
+        return value, original_chars, original_chars, False
+
+    if max_chars <= len(TRUNCATION_MARKER):
+        capped = TRUNCATION_MARKER[:max_chars]
+    else:
+        keep_chars = max_chars - len(TRUNCATION_MARKER)
+        capped = value[:keep_chars].rstrip() + TRUNCATION_MARKER
+
+    return capped, original_chars, len(capped), True
 
 
 def estimate_tokens_from_messages(messages: list[Any]) -> int:

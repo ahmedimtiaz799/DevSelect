@@ -6,6 +6,7 @@ from app.agents.state import DevSelectState
 from app.config import settings
 from app.prompts.agent3_prompt import AGENT3_SYSTEM_PROMPT
 from app.utils.llm_observability import (
+    cap_text_for_llm,
     estimate_tokens_from_messages,
     log_llm_request,
     log_llm_usage,
@@ -106,6 +107,17 @@ Please evaluate the following candidate and generate a structured hiring report.
 --- GITHUB ANALYSIS DATA ---
 {github_section}
 """
+    user_message, original_dynamic_chars, capped_dynamic_chars, was_truncated = cap_text_for_llm(
+        user_message,
+        settings.AGENT3_MAX_INPUT_CHARS,
+    )
+    logger.info(
+        "Agent 3: Dynamic input cap thread=%s original_chars=%s capped_chars=%s truncated=%s",
+        thread_id,
+        original_dynamic_chars,
+        capped_dynamic_chars,
+        was_truncated,
+    )
 
     messages = [
         SystemMessage(content=AGENT3_SYSTEM_PROMPT),

@@ -18,6 +18,7 @@ from app.models.candidate import GitHubAnalysis
 from app.prompts.agent2_prompt import AGENT2_PROMPT
 from app.utils.json_parser import parse_llm_json
 from app.utils.llm_observability import (
+    cap_text_for_llm,
     estimate_tokens_from_text,
     log_llm_request,
     log_llm_usage,
@@ -261,6 +262,17 @@ async def _analyse_with_gemini(
 
     cv_skills_str = ", ".join(cv_skills) if cv_skills else "Not specified"
     github_data_str = json.dumps(raw_github_data, indent=2, default=str)
+    github_data_str, original_github_chars, capped_github_chars, was_truncated = cap_text_for_llm(
+        github_data_str,
+        settings.AGENT2_MAX_INPUT_CHARS,
+    )
+    logger.info(
+        "Agent 2: GitHub payload input cap thread=%s original_chars=%s capped_chars=%s truncated=%s",
+        thread_id or "unknown",
+        original_github_chars,
+        capped_github_chars,
+        was_truncated,
+    )
 
     prompt = (
         AGENT2_PROMPT
