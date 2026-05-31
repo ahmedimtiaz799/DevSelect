@@ -4,6 +4,7 @@ import { useChatHistory } from './useChatHistory';
 import { streamChatResponse } from '../lib/streaming';
 import { uploadCV, resumePipeline } from '../lib/api';
 import { generateTempId, extractGitHubUsername } from '../lib/chatUtils';
+import { serializeUploadMessage } from '../lib/messagePersistence';
 import { supabase } from '../lib/supabase';
 
 const PLACEHOLDER_ROLE_LABELS = new Set([
@@ -73,6 +74,18 @@ export function useChat(chatId) {
       fileName: file.name,
       fileType: file.type,
     };
+  }
+
+  async function persistUserUploadMessage(targetId, messagePayload) {
+    const { error } = await supabase.from('messages').insert({
+      chat_id: targetId,
+      role: 'user',
+      content: serializeUploadMessage(messagePayload),
+    });
+
+    if (error) {
+      console.warn('Failed to persist user upload message:', error.message);
+    }
   }
 
   function addStatusMessage(chatId, text) {
@@ -217,10 +230,11 @@ export function useChat(chatId) {
     clearStatusMessages(targetId);
 
     const tempId = generateTempId();
+    const userMessagePayload = getUserMessagePayload(file, userText);
     addMessage(targetId, {
       id: tempId,
       role: 'user',
-      ...getUserMessagePayload(file, userText),
+      ...userMessagePayload,
       chat_id: targetId,
     });
 
@@ -230,6 +244,9 @@ export function useChat(chatId) {
     }
 
     try {
+      await persistUserUploadMessage(targetId, userMessagePayload);
+      if (!isRunActive(run)) return;
+
       const response = await uploadCV(targetId, file, threadIds[targetId]);
 
       if (!isRunActive(run)) return;

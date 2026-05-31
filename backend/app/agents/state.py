@@ -11,3 +11,4 @@ class DevSelectState(TypedDict):
     github_analysis: GitHubAnalysis | None
     report: str | None
     error: str | None
+    evaluation_status: str | None

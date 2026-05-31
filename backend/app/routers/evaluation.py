@@ -18,6 +18,11 @@ logger = logging.getLogger("devselect")
 
 router = APIRouter(prefix="/api/chat", tags=["evaluation"])
 
+EVALUATION_PENDING = "pending"
+EVALUATION_IN_PROGRESS = "in_progress"
+EVALUATION_COMPLETED = "completed"
+EVALUATION_STOPPED = "stopped"
+EVALUATION_FAILED = "failed"
 UNKNOWN_CANDIDATE = "Unknown Candidate"
 UNKNOWN_ROLE_VALUES = {
     "unknown role",
@@ -79,6 +84,9 @@ Recommend moving Ahmed Imtiaz to the next interview stage for a Full Stack AI En
 3. Include a short debugging exercise around API failure handling.
 4. Validate testing, deployment, and security ownership through practical questions.
 """.strip()
+ACTIVE_STREAM_THREADS: set[str] = set()
+MOCK_EVALUATION_RUNS: dict[str, dict] = {}
+EVALUATION_GUARD_LOCK = asyncio.Lock()
 
 
 def _field(value, name: str):
@@ -191,6 +199,210 @@ def _meta_changed(current: dict, previous: dict) -> bool:
     )
 
 
+def _meta_with_report_role(meta: dict, report: str | None) -> dict:
+    report_role = _report_role(report)
+    if not report_role:
+        return meta
+
+    return {
+        "candidate_name": meta.get("candidate_name") or UNKNOWN_CANDIDATE,
+        "role": report_role,
+    }
+
+
+def _evaluation_status(values: dict | None) -> str:
+    values = values or {}
+    status = values.get("evaluation_status")
+
+    if status in {
+        EVALUATION_IN_PROGRESS,
+        EVALUATION_COMPLETED,
+        EVALUATION_STOPPED,
+        EVALUATION_FAILED,
+    }:
+        return status
+
+    if values.get("report"):
+        return EVALUATION_COMPLETED
+
+    if values.get("error"):
+        return EVALUATION_FAILED
+
+    return EVALUATION_PENDING
+
+
+def _thread_terminal_error_payload(status: str) -> dict:
+    if status == EVALUATION_COMPLETED:
+        return {
+            "error": "Evaluation is already completed.",
+            "code": "EVALUATION_ALREADY_COMPLETED",
+        }
+
+    if status == EVALUATION_IN_PROGRESS:
+        return {
+            "error": "Evaluation is already in progress. Please wait for it to finish.",
+            "code": "EVALUATION_ALREADY_IN_PROGRESS",
+        }
+
+    if status == EVALUATION_STOPPED:
+        return {
+            "error": "Evaluation was stopped. Please upload the CV again to start a new evaluation.",
+            "code": "EVALUATION_STOPPED",
+        }
+
+    if status == EVALUATION_FAILED:
+        return {
+            "error": "Evaluation already failed. Please upload the CV again to retry.",
+            "code": "EVALUATION_ALREADY_FAILED",
+        }
+
+    return {
+        "error": "Evaluation is not ready to stream. Please upload the CV again.",
+        "code": "EVALUATION_NOT_READY",
+    }
+
+
+def _sse_response(generator: AsyncGenerator[str, None]) -> StreamingResponse:
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+async def _single_error_stream(payload: dict) -> AsyncGenerator[str, None]:
+    yield f"event: error\ndata: {json.dumps(payload)}\n\n"
+
+
+async def _cached_report_stream_generator(
+    request: Request,
+    thread_id: str,
+    meta: dict,
+    report: str,
+) -> AsyncGenerator[str, None]:
+    if await request.is_disconnected():
+        logger.info(f"Cached SSE client disconnected before stream start : thread={thread_id}")
+        return
+
+    cached_meta = _meta_with_report_role(meta, report)
+    yield f"event: meta\ndata: {json.dumps(cached_meta)}\n\n"
+    yield f"event: status\ndata: {json.dumps({'text': 'Generating Recommendation...'})}\n\n"
+    logger.info(f"Cached SSE stream started : thread={thread_id}")
+
+    for char in report:
+        if await request.is_disconnected():
+            logger.info(f"Cached SSE client disconnected during token stream : thread={thread_id}")
+            return
+
+        yield f"event: token\ndata: {json.dumps({'text': char})}\n\n"
+
+    yield f"event: done\ndata: {json.dumps({})}\n\n"
+    logger.info(f"Cached SSE stream completed : thread={thread_id}")
+
+
+async def _claim_stream_thread(thread_id: str) -> bool:
+    async with EVALUATION_GUARD_LOCK:
+        if thread_id in ACTIVE_STREAM_THREADS:
+            return False
+
+        ACTIVE_STREAM_THREADS.add(thread_id)
+        return True
+
+
+async def _release_stream_thread(thread_id: str) -> None:
+    async with EVALUATION_GUARD_LOCK:
+        ACTIVE_STREAM_THREADS.discard(thread_id)
+
+
+async def _is_stream_thread_active(thread_id: str) -> bool:
+    async with EVALUATION_GUARD_LOCK:
+        return thread_id in ACTIVE_STREAM_THREADS
+
+
+async def _set_graph_evaluation_status(graph, thread_id: str, status: str) -> None:
+    update_state = getattr(graph, "aupdate_state", None)
+    if update_state is None:
+        return
+
+    try:
+        await update_state(
+            {"configurable": {"thread_id": thread_id}},
+            {"evaluation_status": status},
+        )
+    except Exception as e:
+        logger.warning(f"Evaluation status update failed : thread={thread_id} status={status} error={e}")
+
+
+async def _graph_thread_has_state(graph, thread_id: str) -> bool:
+    try:
+        snapshot = await graph.aget_state({"configurable": {"thread_id": thread_id}})
+    except Exception:
+        return False
+
+    return bool(snapshot and snapshot.values)
+
+
+async def _prepare_mock_thread(thread_id: str) -> str:
+    async with EVALUATION_GUARD_LOCK:
+        if thread_id in MOCK_EVALUATION_RUNS:
+            new_thread_id = str(uuid4())
+            logger.info(f"Mock upload requested existing thread : old={thread_id} new={new_thread_id}")
+            thread_id = new_thread_id
+
+        MOCK_EVALUATION_RUNS[thread_id] = {
+            "status": EVALUATION_PENDING,
+            "report": None,
+            "meta": MOCK_META,
+        }
+        return thread_id
+
+
+async def _mock_run_status(thread_id: str) -> str:
+    async with EVALUATION_GUARD_LOCK:
+        run = MOCK_EVALUATION_RUNS.get(thread_id)
+        if not run:
+            return EVALUATION_PENDING
+
+        return run.get("status") or EVALUATION_PENDING
+
+
+async def _mock_run_exists(thread_id: str) -> bool:
+    async with EVALUATION_GUARD_LOCK:
+        return thread_id in MOCK_EVALUATION_RUNS
+
+
+async def _mock_run_report(thread_id: str) -> str | None:
+    async with EVALUATION_GUARD_LOCK:
+        run = MOCK_EVALUATION_RUNS.get(thread_id)
+        if not run:
+            return None
+
+        return run.get("report")
+
+
+async def _set_mock_run_status(
+    thread_id: str,
+    status: str,
+    report: str | None = None,
+) -> None:
+    async with EVALUATION_GUARD_LOCK:
+        run = MOCK_EVALUATION_RUNS.setdefault(
+            thread_id,
+            {
+                "status": EVALUATION_PENDING,
+                "report": None,
+                "meta": MOCK_META,
+            },
+        )
+        run["status"] = status
+        if report is not None:
+            run["report"] = report
+            run["meta"] = MOCK_META
+
+
 def _mock_token_chunks(text: str) -> list[str]:
     return re.findall(r"\S+\s*", text)
 
@@ -201,34 +413,50 @@ async def mock_evaluation_stream_generator(
 ) -> AsyncGenerator[str, None]:
     if await request.is_disconnected():
         logger.info(f"Mock SSE client disconnected before stream start : thread={thread_id}")
+        await _set_mock_run_status(thread_id, EVALUATION_STOPPED)
         return
 
-    yield f"event: meta\ndata: {json.dumps(MOCK_META)}\n\n"
-    logger.info(f"Mock SSE stream started : thread={thread_id}")
-    await asyncio.sleep(0.25)
+    try:
+        await _set_mock_run_status(thread_id, EVALUATION_IN_PROGRESS)
+        yield f"event: meta\ndata: {json.dumps(MOCK_META)}\n\n"
+        logger.info(f"Mock SSE stream started : thread={thread_id}")
+        await asyncio.sleep(0.25)
 
-    for status in MOCK_STATUSES:
+        for status in MOCK_STATUSES:
+            if await request.is_disconnected():
+                logger.info(f"Mock SSE client disconnected during status stream : thread={thread_id}")
+                await _set_mock_run_status(thread_id, EVALUATION_STOPPED)
+                return
+
+            yield f"event: status\ndata: {json.dumps({'text': status})}\n\n"
+            await asyncio.sleep(0.35)
+
+        for chunk in _mock_token_chunks(MOCK_REPORT):
+            if await request.is_disconnected():
+                logger.info(f"Mock SSE client disconnected during token stream : thread={thread_id}")
+                await _set_mock_run_status(thread_id, EVALUATION_STOPPED)
+                return
+
+            yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
+            await asyncio.sleep(0.025)
+
         if await request.is_disconnected():
-            logger.info(f"Mock SSE client disconnected during status stream : thread={thread_id}")
+            logger.info(f"Mock SSE client disconnected before done : thread={thread_id}")
+            await _set_mock_run_status(thread_id, EVALUATION_STOPPED)
             return
 
-        yield f"event: status\ndata: {json.dumps({'text': status})}\n\n"
-        await asyncio.sleep(0.35)
-
-    for chunk in _mock_token_chunks(MOCK_REPORT):
-        if await request.is_disconnected():
-            logger.info(f"Mock SSE client disconnected during token stream : thread={thread_id}")
-            return
-
-        yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
-        await asyncio.sleep(0.025)
-
-    if await request.is_disconnected():
-        logger.info(f"Mock SSE client disconnected before done : thread={thread_id}")
-        return
-
-    yield f"event: done\ndata: {json.dumps({})}\n\n"
-    logger.info(f"Mock SSE stream completed : thread={thread_id}")
+        await _set_mock_run_status(thread_id, EVALUATION_COMPLETED, report=MOCK_REPORT)
+        yield f"event: done\ndata: {json.dumps({})}\n\n"
+        logger.info(f"Mock SSE stream completed : thread={thread_id}")
+    except asyncio.CancelledError:
+        await _set_mock_run_status(thread_id, EVALUATION_STOPPED)
+        logger.info(f"Mock SSE stream cancelled : thread={thread_id}")
+        raise
+    except Exception:
+        await _set_mock_run_status(thread_id, EVALUATION_FAILED)
+        raise
+    finally:
+        await _release_stream_thread(thread_id)
 
 
 @router.post("/{chat_id}/upload")
@@ -263,6 +491,7 @@ async def upload_cv(
     thread_id = thread_id or str(uuid4())
 
     if settings.DEV_MOCK_EVALUATION:
+        thread_id = await _prepare_mock_thread(thread_id)
         logger.info(f"Mock evaluation upload accepted : thread={thread_id}")
         return JSONResponse(
             status_code=200,
@@ -272,6 +501,12 @@ async def upload_cv(
                 "resume_payload": MOCK_RESUME_PAYLOAD,
             },
         )
+
+    graph = request.app.state.graph
+    if await _graph_thread_has_state(graph, thread_id):
+        old_thread_id = thread_id
+        thread_id = str(uuid4())
+        logger.info(f"Upload requested existing thread : old={old_thread_id} new={thread_id}")
 
     pdf_bytes = await file.read()
 
@@ -283,15 +518,16 @@ async def upload_cv(
         "github_analysis": None,
         "report": None,
         "error": None,
+        "evaluation_status": EVALUATION_PENDING,
     }
 
-    graph = request.app.state.graph
     result = await graph.ainvoke(
         initial_state,
         config={"configurable": {"thread_id": thread_id}},
     )
 
     if result.get("error"):
+        await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         logger.warning(f"Upload evaluation failed before interrupt : thread={thread_id} error={result['error']}")
         return JSONResponse(
             status_code=503,
@@ -304,6 +540,7 @@ async def upload_cv(
         interrupt_payload = interrupt_payload.value
 
     if not isinstance(interrupt_payload, dict) or "scenario" not in interrupt_payload:
+        await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         logger.error(f"Upload evaluation returned no resume scenario : thread={thread_id}")
         return JSONResponse(
             status_code=500,
@@ -362,13 +599,14 @@ async def evaluation_stream_generator(
 
     if await request.is_disconnected():
         logger.info(f"SSE client disconnected before stream start : thread={thread_id}")
+        await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
+        await _release_stream_thread(thread_id)
         return
 
-    yield f"event: meta\ndata: {json.dumps(meta)}\n\n"
-    logger.info(f"SSE stream started : thread={thread_id} meta={meta}")
-    last_meta = meta
-
     try:
+        yield f"event: meta\ndata: {json.dumps(meta)}\n\n"
+        logger.info(f"SSE stream started : thread={thread_id} meta={meta}")
+        last_meta = meta
         config = {"configurable": {"thread_id": thread_id}}
 
         result_stream = graph.astream(
@@ -384,6 +622,7 @@ async def evaluation_stream_generator(
         async for state_snapshot in result_stream:
             if await request.is_disconnected():
                 logger.info(f"SSE client disconnected : thread={thread_id}")
+                await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
                 return
 
             current_meta = _candidate_meta(state_snapshot)
@@ -393,6 +632,7 @@ async def evaluation_stream_generator(
 
             if state_snapshot.get("error"):
                 error = state_snapshot["error"]
+                await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
                 logger.warning(f"SSE pipeline state error : thread={thread_id} error={error}")
                 payload = {
                     "error": error,
@@ -427,11 +667,13 @@ async def evaluation_stream_generator(
                 for char in report:
                     if await request.is_disconnected():
                         logger.info(f"SSE client disconnected during token stream : thread={thread_id}")
+                        await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
                         return
 
                     yield f"event: token\ndata: {json.dumps({'text': char})}\n\n"
 
         if not report_sent:
+            await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
             logger.warning(f"SSE stream ended without report : thread={thread_id}")
             payload = {
                 "error": "Evaluation stopped unexpectedly. Please try again.",
@@ -440,10 +682,12 @@ async def evaluation_stream_generator(
             yield f"event: error\ndata: {json.dumps(payload)}\n\n"
             return
 
+        await _set_graph_evaluation_status(graph, thread_id, EVALUATION_COMPLETED)
         yield f"event: done\ndata: {json.dumps({})}\n\n"
         logger.info(f"SSE stream completed : thread={thread_id}")
 
     except GeminiQuotaExceededError as e:
+        await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         logger.warning(f"SSE pipeline quota failure : thread={thread_id} error={e}", exc_info=True)
         payload = {
             "error": e.user_message,
@@ -451,9 +695,16 @@ async def evaluation_stream_generator(
             "retry_after_seconds": e.retry_after_seconds,
         }
         yield f"event: error\ndata: {json.dumps(payload)}\n\n"
+    except asyncio.CancelledError:
+        await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
+        logger.info(f"SSE stream cancelled : thread={thread_id}")
+        raise
     except Exception as e:
+        await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         logger.exception(f"SSE pipeline failed : thread={thread_id} error={e}")
         yield f"event: error\ndata: {json.dumps({'error': 'Evaluation failed'})}\n\n"
+    finally:
+        await _release_stream_thread(thread_id)
 
 
 @router.get("/{chat_id}/stream")
@@ -483,14 +734,36 @@ async def stream_evaluation(
         )
 
     if settings.DEV_MOCK_EVALUATION:
-        return StreamingResponse(
-            mock_evaluation_stream_generator(request, thread_id),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no",
-            },
-        )
+        if not await _mock_run_exists(thread_id):
+            raise HTTPException(status_code=404, detail="No mock evaluation found. Run /upload first.")
+
+        mock_status = await _mock_run_status(thread_id)
+        mock_report = await _mock_run_report(thread_id)
+
+        if mock_status == EVALUATION_COMPLETED and mock_report:
+            return _sse_response(
+                _cached_report_stream_generator(
+                    request,
+                    thread_id,
+                    MOCK_META,
+                    mock_report,
+                )
+            )
+
+        if mock_status in {
+            EVALUATION_IN_PROGRESS,
+            EVALUATION_COMPLETED,
+            EVALUATION_STOPPED,
+            EVALUATION_FAILED,
+        }:
+            return _sse_response(_single_error_stream(_thread_terminal_error_payload(mock_status)))
+
+        if not await _claim_stream_thread(thread_id):
+            return _sse_response(
+                _single_error_stream(_thread_terminal_error_payload(EVALUATION_IN_PROGRESS))
+            )
+
+        return _sse_response(mock_evaluation_stream_generator(request, thread_id))
 
     graph = request.app.state.graph
     config = {"configurable": {"thread_id": thread_id}}
@@ -505,12 +778,38 @@ async def stream_evaluation(
         raise HTTPException(status_code=404, detail="No evaluation checkpoint found. Run /upload first.")
 
     meta = _candidate_meta(snapshot.values, snapshot.tasks)
+    evaluation_status = _evaluation_status(snapshot.values)
 
-    return StreamingResponse(
+    if evaluation_status == EVALUATION_COMPLETED and snapshot.values.get("report"):
+        return _sse_response(
+            _cached_report_stream_generator(
+                request,
+                thread_id,
+                meta,
+                snapshot.values["report"],
+            )
+        )
+
+    if evaluation_status in {
+        EVALUATION_IN_PROGRESS,
+        EVALUATION_COMPLETED,
+        EVALUATION_STOPPED,
+        EVALUATION_FAILED,
+    }:
+        return _sse_response(
+            _single_error_stream(_thread_terminal_error_payload(evaluation_status))
+        )
+
+    if await _is_stream_thread_active(thread_id):
+        return _sse_response(
+            _single_error_stream(_thread_terminal_error_payload(EVALUATION_IN_PROGRESS))
+        )
+
+    if not await _claim_stream_thread(thread_id):
+        return _sse_response(
+            _single_error_stream(_thread_terminal_error_payload(EVALUATION_IN_PROGRESS))
+        )
+
+    return _sse_response(
         evaluation_stream_generator(request, thread_id, resume_payload, meta, graph),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
     )

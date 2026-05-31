@@ -5,7 +5,12 @@ import { AIMessage } from './AIMessage'
 import { EmptyState } from './EmptyState'
 import { LoadingStates } from './LoadingStates'
 
-export function MessageList({ isLoading = false, isStreaming = false, statuses = [] }) {
+export function MessageList({
+  isLoading = false,
+  isStreaming = false,
+  isMessagesLoading = false,
+  statuses = [],
+}) {
   const activeChatId = useChatStore((s) => s.activeChatId)
   const messages = useChatStore((s) => s.messages)
   const activeMessages = activeChatId
@@ -18,7 +23,7 @@ export function MessageList({ isLoading = false, isStreaming = false, statuses =
   const hasActivity = isLoading || isStreaming
   const containerRef = useAutoScroll(activeMessages)
   const hasMessages = activeMessages.length > 0
-  const isEmptyIdle = !hasMessages && !hasActivity
+  const isEmptyIdle = !hasMessages && !hasActivity && !isMessagesLoading
 
   return (
     <div
@@ -42,7 +47,9 @@ export function MessageList({ isLoading = false, isStreaming = false, statuses =
                 statuses={statuses}
               />
             )
-            : <EmptyState />
+            : isMessagesLoading
+              ? null
+              : <EmptyState />
           : (
             <>
               {activeMessages.map((msg) =>
