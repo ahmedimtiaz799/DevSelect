@@ -9,16 +9,19 @@ import { useChat } from '../hooks/useChat'
 import { useFileUpload } from '../hooks/useFileUpload'
 import { useChatStore } from '../store/chatStore'
 import { useChatHistory } from '../hooks/useChatHistory'
+import { normalizePersistedMessage } from '../lib/messagePersistence'
 import { supabase } from '../lib/supabase'
 
 export function Chat() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [loadedMessagesByChat, setLoadedMessagesByChat] = useState({})
 
   const navigate = useNavigate()
   const { chatId } = useParams()
 
   const setActiveChatId = useChatStore((s) => s.setActiveChatId)
+  const activeChatId = useChatStore((s) => s.activeChatId)
   const setMessages = useChatStore((s) => s.setMessages)
   const pendingProfiles = useChatStore((s) => s.pendingProfiles)
 
@@ -45,42 +48,62 @@ export function Chat() {
     clearFile,
   } = useFileUpload(chatId)
 
-  sendMessageRef.current = sendMessage
+  useEffect(() => {
+    sendMessageRef.current = sendMessage
+  }, [sendMessage])
 
   useEffect(() => {
     if (chatId) {
       setActiveChatId(chatId)
+      let ignore = false
 
       async function fetchMessages() {
-        const { data, error } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('chat_id', chatId)
-          .order('created_at', { ascending: true })
+        try {
+          const { data, error } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('chat_id', chatId)
+            .order('created_at', { ascending: true })
 
-        if (!error && data) {
-          const currentMessages =
-            useChatStore.getState().messages[chatId] ?? []
-          const hasOptimisticMessages = currentMessages.some((message) =>
-            String(message.id).startsWith('temp_')
-          )
-
-          if (hasOptimisticMessages) return
-
-          setMessages(
-            chatId,
-            data.filter((message) =>
-              message.role === 'user' || message.role === 'assistant'
+          if (!ignore && !error && data) {
+            const currentMessages =
+              useChatStore.getState().messages[chatId] ?? []
+            const hasOptimisticMessages = currentMessages.some((message) =>
+              String(message.id).startsWith('temp_')
             )
-          )
+
+            if (hasOptimisticMessages) return
+
+            setMessages(
+              chatId,
+              data.filter((message) =>
+                message.role === 'user' || message.role === 'assistant'
+              ).map(normalizePersistedMessage)
+            )
+          }
+        } finally {
+          if (!ignore) {
+            setLoadedMessagesByChat((prev) => ({
+              ...prev,
+              [chatId]: true,
+            }))
+          }
         }
       }
 
       fetchMessages()
+
+      return () => {
+        ignore = true
+      }
     } else {
       setActiveChatId(null)
     }
   }, [chatId, setActiveChatId, setMessages])
+
+  const messageListChatId = activeChatId ?? chatId
+  const isHydratingMessages =
+    Boolean(messageListChatId) && !loadedMessagesByChat[messageListChatId]
 
   async function handleSend(text, fileToSend) {
     stopRequestedRef.current = false
@@ -132,6 +155,7 @@ export function Chat() {
         <MessageList
           isLoading={isLoading}
           isStreaming={isStreaming}
+          isMessagesLoading={isHydratingMessages}
           statuses={statusMessages}
         />
 
