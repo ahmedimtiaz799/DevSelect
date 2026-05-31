@@ -2,6 +2,7 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Q
 from fastapi.responses import JSONResponse, StreamingResponse
 from typing import Optional, AsyncGenerator
 from uuid import uuid4
+import asyncio
 import json
 import urllib.parse
 import logging
@@ -9,6 +10,7 @@ import re
 from langgraph.types import Command
 
 from app.agents.agent3_lead_evaluator import GeminiQuotaExceededError
+from app.config import settings
 from app.dependencies import verify_token
 from app.models.requests import ResumeRequest
 
@@ -31,6 +33,52 @@ DETECTED_ROLE_PATTERN = re.compile(
     r"^\s*\*{0,2}Detected Role\s*(?::\*{0,2}|\*{0,2}:)\s*(.+?)\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
+MOCK_META = {
+    "candidate_name": "Ahmed Imtiaz",
+    "role": "Full Stack AI Engineer",
+}
+MOCK_RESUME_PAYLOAD = {
+    "scenario": "MOCK",
+    "github_url": None,
+}
+MOCK_STATUSES = [
+    "Analyzing CV",
+    "Checking Github Repository",
+    "Generating Recommendation",
+]
+MOCK_REPORT = """
+## Candidate Overview
+Ahmed Imtiaz is presented as a Full Stack AI Engineer with strong practical experience across frontend, backend, AI integration, and product-focused delivery.
+
+## CV & Experience Review
+The CV shows a balanced profile with modern JavaScript, React, Python, FastAPI, API design, and AI-assisted application development. The experience reads as hands-on and implementation-heavy, with evidence of building usable systems rather than only prototypes.
+
+## GitHub Profile Review
+The mocked GitHub review indicates active project work, readable repository structure, and practical use of full-stack patterns. Repository signals suggest good ownership habits, with room to improve documentation depth and test coverage visibility.
+
+## Skill Match Assessment
+The candidate appears well aligned for roles requiring React, FastAPI, Python, database-backed APIs, authentication flows, SSE streaming, and AI product integration. The strongest match is for full-stack AI application engineering.
+
+## Red Flags
+- Testing depth is not fully proven from the available summary.
+- Production observability and deployment ownership should be discussed in interview.
+- Security review habits should be validated with scenario-based questions.
+
+## Strengths
+- Strong full-stack implementation range.
+- Comfortable working across frontend state, backend APIs, and AI workflows.
+- Clear evidence of practical product-building instincts.
+- Good fit for teams building AI-assisted internal tools or SaaS workflows.
+
+## Hiring Recommendation
+Recommend moving Ahmed Imtiaz to the next interview stage for a Full Stack AI Engineer role. The profile is promising, especially if the team values builders who can move across the application stack and integrate AI systems responsibly.
+
+## Suggested Next Steps
+1. Run a technical interview focused on FastAPI, React state management, and streaming UX.
+2. Ask for a walkthrough of one shipped project and the tradeoffs behind it.
+3. Include a short debugging exercise around API failure handling.
+4. Validate testing, deployment, and security ownership through practical questions.
+""".strip()
 
 
 def _field(value, name: str):
@@ -143,6 +191,46 @@ def _meta_changed(current: dict, previous: dict) -> bool:
     )
 
 
+def _mock_token_chunks(text: str) -> list[str]:
+    return re.findall(r"\S+\s*", text)
+
+
+async def mock_evaluation_stream_generator(
+    request: Request,
+    thread_id: str,
+) -> AsyncGenerator[str, None]:
+    if await request.is_disconnected():
+        logger.info(f"Mock SSE client disconnected before stream start : thread={thread_id}")
+        return
+
+    yield f"event: meta\ndata: {json.dumps(MOCK_META)}\n\n"
+    logger.info(f"Mock SSE stream started : thread={thread_id}")
+    await asyncio.sleep(0.25)
+
+    for status in MOCK_STATUSES:
+        if await request.is_disconnected():
+            logger.info(f"Mock SSE client disconnected during status stream : thread={thread_id}")
+            return
+
+        yield f"event: status\ndata: {json.dumps({'text': status})}\n\n"
+        await asyncio.sleep(0.35)
+
+    for chunk in _mock_token_chunks(MOCK_REPORT):
+        if await request.is_disconnected():
+            logger.info(f"Mock SSE client disconnected during token stream : thread={thread_id}")
+            return
+
+        yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
+        await asyncio.sleep(0.025)
+
+    if await request.is_disconnected():
+        logger.info(f"Mock SSE client disconnected before done : thread={thread_id}")
+        return
+
+    yield f"event: done\ndata: {json.dumps({})}\n\n"
+    logger.info(f"Mock SSE stream completed : thread={thread_id}")
+
+
 @router.post("/{chat_id}/upload")
 async def upload_cv(
     chat_id: str,
@@ -172,8 +260,20 @@ async def upload_cv(
     if not safe_name:
         safe_name = "upload.pdf"
 
-    pdf_bytes = await file.read()
     thread_id = thread_id or str(uuid4())
+
+    if settings.DEV_MOCK_EVALUATION:
+        logger.info(f"Mock evaluation upload accepted : thread={thread_id}")
+        return JSONResponse(
+            status_code=200,
+            content={
+                "thread_id": thread_id,
+                "status": "ready_to_stream",
+                "resume_payload": MOCK_RESUME_PAYLOAD,
+            },
+        )
+
+    pdf_bytes = await file.read()
 
     initial_state = {
         "pdf_bytes": pdf_bytes,
@@ -380,6 +480,16 @@ async def stream_evaluation(
         raise HTTPException(
             status_code=422,
             detail="resume_payload must contain a 'scenario' field.",
+        )
+
+    if settings.DEV_MOCK_EVALUATION:
+        return StreamingResponse(
+            mock_evaluation_stream_generator(request, thread_id),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
         )
 
     graph = request.app.state.graph

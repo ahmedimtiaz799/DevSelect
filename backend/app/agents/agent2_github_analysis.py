@@ -17,8 +17,14 @@ from app.config import settings
 from app.models.candidate import GitHubAnalysis
 from app.prompts.agent2_prompt import AGENT2_PROMPT
 from app.utils.json_parser import parse_llm_json
+from app.utils.llm_observability import (
+    estimate_tokens_from_text,
+    log_llm_request,
+    log_llm_usage,
+)
 
 logger = logging.getLogger("devselect")
+AGENT2_MODEL = "gemini-2.5-flash"
 
 GITHUB_GRAPHQL_QUERY = """
 query FetchDeveloperProfile($login: String!) {
@@ -239,12 +245,17 @@ def _pre_score_profile(raw_data: dict) -> dict:
     retry=retry_if_exception_type(GeminiTransientError),
     reraise=True,
 )
-async def _analyse_with_gemini(raw_github_data: dict, cv_skills: list[str]) -> str:
+async def _analyse_with_gemini(
+    raw_github_data: dict,
+    cv_skills: list[str],
+    thread_id: str | None = None,
+) -> str:
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=AGENT2_MODEL,
         google_api_key=settings.GEMINI_API_KEY,
         temperature=0.2,
-        timeout=30,
+        max_tokens=settings.AGENT2_MAX_OUTPUT_TOKENS,
+        request_timeout=settings.GEMINI_TIMEOUT_SECONDS,
         max_retries=0,
     )
 
@@ -256,9 +267,19 @@ async def _analyse_with_gemini(raw_github_data: dict, cv_skills: list[str]) -> s
         .replace("{cv_skills}", cv_skills_str)
         .replace("{github_data}", github_data_str)
     )
+    estimated_input_tokens = estimate_tokens_from_text(prompt)
 
     try:
+        log_llm_request(
+            logger,
+            "agent2",
+            AGENT2_MODEL,
+            thread_id,
+            estimated_input_tokens,
+            settings.AGENT2_MAX_OUTPUT_TOKENS,
+        )
         response = await llm.ainvoke(prompt)
+        log_llm_usage(logger, "agent2", AGENT2_MODEL, thread_id, response)
         return response.content
     except Exception as e:
         error_str = str(e).lower()
@@ -423,7 +444,11 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
 
     try:
         logger.info("Agent 2: Sending GitHub data to Gemini Flash...")
-        raw_json_str = await _analyse_with_gemini(analysis_payload, cv_skills)
+        raw_json_str = await _analyse_with_gemini(
+            analysis_payload,
+            cv_skills,
+            thread_id=thread_id,
+        )
         logger.info("Agent 2: Gemini Flash responded")
     except ValueError as e:
         return {"error": str(e)}

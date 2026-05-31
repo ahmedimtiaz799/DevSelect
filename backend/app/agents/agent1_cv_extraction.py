@@ -19,8 +19,14 @@ from app.config import settings
 from app.models.candidate import CandidateExtraction
 from app.prompts.agent1_prompt import AGENT1_PROMPT
 from app.utils.json_parser import parse_llm_json
+from app.utils.llm_observability import (
+    estimate_tokens_from_text,
+    log_llm_request,
+    log_llm_usage,
+)
 
 logger = logging.getLogger("devselect")
+AGENT1_MODEL = "gemini-2.5-flash"
 
 
 class LlamaParseTransientError(Exception):
@@ -79,19 +85,30 @@ async def _parse_pdf_with_llamaparse(pdf_bytes: bytes) -> str:
     retry=retry_if_exception_type(GeminiTransientError),
     reraise=True,
 )
-async def _extract_with_gemini(markdown_text: str) -> str:
+async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None) -> str:
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model=AGENT1_MODEL,
         google_api_key=settings.GEMINI_API_KEY,
         temperature=0.2,
-        timeout=30,
+        max_tokens=settings.AGENT1_MAX_OUTPUT_TOKENS,
+        request_timeout=settings.GEMINI_TIMEOUT_SECONDS,
         max_retries=0,
     )
 
     prompt = AGENT1_PROMPT.format(cv_text=markdown_text)
+    estimated_input_tokens = estimate_tokens_from_text(prompt)
 
     try:
+        log_llm_request(
+            logger,
+            "agent1",
+            AGENT1_MODEL,
+            thread_id,
+            estimated_input_tokens,
+            settings.AGENT1_MAX_OUTPUT_TOKENS,
+        )
         response = await llm.ainvoke(prompt)
+        log_llm_usage(logger, "agent1", AGENT1_MODEL, thread_id, response)
         return response.content
     except Exception as e:
         error_str = str(e).lower()
@@ -139,7 +156,10 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
 
     try:
         logger.info("Agent 1: Sending parsed text to Gemini...")
-        raw_json_str = await _extract_with_gemini(raw_cv_text)
+        raw_json_str = await _extract_with_gemini(
+            raw_cv_text,
+            thread_id=state["thread_id"],
+        )
         logger.info("Agent 1: Gemini responded")
     except ValueError as e:
         return {"raw_cv_text": raw_cv_text, "error": str(e)}

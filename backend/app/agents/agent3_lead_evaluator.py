@@ -5,6 +5,11 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.state import DevSelectState
 from app.config import settings
 from app.prompts.agent3_prompt import AGENT3_SYSTEM_PROMPT
+from app.utils.llm_observability import (
+    estimate_tokens_from_messages,
+    log_llm_request,
+    log_llm_usage,
+)
 
 logger = logging.getLogger("devselect")
 
@@ -33,20 +38,39 @@ def _is_gemini_quota_error(error: Exception) -> bool:
     )
 
 
-async def _stream_with_fallback(messages: list) -> str:
+async def _stream_with_fallback(messages: list, thread_id: str | None = None) -> str:
+    estimated_input_tokens = estimate_tokens_from_messages(messages)
+
     for model_name in [PRIMARY_MODEL, FALLBACK_MODEL]:
         llm = ChatGoogleGenerativeAI(
             model=model_name,
             google_api_key=settings.GEMINI_API_KEY,
             temperature=0.2,
             streaming=True,
+            max_tokens=settings.AGENT3_MAX_OUTPUT_TOKENS,
+            request_timeout=settings.GEMINI_TIMEOUT_SECONDS,
             max_retries=0,
         )
         try:
+            log_llm_request(
+                logger,
+                "agent3",
+                model_name,
+                thread_id,
+                estimated_input_tokens,
+                settings.AGENT3_MAX_OUTPUT_TOKENS,
+            )
             report_text = ""
+            usage_source = None
             async for chunk in llm.astream(messages):
+                if (
+                    getattr(chunk, "usage_metadata", None)
+                    or getattr(chunk, "response_metadata", None)
+                ):
+                    usage_source = chunk
                 if chunk.content:
                     report_text += chunk.content
+            log_llm_usage(logger, "agent3", model_name, thread_id, usage_source)
             if model_name == FALLBACK_MODEL:
                 logger.warning(f"Agent 3: used fallback model {FALLBACK_MODEL} — primary quota exhausted.")
             return report_text
@@ -89,7 +113,7 @@ Please evaluate the following candidate and generate a structured hiring report.
     ]
 
     try:
-        report_text = await _stream_with_fallback(messages)
+        report_text = await _stream_with_fallback(messages, thread_id=thread_id)
     except GeminiQuotaExceededError as e:
         logger.exception(f"Agent 3 quota exhausted for thread {thread_id}: {e}")
         raise
