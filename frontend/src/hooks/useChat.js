@@ -163,6 +163,17 @@ export function useChat(chatId) {
     });
   }
 
+  function addStoppedMessage(targetId) {
+    if (!targetId) return;
+
+    addMessage(targetId, {
+      id: generateTempId(),
+      role: 'system',
+      content: 'Response stopped.',
+      chat_id: targetId,
+    });
+  }
+
   function stopProcessing() {
     const run = activeRunRef.current;
     const targetId = run?.chatId ?? chatId;
@@ -181,10 +192,15 @@ export function useChat(chatId) {
 
     if (targetId) {
       clearStatusMessages(targetId);
+      setThreadId(targetId, null);
     }
 
     if (run?.assistantTempId) {
       removeAssistantMessage(run.chatId, run.assistantTempId);
+    }
+
+    if (run || isLoading || isStreaming) {
+      addStoppedMessage(targetId);
     }
 
     activeRunRef.current = null;

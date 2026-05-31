@@ -253,11 +253,16 @@ async def resume_evaluation(
 
 
 async def evaluation_stream_generator(
+    request: Request,
     thread_id: str,
     resume_payload: dict,
     meta: dict,
     graph,
 ) -> AsyncGenerator[str, None]:
+
+    if await request.is_disconnected():
+        logger.info(f"SSE client disconnected before stream start : thread={thread_id}")
+        return
 
     yield f"event: meta\ndata: {json.dumps(meta)}\n\n"
     logger.info(f"SSE stream started : thread={thread_id} meta={meta}")
@@ -277,6 +282,10 @@ async def evaluation_stream_generator(
         report_sent = False
 
         async for state_snapshot in result_stream:
+            if await request.is_disconnected():
+                logger.info(f"SSE client disconnected : thread={thread_id}")
+                return
+
             current_meta = _candidate_meta(state_snapshot)
             if _meta_changed(current_meta, last_meta):
                 yield f"event: meta\ndata: {json.dumps(current_meta)}\n\n"
@@ -316,6 +325,10 @@ async def evaluation_stream_generator(
                 if report:
                     report_sent = True
                 for char in report:
+                    if await request.is_disconnected():
+                        logger.info(f"SSE client disconnected during token stream : thread={thread_id}")
+                        return
+
                     yield f"event: token\ndata: {json.dumps({'text': char})}\n\n"
 
         if not report_sent:
@@ -384,7 +397,7 @@ async def stream_evaluation(
     meta = _candidate_meta(snapshot.values, snapshot.tasks)
 
     return StreamingResponse(
-        evaluation_stream_generator(thread_id, resume_payload, meta, graph),
+        evaluation_stream_generator(request, thread_id, resume_payload, meta, graph),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
