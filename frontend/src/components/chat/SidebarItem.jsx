@@ -12,7 +12,14 @@ const MENU_HEIGHT = 126
 const MENU_GAP = 4
 const VIEWPORT_PADDING = 8
 
-export function SidebarItem({ chat, onRename, onDelete, onPin, isCollapsed }) {
+export function SidebarItem({
+  chat,
+  onRename,
+  onDelete,
+  onPin,
+  onNavigateRequest,
+  isCollapsed,
+}) {
   const navigate = useNavigate()
   const { activeChatId, setActiveChatId } = useChatStore()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -30,6 +37,11 @@ export function SidebarItem({ chat, onRename, onDelete, onPin, isCollapsed }) {
   }, [])
 
   function handleClick() {
+    if (onNavigateRequest) {
+      onNavigateRequest(`/chat/${chat.id}`, chat.id)
+      return
+    }
+
     setActiveChatId(chat.id)
     navigate(`/chat/${chat.id}`)
   }

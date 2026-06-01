@@ -62,7 +62,7 @@ export function useChat(chatId) {
   const clearPendingProfiles = useChatStore((s) => s.clearPendingProfiles);
   const updateChatTitle = useChatStore((s) => s.updateChatTitle);
 
-  const { renameChat } = useChatHistory();
+  const { renameChat, touchChatActivity } = useChatHistory();
 
   useEffect(() => {
     return () => {
@@ -141,6 +141,7 @@ export function useChat(chatId) {
 
     addMessage(targetId, userMessage);
     addMessage(targetId, assistantMessage);
+    await touchChatActivity(targetId);
     await persistPlainMessages(targetId, [userMessage, assistantMessage]);
   }
 
@@ -330,6 +331,7 @@ export function useChat(chatId) {
 
     try {
       await persistUserUploadMessage(targetId, userMessagePayload);
+      await touchChatActivity(targetId);
       if (!isRunActive(run)) return;
 
       const response = await uploadCV(
@@ -446,6 +448,7 @@ export function useChat(chatId) {
     addMessage(targetId, userMessage);
 
     try {
+      await touchChatActivity(targetId);
       const response = await followUpQuestion(targetId, text);
       if (!isRunActive(run)) return;
 
@@ -490,6 +493,7 @@ export function useChat(chatId) {
     clearStatusMessages(chatId);
 
     try {
+      await touchChatActivity(chatId);
       const result = await resumePipeline(
         chatId,
         threadIds[chatId],

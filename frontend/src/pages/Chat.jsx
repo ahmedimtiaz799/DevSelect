@@ -8,11 +8,15 @@ import { useChat } from '../hooks/useChat'
 import { useFileUpload } from '../hooks/useFileUpload'
 import { useChatStore } from '../store/chatStore'
 import { useChatHistory } from '../hooks/useChatHistory'
+import { useAuth } from '../hooks/useAuth'
 import {
   isEvaluationReportMessage,
   normalizePersistedMessage,
 } from '../lib/messagePersistence'
 import { supabase } from '../lib/supabase'
+
+const EMPTY_MESSAGES = []
+const EMPTY_PROFILES = []
 
 export function Chat() {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -20,17 +24,22 @@ export function Chat() {
   const [loadedMessagesByChat, setLoadedMessagesByChat] = useState({})
   const [secondEvaluationDraft, setSecondEvaluationDraft] = useState(null)
   const [isStartingNewEvaluation, setIsStartingNewEvaluation] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState(null)
 
   const navigate = useNavigate()
   const { chatId } = useParams()
+  const { user } = useAuth()
 
   const setActiveChatId = useChatStore((s) => s.setActiveChatId)
   const setMessages = useChatStore((s) => s.setMessages)
+  const messages = useChatStore((s) => s.messages)
   const pendingProfiles = useChatStore((s) => s.pendingProfiles)
-  const activeMessages = useChatStore((s) => chatId ? s.messages[chatId] ?? [] : [])
 
-  const profiles = pendingProfiles[chatId] ?? []
+  const activeMessages = chatId ? messages[chatId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES
+  const profiles = chatId ? pendingProfiles[chatId] ?? EMPTY_PROFILES : EMPTY_PROFILES
   const hasCompletedEvaluationReport = activeMessages.some(isEvaluationReportMessage)
+  const inputChatId = chatId ?? 'new-chat'
+  const draftUserId = user?.id ?? 'local'
 
   const { createNewChat } = useChatHistory()
   const sendMessageRef = useRef(null)
@@ -51,7 +60,7 @@ export function Chat() {
     error,
     onFileSelect,
     clearFile,
-  } = useFileUpload(chatId)
+  } = useFileUpload(inputChatId)
 
   useEffect(() => {
     sendMessageRef.current = sendMessage
@@ -148,6 +157,39 @@ export function Chat() {
     await sendMessageRef.current(fileToSend, text, chatId)
   }
 
+  function navigateToChatPath(path, targetChatId = null) {
+    setActiveChatId(targetChatId)
+    navigate(path)
+  }
+
+  function handleSidebarNavigate(path, targetChatId = null) {
+    const isCurrentPath =
+      (targetChatId && targetChatId === chatId) ||
+      (!targetChatId && !chatId)
+
+    if (isCurrentPath) return
+
+    if (file) {
+      setPendingNavigation({ path, chatId: targetChatId })
+      return
+    }
+
+    navigateToChatPath(path, targetChatId)
+  }
+
+  function handleStayOnCurrentChat() {
+    setPendingNavigation(null)
+  }
+
+  function handleDiscardCvAndSwitch() {
+    if (!pendingNavigation) return
+
+    const destination = pendingNavigation
+    clearFile()
+    setPendingNavigation(null)
+    navigateToChatPath(destination.path, destination.chatId)
+  }
+
   function handleCancelSecondEvaluation() {
     if (isStartingNewEvaluation) return
     setSecondEvaluationDraft(null)
@@ -185,6 +227,7 @@ export function Chat() {
         onMobileClose={() => setMobileOpen(false)}
         isCollapsed={isCollapsed}
         onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
+        onNavigateRequest={handleSidebarNavigate}
       />
 
       <div
@@ -206,7 +249,9 @@ export function Chat() {
 
         <div className="shrink-0 bg-white pt-2 pb-4">
           <InputBar
-            chatId={chatId ?? 'new'}
+            key={`${draftUserId}:${inputChatId}`}
+            chatId={inputChatId}
+            draftUserId={draftUserId}
             onSend={handleSend}
             onStop={handleStop}
             onFileSelect={onFileSelect}
@@ -261,6 +306,50 @@ export function Chat() {
                 className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {isStartingNewEvaluation ? 'Starting...' : 'Start new evaluation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingNavigation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="unsent-cv-title"
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl ring-1 ring-gray-200"
+          >
+            <h2
+              id="unsent-cv-title"
+              className="text-lg font-semibold text-brand-dark"
+            >
+              CV not sent yet
+            </h2>
+
+            <p className="mt-3 text-sm leading-6 text-brand-body">
+              Switching chats will remove the selected CV.
+            </p>
+
+            <p className="mt-2 text-sm leading-6 text-brand-muted">
+              Your typed text will stay saved as a draft.
+            </p>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={handleStayOnCurrentChat}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                Stay here
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDiscardCvAndSwitch}
+                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90"
+              >
+                Switch without CV
               </button>
             </div>
           </div>

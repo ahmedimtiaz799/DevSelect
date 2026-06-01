@@ -4,11 +4,38 @@ import { useChatHistory } from '../../hooks/useChatHistory'
 import { SidebarItem } from './SidebarItem'
 import { UserMenu } from './UserMenu'
 
+function chatActivityTime(chat) {
+  const value = Date.parse(chat.updated_at || chat.created_at || '')
+  return Number.isNaN(value) ? 0 : value
+}
+
+function sortByLatestActivity(a, b) {
+  return chatActivityTime(b) - chatActivityTime(a)
+}
+
+function dateSortValue(value) {
+  const parsed = Date.parse(value || '')
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+function pinnedSortValue(chat) {
+  return dateSortValue(chat.pinned_at || chat.created_at || chat.updated_at)
+}
+
+function sortByStablePinnedOrder(a, b) {
+  const aValue = pinnedSortValue(a)
+  const bValue = pinnedSortValue(b)
+
+  if (aValue !== bValue) return aValue - bValue
+  return String(a.id).localeCompare(String(b.id))
+}
+
 export function Sidebar({
   mobileOpen,
   onMobileClose,
   isCollapsed,
   onToggleCollapse,
+  onNavigateRequest,
 }) {
   const { chats, createNewChat, deleteChat, renameChat, pinChat } = useChatHistory()
 
@@ -26,12 +53,25 @@ export function Sidebar({
     setSearch('')
   }
 
+  function handleNewChatClick() {
+    if (onNavigateRequest) {
+      onNavigateRequest('/chat', null)
+      return
+    }
+
+    createNewChat()
+  }
+
   const filtered = chats.filter((c) =>
     c.title.toLowerCase().includes(search.toLowerCase())
   )
 
-  const pinnedChats = filtered.filter((c) => c.is_pinned)
-  const unpinnedChats = filtered.filter((c) => !c.is_pinned)
+  const pinnedChats = filtered
+    .filter((c) => c.is_pinned)
+    .sort(sortByStablePinnedOrder)
+  const unpinnedChats = filtered
+    .filter((c) => !c.is_pinned)
+    .sort(sortByLatestActivity)
   const hasBothSections = pinnedChats.length > 0 && unpinnedChats.length > 0
 
   return (
@@ -76,7 +116,7 @@ export function Sidebar({
 
           <div className={`flex ${isCollapsed ? 'justify-center' : ''}`}>
             <button
-              onClick={() => createNewChat()}
+              onClick={handleNewChatClick}
               className={`bg-white text-brand-dark text-btn-sm font-semibold rounded-pill py-2 hover:bg-gray-100 transition-colors
                 ${
                   isCollapsed
@@ -153,6 +193,7 @@ export function Sidebar({
                   onRename={renameChat}
                   onDelete={deleteChat}
                   onPin={pinChat}
+                  onNavigateRequest={onNavigateRequest}
                   isCollapsed={isCollapsed}
                 />
               ))}
@@ -174,6 +215,7 @@ export function Sidebar({
               onRename={renameChat}
               onDelete={deleteChat}
               onPin={pinChat}
+              onNavigateRequest={onNavigateRequest}
               isCollapsed={isCollapsed}
             />
           ))}

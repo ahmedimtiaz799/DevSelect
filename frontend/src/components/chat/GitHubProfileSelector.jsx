@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Github } from 'lucide-react'
+import { GitBranch } from 'lucide-react'
 
 function getGithubUsername(url) {
   try {
@@ -37,7 +37,7 @@ export function GitHubProfileSelector({ profiles, onSelect }) {
     >
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-dark/10 text-brand-dark">
-          <Github size={18} />
+          <GitBranch size={18} />
         </span>
 
         <div className="min-w-0 flex-1">

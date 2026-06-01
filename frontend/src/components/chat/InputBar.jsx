@@ -1,8 +1,51 @@
 import { useRef, useState, useEffect } from 'react'
 import { Plus, ArrowUp, Square, FileText, X, AlertCircle } from 'lucide-react'
 
+const LOCAL_DRAFT_USER_ID = 'local'
+
+function getDraftKey(userId, draftScope) {
+  return `devselect:draft:${userId || LOCAL_DRAFT_USER_ID}:${draftScope}`
+}
+
+function uniqueKeys(keys) {
+  return [...new Set(keys.filter(Boolean))]
+}
+
+function loadDraftText(keys) {
+  try {
+    for (const key of keys) {
+      const value = localStorage.getItem(key)
+      if (value !== null) return value
+    }
+  } catch {
+    return ''
+  }
+
+  return ''
+}
+
+function migrateDraftText(targetKey, fallbackKeys) {
+  try {
+    if (localStorage.getItem(targetKey) !== null) return
+
+    const value = loadDraftText(fallbackKeys)
+    if (value) localStorage.setItem(targetKey, value)
+  } catch {
+    return
+  }
+}
+
+function clearDraftText(keys) {
+  try {
+    keys.forEach((key) => localStorage.removeItem(key))
+  } catch {
+    return
+  }
+}
+
 export function InputBar({
   chatId,
+  draftUserId,
   onSend,
   onStop,
   onFileSelect,
@@ -14,27 +57,29 @@ export function InputBar({
   hasCompletedReport,
   fileError,
 }) {
-  const [text, setText] = useState('')
+  const draftScope = chatId ?? 'new-chat'
+  const normalizedDraftUserId = draftUserId || LOCAL_DRAFT_USER_ID
+  const draftKey = getDraftKey(normalizedDraftUserId, draftScope)
+  const localDraftKey = getDraftKey(LOCAL_DRAFT_USER_ID, draftScope)
+  const legacyDraftKey = `devselect:draft:${draftScope === 'new-chat' ? 'new' : draftScope}`
+  const draftKeys = uniqueKeys([draftKey, localDraftKey, legacyDraftKey])
+
+  const [text, setText] = useState(() => loadDraftText(draftKeys))
   const [fileWarning, setFileWarning] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
 
-  const draftKey = `devselect:draft:${chatId ?? 'new'}`
-
   const hasContent = text.trim().length > 0 || !!file
   const isProcessing = isLoading || isStreaming || isSubmitting
   const canSend = hasContent && !isProcessing
 
   useEffect(() => {
-    try {
-      const savedDraft = localStorage.getItem(draftKey)
-      setText(savedDraft ?? '')
-    } catch {
-      setText('')
+    if (normalizedDraftUserId !== LOCAL_DRAFT_USER_ID) {
+      migrateDraftText(draftKey, [localDraftKey, legacyDraftKey])
     }
-  }, [draftKey])
+  }, [draftKey, localDraftKey, legacyDraftKey, normalizedDraftUserId])
 
   useEffect(() => {
     const textarea = textareaRef.current
@@ -51,11 +96,12 @@ export function InputBar({
     try {
       if (value.trim()) {
         localStorage.setItem(draftKey, value)
+        clearDraftText(draftKeys.filter((key) => key !== draftKey))
       } else {
-        localStorage.removeItem(draftKey)
+        clearDraftText(draftKeys)
       }
     } catch {
-      // Ignore localStorage errors silently
+      return
     }
   }
 
@@ -83,12 +129,7 @@ export function InputBar({
       onFileClear()
     }
 
-    try {
-      localStorage.removeItem(draftKey)
-    } catch {
-      // Ignore localStorage errors silently
-    }
-
+    clearDraftText(draftKeys)
     setText('')
 
     if (textareaRef.current) {

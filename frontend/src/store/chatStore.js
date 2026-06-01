@@ -42,10 +42,19 @@ export const useChatStore = create(
         if (chat) chat.title = title
       }),
 
-    pinChat: (chatId, isPinned) =>
+    touchChat: (chatId, updatedAt) =>
       set((state) => {
         const chat = state.chats.find((c) => c.id === chatId)
-        if (chat) chat.is_pinned = isPinned
+        if (chat) chat.updated_at = updatedAt
+      }),
+
+    pinChat: (chatId, isPinned, pinnedAt = null) =>
+      set((state) => {
+        const chat = state.chats.find((c) => c.id === chatId)
+        if (chat) {
+          chat.is_pinned = isPinned
+          chat.pinned_at = pinnedAt
+        }
       }),
 
     deleteChat: (chatId) =>

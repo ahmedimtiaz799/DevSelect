@@ -13,6 +13,7 @@ export function useChatHistory() {
     setChats,
     addChat,
     updateChatTitle,
+    touchChat,
     deleteChat: deleteChatFromStore,
     pinChat: pinChatInStore,
     setActiveChatId,
@@ -35,7 +36,7 @@ export function useChatHistory() {
     }
 
     fetchChats()
-  }, [user])
+  }, [user, setChats])
 
   async function createNewChat(firstMessage) {
     const title = firstMessage ? truncateTitle(firstMessage, 40) : 'New Chat'
@@ -80,16 +81,44 @@ export function useChatHistory() {
     updateChatTitle(chatId, newTitle)
   }
 
-  async function pinChat(chatId, isPinned) {
-    const { error } = await supabase
+  async function touchChatActivity(chatId) {
+    if (!chatId) return
+
+    const updatedAt = new Date().toISOString()
+    touchChat(chatId, updatedAt)
+
+    const { data, error } = await supabase
       .from('chats')
-      .update({ is_pinned: isPinned })
+      .update({ updated_at: updatedAt })
       .eq('id', chatId)
+      .select('updated_at')
+      .single()
 
     if (error) return
 
-    pinChatInStore(chatId, isPinned)
+    if (data?.updated_at) {
+      touchChat(chatId, data.updated_at)
+    }
   }
 
-  return { chats, createNewChat, deleteChat, renameChat, pinChat }
+  async function pinChat(chatId, isPinned) {
+    const pinnedAt = isPinned ? new Date().toISOString() : null
+
+    const { data, error } = await supabase
+      .from('chats')
+      .update({ is_pinned: isPinned, pinned_at: pinnedAt })
+      .eq('id', chatId)
+      .select('is_pinned,pinned_at')
+      .single()
+
+    if (error) return
+
+    pinChatInStore(
+      chatId,
+      data?.is_pinned ?? isPinned,
+      data?.pinned_at ?? pinnedAt
+    )
+  }
+
+  return { chats, createNewChat, deleteChat, renameChat, pinChat, touchChatActivity }
 }
