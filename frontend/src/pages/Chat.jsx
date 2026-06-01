@@ -4,28 +4,33 @@ import { Sidebar } from '../components/chat/Sidebar'
 import { ChatHeader } from '../components/chat/ChatHeader'
 import { MessageList } from '../components/chat/MessageList'
 import { InputBar } from '../components/chat/InputBar'
-import { GitHubProfileSelector } from '../components/chat/GitHubProfileSelector'
 import { useChat } from '../hooks/useChat'
 import { useFileUpload } from '../hooks/useFileUpload'
 import { useChatStore } from '../store/chatStore'
 import { useChatHistory } from '../hooks/useChatHistory'
-import { normalizePersistedMessage } from '../lib/messagePersistence'
+import {
+  isEvaluationReportMessage,
+  normalizePersistedMessage,
+} from '../lib/messagePersistence'
 import { supabase } from '../lib/supabase'
 
 export function Chat() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [loadedMessagesByChat, setLoadedMessagesByChat] = useState({})
+  const [secondEvaluationDraft, setSecondEvaluationDraft] = useState(null)
+  const [isStartingNewEvaluation, setIsStartingNewEvaluation] = useState(false)
 
   const navigate = useNavigate()
   const { chatId } = useParams()
 
   const setActiveChatId = useChatStore((s) => s.setActiveChatId)
-  const activeChatId = useChatStore((s) => s.activeChatId)
   const setMessages = useChatStore((s) => s.setMessages)
   const pendingProfiles = useChatStore((s) => s.pendingProfiles)
+  const activeMessages = useChatStore((s) => chatId ? s.messages[chatId] ?? [] : [])
 
   const profiles = pendingProfiles[chatId] ?? []
+  const hasCompletedEvaluationReport = activeMessages.some(isEvaluationReportMessage)
 
   const { createNewChat } = useChatHistory()
   const sendMessageRef = useRef(null)
@@ -101,34 +106,71 @@ export function Chat() {
     }
   }, [chatId, setActiveChatId, setMessages])
 
-  const messageListChatId = activeChatId ?? chatId
   const isHydratingMessages =
-    Boolean(messageListChatId) && !loadedMessagesByChat[messageListChatId]
+    Boolean(chatId) && !loadedMessagesByChat[chatId]
+
+  function getNewChatTitle(text, fileToSend) {
+    return text.trim()
+      ? text.trim()
+      : fileToSend?.name.replace(/\.pdf$/i, '') ?? 'New Chat'
+  }
+
+  async function startEvaluationInNewChat(text, fileToSend, options = {}) {
+    const targetChatId = await createNewChat(getNewChatTitle(text, fileToSend))
+
+    if (!targetChatId) return null
+
+    if (options.replace) {
+      navigate(`/chat/${targetChatId}`, { replace: true })
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    if (stopRequestedRef.current) return null
+
+    await sendMessageRef.current(fileToSend, text, targetChatId)
+    return targetChatId
+  }
 
   async function handleSend(text, fileToSend) {
     stopRequestedRef.current = false
 
-    if (!fileToSend && !hasThread(chatId)) return
-
-    let targetChatId = chatId
-
-    if (!targetChatId) {
-      const tempTitle = text.trim()
-        ? text.trim()
-        : fileToSend.name.replace(/\.pdf$/i, '')
-
-      targetChatId = await createNewChat(tempTitle)
-
-      if (!targetChatId) return
-
-      navigate(`/chat/${targetChatId}`, { replace: true })
-
-      await new Promise((resolve) => setTimeout(resolve, 50))
-
-      if (stopRequestedRef.current) return
+    if (fileToSend && chatId && hasCompletedEvaluationReport) {
+      setSecondEvaluationDraft({ text, file: fileToSend })
+      return
     }
 
-    await sendMessageRef.current(fileToSend, text, targetChatId)
+    if (!chatId) {
+      await startEvaluationInNewChat(text, fileToSend, { replace: true })
+      return
+    }
+
+    await sendMessageRef.current(fileToSend, text, chatId)
+  }
+
+  function handleCancelSecondEvaluation() {
+    if (isStartingNewEvaluation) return
+    setSecondEvaluationDraft(null)
+  }
+
+  async function handleStartSecondEvaluation() {
+    if (!secondEvaluationDraft || isStartingNewEvaluation) return
+
+    setIsStartingNewEvaluation(true)
+    stopRequestedRef.current = false
+
+    try {
+      const targetChatId = await startEvaluationInNewChat(
+        secondEvaluationDraft.text,
+        secondEvaluationDraft.file
+      )
+
+      if (targetChatId) {
+        setSecondEvaluationDraft(null)
+      }
+    } finally {
+      setIsStartingNewEvaluation(false)
+    }
   }
 
   function handleStop() {
@@ -150,23 +192,19 @@ export function Chat() {
           isCollapsed ? 'md:ml-16' : 'md:ml-64'
         }`}
       >
-        <ChatHeader onMenuClick={() => setMobileOpen(true)} />
+        <ChatHeader chatId={chatId ?? null} onMenuClick={() => setMobileOpen(true)} />
 
         <MessageList
+          chatId={chatId ?? null}
           isLoading={isLoading}
           isStreaming={isStreaming}
           isMessagesLoading={isHydratingMessages}
           statuses={statusMessages}
+          profiles={profiles}
+          onProfileSelect={handleProfileSelect}
         />
 
         <div className="shrink-0 bg-white pt-2 pb-4">
-          {profiles.length > 0 && (
-            <GitHubProfileSelector
-              profiles={profiles}
-              onSelect={handleProfileSelect}
-            />
-          )}
-
           <InputBar
             chatId={chatId ?? 'new'}
             onSend={handleSend}
@@ -177,10 +215,57 @@ export function Chat() {
             isStreaming={isStreaming}
             file={file}
             threadExists={hasThread(chatId)}
+            hasCompletedReport={hasCompletedEvaluationReport}
             fileError={error}
           />
         </div>
       </div>
+
+      {secondEvaluationDraft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-evaluation-title"
+            className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl ring-1 ring-gray-200"
+          >
+            <h2
+              id="new-evaluation-title"
+              className="text-lg font-semibold text-brand-dark"
+            >
+              Start a new evaluation?
+            </h2>
+
+            <p className="mt-3 text-sm leading-6 text-brand-body">
+              This chat already has a completed candidate report. To keep follow-up answers accurate, a new CV should start in a separate chat.
+            </p>
+
+            <p className="mt-2 text-sm leading-6 text-brand-muted">
+              Your current report will stay saved in this chat.
+            </p>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={handleCancelSecondEvaluation}
+                disabled={isStartingNewEvaluation}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleStartSecondEvaluation}
+                disabled={isStartingNewEvaluation}
+                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isStartingNewEvaluation ? 'Starting...' : 'Start new evaluation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

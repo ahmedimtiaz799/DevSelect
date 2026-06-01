@@ -19,9 +19,9 @@ export function MessageBubble({ content = '', fileName }) {
   }
 
   return (
-    <div className="group flex justify-end">
+    <div className="group flex min-w-0 max-w-full justify-end">
       <div
-        className={`relative max-w-[85%] bg-brand-userBubble text-brand-body rounded-bubble text-msg ${
+        className={`relative min-w-0 max-w-[85%] overflow-hidden bg-brand-userBubble text-brand-body rounded-bubble text-msg ${
           isFileOnly ? 'md:max-w-xs px-2 py-2' : 'md:max-w-bubble px-3.5 py-3'
         }`}
       >
@@ -44,7 +44,7 @@ export function MessageBubble({ content = '', fileName }) {
           )}
 
           {hasText && (
-            <p className="whitespace-pre-wrap">
+            <p className="max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
               {content}
             </p>
           )}

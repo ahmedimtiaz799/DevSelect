@@ -11,3 +11,12 @@ class ResumeRequest(BaseModel):
         if v == "" or v == "null":
             return None
         return v
+
+
+class FollowUpRequest(BaseModel):
+    question: str
+
+    @field_validator("question", mode="before")
+    @classmethod
+    def normalize_question(cls, v):
+        return str(v or "").strip()

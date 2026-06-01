@@ -9,15 +9,18 @@ import logging
 import re
 from langgraph.types import Command
 
+from app.agents.follow_up import answer_follow_up_question, mock_follow_up_answer
 from app.agents.agent3_lead_evaluator import GeminiQuotaExceededError
 from app.config import settings
+from app.db.supabase_client import get_supabase
 from app.dependencies import verify_token
-from app.models.requests import ResumeRequest
+from app.models.requests import FollowUpRequest, ResumeRequest
 from app.utils.budget_limits import (
     budget_error_payload,
     estimate_evaluation_budget,
     record_budget_usage,
 )
+from app.utils.llm_observability import cap_text_for_llm
 
 logger = logging.getLogger("devselect")
 
@@ -92,6 +95,17 @@ Recommend moving Ahmed Imtiaz to the next interview stage for a Full Stack AI En
 ACTIVE_STREAM_THREADS: set[str] = set()
 MOCK_EVALUATION_RUNS: dict[str, dict] = {}
 EVALUATION_GUARD_LOCK = asyncio.Lock()
+RECRUITER_INSTRUCTION_MAX_CHARS = 2000
+PRE_CV_GUIDANCE_MESSAGE = "Please upload a candidate CV to begin an evaluation."
+FOLLOW_UP_REQUIRES_REPORT_MESSAGE = "A completed evaluation is required before follow-up questions."
+REPORT_CONTEXT_HINTS = (
+    "Candidate Overview",
+    "Hiring Recommendation",
+    "Skill Match Assessment",
+    "Detected Role",
+)
+ASSISTANT_MESSAGE_PREFIX = "__DEVSELECT_ASSISTANT_MESSAGE__"
+EVALUATION_REPORT_MESSAGE_TYPE = "evaluation_report"
 
 
 def _field(value, name: str):
@@ -106,6 +120,25 @@ def _clean_text(value) -> str | None:
 
     text = str(value).strip()
     return text or None
+
+
+def _normalize_recruiter_instruction(value) -> str | None:
+    instruction = _clean_text(value)
+    if not instruction:
+        return None
+
+    capped, original_chars, capped_chars, was_truncated = cap_text_for_llm(
+        instruction,
+        RECRUITER_INSTRUCTION_MAX_CHARS,
+    )
+    logger.info(
+        "Recruiter instruction received : provided=%s original_chars=%s capped_chars=%s truncated=%s",
+        True,
+        original_chars,
+        capped_chars,
+        was_truncated,
+    )
+    return capped or None
 
 
 def _known_role(value) -> str | None:
@@ -234,6 +267,106 @@ def _evaluation_status(values: dict | None) -> str:
         return EVALUATION_FAILED
 
     return EVALUATION_PENDING
+
+
+def _is_completed_report_content(content: str | None) -> bool:
+    if not content:
+        return False
+
+    text = str(content).strip()
+    if not text or text == PRE_CV_GUIDANCE_MESSAGE:
+        return False
+
+    if text in {
+        "Evaluation failed. Please try again.",
+        "Evaluation stopped unexpectedly. Please try again.",
+        "Gemini quota reached. Please wait and try again.",
+    }:
+        return False
+
+    return len(text) >= 500 or any(hint in text for hint in REPORT_CONTEXT_HINTS)
+
+
+def _assistant_message_content(content: str | None) -> tuple[str, str | None]:
+    if not isinstance(content, str):
+        return "", None
+
+    text = content.strip()
+    if not text.startswith(ASSISTANT_MESSAGE_PREFIX):
+        return text, None
+
+    try:
+        payload = json.loads(text[len(ASSISTANT_MESSAGE_PREFIX):])
+    except (json.JSONDecodeError, TypeError):
+        return "", None
+
+    if not isinstance(payload, dict):
+        return "", None
+
+    message_text = payload.get("content")
+    message_type = payload.get("message_type") or payload.get("kind")
+
+    return (
+        message_text.strip() if isinstance(message_text, str) else "",
+        _clean_text(message_type),
+    )
+
+
+def _completed_report_from_messages(messages: list[dict]) -> str | None:
+    explicit_report = None
+    candidates = []
+
+    for message in messages:
+        if message.get("role") != "assistant":
+            continue
+
+        content, message_type = _assistant_message_content(message.get("content"))
+
+        if message_type == EVALUATION_REPORT_MESSAGE_TYPE and content:
+            explicit_report = content
+            continue
+
+        if message_type:
+            continue
+
+        if not _is_completed_report_content(content):
+            continue
+
+        hint_score = sum(1 for hint in REPORT_CONTEXT_HINTS if hint in content)
+        candidates.append((hint_score, len(content), content))
+
+    if explicit_report:
+        return explicit_report
+
+    if not candidates:
+        return None
+
+    candidates.sort(reverse=True)
+    return candidates[0][2]
+
+
+async def _load_completed_report_for_chat(chat_id: str, user_id: str) -> str | None:
+    supabase = await get_supabase()
+    chat_result = await (
+        supabase.table("chats")
+        .select("id")
+        .eq("id", chat_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not getattr(chat_result, "data", None):
+        return None
+
+    messages_result = await (
+        supabase.table("messages")
+        .select("role,content,created_at")
+        .eq("chat_id", chat_id)
+        .eq("role", "assistant")
+        .order("created_at", desc=False)
+        .execute()
+    )
+    return _completed_report_from_messages(getattr(messages_result, "data", None) or [])
 
 
 def _thread_terminal_error_payload(status: str) -> dict:
@@ -470,6 +603,7 @@ async def upload_cv(
     request: Request,
     file: UploadFile = File(...),
     thread_id: Optional[str] = Form(None),
+    recruiter_instruction: Optional[str] = Form(None),
     user_id: str = Depends(verify_token),
 ):
     if file.size and file.size > 10 * 1024 * 1024:
@@ -492,6 +626,10 @@ async def upload_cv(
     safe_name = safe_name[:100]
     if not safe_name:
         safe_name = "upload.pdf"
+
+    normalized_recruiter_instruction = _normalize_recruiter_instruction(recruiter_instruction)
+    if not normalized_recruiter_instruction:
+        logger.info("Recruiter instruction received : provided=%s chars=%s", False, 0)
 
     thread_id = thread_id or str(uuid4())
 
@@ -534,6 +672,7 @@ async def upload_cv(
         "pdf_bytes": pdf_bytes,
         "thread_id": thread_id,
         "raw_cv_text": "",
+        "recruiter_instruction": normalized_recruiter_instruction,
         "candidate": None,
         "github_analysis": None,
         "report": None,
@@ -606,6 +745,66 @@ async def resume_evaluation(
             "status": "ready_to_stream",
             "resume_payload": resume_payload,
         },
+    )
+
+
+@router.post("/{chat_id}/follow-up")
+async def follow_up_question(
+    chat_id: str,
+    body: FollowUpRequest,
+    user_id: str = Depends(verify_token),
+):
+    question = _clean_text(body.question)
+    if not question:
+        raise HTTPException(status_code=400, detail="Follow-up question is required.")
+
+    report_context = await _load_completed_report_for_chat(chat_id, user_id)
+    if not report_context:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": FOLLOW_UP_REQUIRES_REPORT_MESSAGE,
+                "code": "FOLLOW_UP_REQUIRES_COMPLETED_REPORT",
+            },
+        )
+
+    logger.info(
+        "Follow-up request accepted : chat=%s user=%s question_chars=%s report_context_chars=%s mock=%s",
+        chat_id,
+        user_id,
+        len(question),
+        len(report_context),
+        settings.DEV_MOCK_EVALUATION,
+    )
+
+    try:
+        if settings.DEV_MOCK_EVALUATION:
+            answer = mock_follow_up_answer(question)
+        else:
+            answer = await answer_follow_up_question(report_context, question, chat_id=chat_id)
+    except GeminiQuotaExceededError as e:
+        logger.warning(f"Follow-up quota failure : chat={chat_id} error={e}", exc_info=True)
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": e.user_message,
+                "code": e.code,
+                "retry_after_seconds": e.retry_after_seconds,
+            },
+        )
+    except Exception as e:
+        logger.exception(f"Follow-up failed : chat={chat_id} error={e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Follow-up answer failed. Please try again.",
+                "code": "FOLLOW_UP_FAILED",
+            },
+        )
+
+    return JSONResponse(
+        status_code=200,
+        content={"answer": answer},
     )
 
 

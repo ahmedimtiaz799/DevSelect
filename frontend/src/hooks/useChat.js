@@ -2,9 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import { useChatStore } from '../store/chatStore';
 import { useChatHistory } from './useChatHistory';
 import { streamChatResponse } from '../lib/streaming';
-import { uploadCV, resumePipeline } from '../lib/api';
+import { followUpQuestion, uploadCV, resumePipeline } from '../lib/api';
 import { generateTempId, extractGitHubUsername } from '../lib/chatUtils';
-import { serializeUploadMessage } from '../lib/messagePersistence';
+import {
+  EVALUATION_REPORT_MESSAGE_TYPE,
+  FOLLOW_UP_ANSWER_MESSAGE_TYPE,
+  isEvaluationReportMessage,
+  serializeAssistantMessage,
+  serializeUploadMessage,
+} from '../lib/messagePersistence';
 import { supabase } from '../lib/supabase';
 
 const PLACEHOLDER_ROLE_LABELS = new Set([
@@ -17,7 +23,13 @@ const PLACEHOLDER_ROLE_LABELS = new Set([
   'none',
   'null',
 ]);
-
+const PRE_CV_GUIDANCE_MESSAGE = 'Please upload a candidate CV to begin an evaluation.';
+const BUDGET_LIMIT_MESSAGES = {
+  DAILY_EVALUATION_LIMIT_REACHED: 'Daily evaluation limit reached. Please try again tomorrow.',
+  DAILY_USER_TOKEN_LIMIT_REACHED: 'Daily AI usage limit reached. Please try again tomorrow.',
+  DAILY_GLOBAL_TOKEN_LIMIT_REACHED: 'Daily AI budget limit reached. Please try again tomorrow.',
+  DAILY_AI_BUDGET_LIMIT_REACHED: 'Daily AI budget limit reached. Please try again tomorrow.',
+};
 function cleanMetaText(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -88,6 +100,50 @@ export function useChat(chatId) {
     }
   }
 
+  async function persistPlainMessages(targetId, messages) {
+    const { error } = await supabase.from('messages').insert(
+      messages.map((message) => ({
+        chat_id: targetId,
+        role: message.role,
+        content: message.role === 'assistant' && message.message_type
+          ? serializeAssistantMessage(message, message.message_type)
+          : message.content,
+      }))
+    );
+
+    if (error) {
+      console.warn('Failed to persist chat guidance messages:', error.message);
+    }
+  }
+
+  function hasCompletedReport(targetId) {
+    const chatMessages = useChatStore.getState().messages[targetId] ?? [];
+
+    return chatMessages.some(isEvaluationReportMessage);
+  }
+
+  async function sendPreCvGuidanceMessage(userText, targetId) {
+    const text = (userText ?? '').trim();
+    if (!text || !targetId) return;
+
+    const userMessage = {
+      id: generateTempId(),
+      role: 'user',
+      content: text,
+      chat_id: targetId,
+    };
+    const assistantMessage = {
+      id: generateTempId(),
+      role: 'assistant',
+      content: PRE_CV_GUIDANCE_MESSAGE,
+      chat_id: targetId,
+    };
+
+    addMessage(targetId, userMessage);
+    addMessage(targetId, assistantMessage);
+    await persistPlainMessages(targetId, [userMessage, assistantMessage]);
+  }
+
   function addStatusMessage(chatId, text) {
     setStatusMessagesByChat((current) => ({
       ...current,
@@ -130,6 +186,32 @@ export function useChat(chatId) {
 
   function getRequestErrorMessage(error) {
     return error?.message || 'Evaluation failed. Please try again.';
+  }
+
+  function getBudgetLimitMessage(response) {
+    const code = response?.data?.code;
+
+    if (BUDGET_LIMIT_MESSAGES[code]) {
+      return BUDGET_LIMIT_MESSAGES[code];
+    }
+
+    if (
+      response?.status === 429 &&
+      typeof code === 'string' &&
+      code.startsWith('DAILY_')
+    ) {
+      return BUDGET_LIMIT_MESSAGES.DAILY_AI_BUDGET_LIMIT_REACHED;
+    }
+
+    if (
+      response?.status === 429 &&
+      typeof response?.data?.error === 'string' &&
+      response.data.error.toLowerCase().includes('daily')
+    ) {
+      return BUDGET_LIMIT_MESSAGES.DAILY_AI_BUDGET_LIMIT_REACHED;
+    }
+
+    return '';
   }
 
   function ensureReadyToStream(result) {
@@ -221,9 +303,17 @@ export function useChat(chatId) {
 
   async function sendMessage(file, userText, overrideChatId) {
     const targetId = overrideChatId ?? chatId;
-    const threadExists = hasThread(targetId);
 
-    if (!file && !threadExists) return;
+    if (!file) {
+      if (hasCompletedReport(targetId)) {
+        const run = startRun(targetId);
+        await sendFollowUpMessage(userText, targetId, run);
+        return;
+      }
+
+      await sendPreCvGuidanceMessage(userText, targetId);
+      return;
+    }
 
     const run = startRun(targetId);
     setIsLoading(true);
@@ -238,18 +328,35 @@ export function useChat(chatId) {
       chat_id: targetId,
     });
 
-    if (!file && threadExists) {
-      await sendFollowUpMessage(userText, targetId, run);
-      return;
-    }
-
     try {
       await persistUserUploadMessage(targetId, userMessagePayload);
       if (!isRunActive(run)) return;
 
-      const response = await uploadCV(targetId, file, threadIds[targetId]);
+      const response = await uploadCV(
+        targetId,
+        file,
+        threadIds[targetId],
+        userMessagePayload.content
+      );
 
       if (!isRunActive(run)) return;
+
+      const budgetLimitMessage = getBudgetLimitMessage(response);
+      if (budgetLimitMessage) {
+        const assistantMessage = {
+          id: generateTempId(),
+          role: 'assistant',
+          content: budgetLimitMessage,
+          chat_id: targetId,
+        };
+
+        setIsLoading(false);
+        clearStatusMessages(targetId);
+        finishRun(run);
+        addMessage(targetId, assistantMessage);
+        await persistPlainMessages(targetId, [assistantMessage]);
+        return;
+      }
 
       if (response.status !== 200 && response.status !== 202) {
         throw new Error(response.data?.error || 'Evaluation failed. Please try again.');
@@ -321,35 +428,57 @@ export function useChat(chatId) {
   }
 
   async function sendFollowUpMessage(userText, targetId, run) {
-    const threadId = threadIds[targetId];
-    if (!threadId) return;
+    const text = (userText ?? '').trim();
+    if (!text || !targetId) {
+      finishRun(run);
+      return;
+    }
 
     setIsLoading(true);
     clearStatusMessages(targetId);
 
+    const userMessage = {
+      id: generateTempId(),
+      role: 'user',
+      content: text,
+      chat_id: targetId,
+    };
+    addMessage(targetId, userMessage);
+
     try {
-      const result = await resumePipeline(targetId, threadId, null, userText);
+      const response = await followUpQuestion(targetId, text);
       if (!isRunActive(run)) return;
 
-      ensureReadyToStream(result);
-      await startSSEStream(
-        result.thread_id,
-        result.resume_payload,
-        targetId,
-        run
-      );
+      if (response.status !== 200 || !response.data?.answer) {
+        throw new Error(response.data?.error || 'Follow-up answer failed. Please try again.');
+      }
+
+      const assistantMessage = {
+        id: generateTempId(),
+        role: 'assistant',
+        content: response.data.answer,
+        message_type: FOLLOW_UP_ANSWER_MESSAGE_TYPE,
+        chat_id: targetId,
+      };
+      addMessage(targetId, assistantMessage);
+      await persistPlainMessages(targetId, [userMessage, assistantMessage]);
+      setIsLoading(false);
+      clearStatusMessages(targetId);
+      finishRun(run);
     } catch (error) {
       if (!isRunActive(run)) return;
 
       setIsLoading(false);
       clearStatusMessages(targetId);
       finishRun(run);
-      addMessage(targetId, {
+      const assistantMessage = {
         id: generateTempId(),
         role: 'assistant',
         content: getRequestErrorMessage(error),
         chat_id: targetId,
-      });
+      };
+      addMessage(targetId, assistantMessage);
+      await persistPlainMessages(targetId, [userMessage, assistantMessage]);
     }
   }
 
@@ -495,10 +624,27 @@ export function useChat(chatId) {
           return;
         }
 
+        useChatStore.setState((state) => {
+          const chatMessages = state.messages[targetId] ?? [];
+          return {
+            messages: {
+              ...state.messages,
+              [targetId]: chatMessages.map((message) =>
+                message.id === assistantTempId
+                  ? { ...message, message_type: EVALUATION_REPORT_MESSAGE_TYPE }
+                  : message
+              ),
+            },
+          };
+        });
+
         await supabase.from('messages').insert({
           chat_id: targetId,
           role: 'assistant',
-          content: assistantMessage.content,
+          content: serializeAssistantMessage(
+            assistantMessage,
+            EVALUATION_REPORT_MESSAGE_TYPE
+          ),
         });
       },
 

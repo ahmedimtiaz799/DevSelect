@@ -11,11 +11,11 @@ export function InputBar({
   isStreaming,
   file,
   threadExists,
+  hasCompletedReport,
   fileError,
 }) {
   const [text, setText] = useState('')
   const [fileWarning, setFileWarning] = useState(false)
-  const [noFileWarning, setNoFileWarning] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const fileInputRef = useRef(null)
@@ -69,12 +69,6 @@ export function InputBar({
   function handleSend() {
     if (!canSend) return
 
-    if (!file && !threadExists) {
-      setNoFileWarning(true)
-      setTimeout(() => setNoFileWarning(false), 3000)
-      return
-    }
-
     const textToSend = text.trim()
     const fileToSend = file
 
@@ -123,9 +117,11 @@ export function InputBar({
     }
   }
 
-  const placeholder = threadExists
-    ? 'Ask a follow-up question'
-    : 'Upload a CV to evaluate a candidate'
+  const placeholder = hasCompletedReport
+    ? 'Ask a follow-up about this candidate...'
+    : threadExists
+      ? 'Ask a follow-up question'
+      : 'Upload a CV to evaluate a candidate'
 
   return (
     <div className="mx-4 md:mx-12 mt-2">
@@ -140,13 +136,6 @@ export function InputBar({
         <div className="flex items-center gap-2 text-amber-700 text-sm mb-2 px-1">
           <AlertCircle size={13} className="shrink-0" />
           <span>You can only evaluate one CV at a time</span>
-        </div>
-      )}
-
-      {noFileWarning && (
-        <div className="flex items-center gap-2 text-amber-700 text-sm mb-2 px-1">
-          <AlertCircle size={13} className="shrink-0" />
-          <span>Please upload a CV to evaluate a candidate</span>
         </div>
       )}
 

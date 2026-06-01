@@ -1,3 +1,5 @@
+let tempIdCounter = 0
+
 export function truncateTitle(title, maxLength = 30) {
   if (title.length > maxLength) return title.slice(0, maxLength) + '...'
   return title
@@ -28,7 +30,8 @@ export function formatDate(isoString) {
 }
 
 export function generateTempId() {
-  return 'temp_' + Date.now()
+  tempIdCounter += 1
+  return `temp_${Date.now()}_${tempIdCounter}`
 }
 
 export function extractGitHubUsername(url) {

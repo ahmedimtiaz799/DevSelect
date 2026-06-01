@@ -29,11 +29,13 @@ export async function apiGet(path) {
   return response.json()
 }
 
-export async function uploadCV(chatId, file, threadId) {
+export async function uploadCV(chatId, file, threadId, recruiterInstruction) {
   const { data } = await supabase.auth.getSession()
   const formData = new FormData()
+  const instruction = (recruiterInstruction ?? '').trim()
   formData.append('file', file)
   if (threadId) formData.append('thread_id', threadId)
+  if (instruction) formData.append('recruiter_instruction', instruction)
 
   const response = await fetch(`${BASE_URL}/api/chat/${chatId}/upload`, {
     method: 'POST',
@@ -52,4 +54,16 @@ export async function resumePipeline(chatId, threadId, selectedProfile) {
     thread_id: threadId,
     selected_profile: selectedProfile ?? null,
   })
+}
+
+export async function followUpQuestion(chatId, question) {
+  const headers = await getAuthHeaders()
+  const response = await fetch(`${BASE_URL}/api/chat/${chatId}/follow-up`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ question }),
+  })
+
+  const result = await response.json()
+  return { status: response.status, data: result }
 }
