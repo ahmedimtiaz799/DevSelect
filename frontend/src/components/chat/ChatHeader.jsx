@@ -1,11 +1,12 @@
 import { Menu } from 'lucide-react'
 import { useChatStore } from '../../store/chatStore'
+import { normalizeChatTitle } from '../../lib/chatUtils'
 
 export function ChatHeader({ chatId, onMenuClick }) {
   const { chats } = useChatStore()
 
   const activeChat = chatId ? chats.find((c) => c.id === chatId) : null
-  const title = activeChat?.title ?? ''
+  const title = activeChat?.title ? normalizeChatTitle(activeChat.title) : ''
 
   return (
     <header className="sticky top-0 z-10 h-14 bg-white shadow-sm border-b border-gray-100 flex items-center px-4 md:px-6 gap-3 shrink-0 min-w-0 overflow-hidden">

@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { normalizeChatTitle } from '../../lib/chatUtils'
 
 export function DeleteConfirmModal({ chatTitle, onConfirm, onCancel }) {
   const cancelRef = useRef(null)
+  const normalizedChatTitle = normalizeChatTitle(chatTitle)
 
   useEffect(() => {
     cancelRef.current?.focus()
@@ -25,8 +27,8 @@ export function DeleteConfirmModal({ chatTitle, onConfirm, onCancel }) {
           Delete chat?
         </h3>
 
-        <p className="text-brand-muted text-msg mb-6">
-          "{chatTitle}" will be permanently deleted.
+        <p className="text-brand-muted text-msg mb-6 break-words [overflow-wrap:anywhere]">
+          "{normalizedChatTitle}" will be permanently deleted.
         </p>
 
         <div className="flex gap-3 justify-end">

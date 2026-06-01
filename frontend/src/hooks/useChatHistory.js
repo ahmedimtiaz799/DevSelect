@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useChatStore } from '../store/chatStore'
 import { useAuth } from './useAuth'
-import { truncateTitle } from '../lib/chatUtils'
+import { normalizeChatTitle } from '../lib/chatUtils'
 
 export function useChatHistory() {
   const navigate = useNavigate()
@@ -39,7 +39,7 @@ export function useChatHistory() {
   }, [user, setChats])
 
   async function createNewChat(firstMessage) {
-    const title = firstMessage ? truncateTitle(firstMessage, 40) : 'New Chat'
+    const title = normalizeChatTitle(firstMessage)
 
     const { data, error } = await supabase
       .from('chats')
@@ -71,14 +71,16 @@ export function useChatHistory() {
   }
 
   async function renameChat(chatId, newTitle) {
+    const title = normalizeChatTitle(newTitle)
+
     const { error } = await supabase
       .from('chats')
-      .update({ title: newTitle })
+      .update({ title })
       .eq('id', chatId)
 
     if (error) return
 
-    updateChatTitle(chatId, newTitle)
+    updateChatTitle(chatId, title)
   }
 
   async function touchChatActivity(chatId) {

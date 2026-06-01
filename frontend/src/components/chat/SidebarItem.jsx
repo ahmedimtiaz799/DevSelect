@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MoreVertical } from 'lucide-react'
 import { useChatStore } from '../../store/chatStore'
-import { truncateTitle } from '../../lib/chatUtils'
+import { normalizeChatTitle, truncateTitle } from '../../lib/chatUtils'
 import { ChatContextMenu } from './ChatContextMenu'
 import { DeleteConfirmModal } from './DeleteConfirmModal'
 import { RenameModal } from './RenameModal'
@@ -30,6 +30,7 @@ export function SidebarItem({
   const menuButtonRef = useRef(null)
 
   const isActive = activeChatId === chat.id
+  const chatTitle = normalizeChatTitle(chat.title)
 
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), 10)
@@ -90,7 +91,7 @@ export function SidebarItem({
   return (
     <>
       <div
-        title={isCollapsed ? chat.title : undefined}
+        title={isCollapsed ? chatTitle : undefined}
         className={`relative group flex items-center justify-between px-2 py-2 rounded-card cursor-pointer transition-all duration-200 ease-out
           ${visible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}
           ${isActive
@@ -103,10 +104,10 @@ export function SidebarItem({
         <div className={`flex items-center gap-1.5 min-w-0 flex-1 ${isCollapsed ? 'justify-center' : ''}`}>
           {!isCollapsed && (
             <span
-              title={chat.title}
+              title={chatTitle}
               className="text-ui truncate max-w-[140px] whitespace-nowrap overflow-hidden"
             >
-              {truncateTitle(chat.title)}
+              {truncateTitle(chatTitle)}
             </span>
           )}
         </div>
@@ -144,7 +145,7 @@ export function SidebarItem({
 
       {showDeleteModal && (
         <DeleteConfirmModal
-          chatTitle={chat.title}
+          chatTitle={chatTitle}
           onConfirm={handleDeleteConfirm}
           onCancel={() => setShowDeleteModal(false)}
         />
@@ -152,7 +153,7 @@ export function SidebarItem({
 
       {showRenameModal && (
         <RenameModal
-          chatTitle={chat.title}
+          chatTitle={chatTitle}
           onConfirm={handleRenameConfirm}
           onCancel={() => setShowRenameModal(false)}
         />

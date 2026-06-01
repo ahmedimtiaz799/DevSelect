@@ -1,8 +1,32 @@
 let tempIdCounter = 0
 
+export const CHAT_TITLE_MAX_LENGTH = 80
+
+function cleanTitleValue(value) {
+  return String(value ?? '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function normalizeChatTitle(title, fallback = 'New Chat') {
+  const cleaned = cleanTitleValue(title)
+  const fallbackTitle = cleanTitleValue(fallback) || 'New Chat'
+  const value = cleaned || fallbackTitle
+
+  if (value.length <= CHAT_TITLE_MAX_LENGTH) return value
+
+  return `${value.slice(0, CHAT_TITLE_MAX_LENGTH - 3).trimEnd()}...`
+}
+
 export function truncateTitle(title, maxLength = 30) {
-  if (title.length > maxLength) return title.slice(0, maxLength) + '...'
-  return title
+  const normalizedTitle = normalizeChatTitle(title)
+
+  if (normalizedTitle.length > maxLength) {
+    return `${normalizedTitle.slice(0, maxLength - 3).trimEnd()}...`
+  }
+
+  return normalizedTitle
 }
 
 export function formatDate(isoString) {

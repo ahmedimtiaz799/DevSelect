@@ -3,6 +3,7 @@ import { Search, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useChatHistory } from '../../hooks/useChatHistory'
 import { SidebarItem } from './SidebarItem'
 import { UserMenu } from './UserMenu'
+import { normalizeChatTitle } from '../../lib/chatUtils'
 
 function chatActivityTime(chat) {
   const value = Date.parse(chat.updated_at || chat.created_at || '')
@@ -63,7 +64,7 @@ export function Sidebar({
   }
 
   const filtered = chats.filter((c) =>
-    c.title.toLowerCase().includes(search.toLowerCase())
+    normalizeChatTitle(c.title, '').toLowerCase().includes(search.toLowerCase())
   )
 
   const pinnedChats = filtered

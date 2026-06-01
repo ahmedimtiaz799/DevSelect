@@ -14,6 +14,7 @@ import {
   normalizePersistedMessage,
 } from '../lib/messagePersistence'
 import { supabase } from '../lib/supabase'
+import { normalizeChatTitle } from '../lib/chatUtils'
 
 const EMPTY_MESSAGES = []
 const EMPTY_PROFILES = []
@@ -119,9 +120,11 @@ export function Chat() {
     Boolean(chatId) && !loadedMessagesByChat[chatId]
 
   function getNewChatTitle(text, fileToSend) {
-    return text.trim()
-      ? text.trim()
-      : fileToSend?.name.replace(/\.pdf$/i, '') ?? 'New Chat'
+    return normalizeChatTitle(
+      text.trim()
+        ? text
+        : fileToSend?.name.replace(/\.pdf$/i, '')
+    )
   }
 
   async function startEvaluationInNewChat(text, fileToSend, options = {}) {

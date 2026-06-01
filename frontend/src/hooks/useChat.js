@@ -3,7 +3,7 @@ import { useChatStore } from '../store/chatStore';
 import { useChatHistory } from './useChatHistory';
 import { streamChatResponse } from '../lib/streaming';
 import { followUpQuestion, uploadCV, resumePipeline } from '../lib/api';
-import { generateTempId, extractGitHubUsername } from '../lib/chatUtils';
+import { generateTempId, extractGitHubUsername, normalizeChatTitle } from '../lib/chatUtils';
 import {
   EVALUATION_REPORT_MESSAGE_TYPE,
   FOLLOW_UP_ANSWER_MESSAGE_TYPE,
@@ -551,16 +551,17 @@ export function useChat(chatId) {
         const title = validRole
           ? `${candidateName} — ${validRole}`
           : candidateName;
+        const normalizedTitle = normalizeChatTitle(title);
 
         if (!title || candidateName === 'Unknown Candidate') return;
 
         const currentTitle =
           useChatStore.getState().chats.find((c) => c.id === targetId)?.title ?? '';
         if (!validRole && getCurrentTitleRole(currentTitle)) return;
-        if (currentTitle === title) return;
+        if (currentTitle === normalizedTitle) return;
 
-        updateChatTitle(targetId, title);
-        renameChat(targetId, title);
+        updateChatTitle(targetId, normalizedTitle);
+        renameChat(targetId, normalizedTitle);
       },
 
       onStatus(text) {

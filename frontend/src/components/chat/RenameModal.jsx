@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { CHAT_TITLE_MAX_LENGTH, normalizeChatTitle } from '../../lib/chatUtils'
 
 export function RenameModal({ chatTitle, onConfirm, onCancel }) {
-  const [value, setValue] = useState(chatTitle)
+  const normalizedChatTitle = normalizeChatTitle(chatTitle)
+  const [value, setValue] = useState(normalizedChatTitle)
   const inputRef = useRef(null)
 
   useEffect(() => {
@@ -11,8 +13,10 @@ export function RenameModal({ chatTitle, onConfirm, onCancel }) {
   }, [])
 
   function handleSubmit() {
-    if (value.trim() && value.trim() !== chatTitle) {
-      onConfirm(value.trim())
+    const normalizedValue = normalizeChatTitle(value)
+
+    if (normalizedValue !== normalizedChatTitle) {
+      onConfirm(normalizedValue)
     } else {
       onCancel()
     }
@@ -28,6 +32,7 @@ export function RenameModal({ chatTitle, onConfirm, onCancel }) {
         <input
           ref={inputRef}
           value={value}
+          maxLength={CHAT_TITLE_MAX_LENGTH}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleSubmit()
