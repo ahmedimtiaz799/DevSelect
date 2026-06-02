@@ -4,7 +4,8 @@ from app.models.candidate import CandidateExtraction, GitHubAnalysis
 
 
 class DevSelectState(TypedDict):
-    pdf_bytes: bytes
+    pdf_bytes: bytes | None
+    pdf_temp_path: str | None
     thread_id: str
     raw_cv_text: str
     recruiter_instruction: str | None
@@ -12,4 +13,5 @@ class DevSelectState(TypedDict):
     github_analysis: GitHubAnalysis | None
     report: str | None
     error: str | None
+    error_code: str | None
     evaluation_status: str | None

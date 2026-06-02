@@ -2,6 +2,7 @@ import re
 import logging
 import tempfile
 import os
+import asyncio
 from typing import Any
 
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -34,8 +35,24 @@ class LlamaParseTransientError(Exception):
     pass
 
 
+class LlamaParseTimeoutError(Exception):
+    pass
+
+
 class GeminiTransientError(Exception):
     pass
+
+
+def _delete_file(path: str | None) -> None:
+    if not path:
+        return
+
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        return
+    except Exception as e:
+        logger.warning(f"Temporary PDF cleanup failed: {type(e).__name__}")
 
 
 @retry(
@@ -44,7 +61,7 @@ class GeminiTransientError(Exception):
     retry=retry_if_exception_type(LlamaParseTransientError),
     reraise=True,
 )
-async def _parse_pdf_with_llamaparse(pdf_bytes: bytes) -> str:
+async def _parse_pdf_with_llamaparse(pdf_path: str) -> str:
     try:
         parser = LlamaParse(
             api_key=settings.LLAMAPARSE_API_KEY,
@@ -54,14 +71,10 @@ async def _parse_pdf_with_llamaparse(pdf_bytes: bytes) -> str:
             verbose=False,
         )
 
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(pdf_bytes)
-            tmp_path = tmp.name
-
-        try:
-            documents = await parser.aload_data(tmp_path)
-        finally:
-            os.unlink(tmp_path)
+        documents = await asyncio.wait_for(
+            parser.aload_data(pdf_path),
+            timeout=settings.LLAMA_PARSE_TIMEOUT_SECONDS,
+        )
 
         if not documents:
             raise ValueError("LlamaParse returned no documents.")
@@ -73,11 +86,25 @@ async def _parse_pdf_with_llamaparse(pdf_bytes: bytes) -> str:
 
         return markdown_text
 
+    except asyncio.TimeoutError as e:
+        logger.warning("LlamaParse timed out after %s seconds", settings.LLAMA_PARSE_TIMEOUT_SECONDS)
+        raise LlamaParseTimeoutError("LlamaParse timed out.") from e
     except ValueError:
         raise
     except Exception as e:
         logger.error(f"LlamaParse error: {e}")
         raise LlamaParseTransientError(f"LlamaParse transient error: {e}")
+
+
+async def _parse_pdf_bytes_with_llamaparse(pdf_bytes: bytes) -> str:
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(pdf_bytes)
+        tmp_path = tmp.name
+
+    try:
+        return await _parse_pdf_with_llamaparse(tmp_path)
+    finally:
+        _delete_file(tmp_path)
 
 
 @retry(
@@ -139,12 +166,18 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         logger.warning("Agent 1 skipping — error already set in state.")
         return {}
 
-    if not state.get("pdf_bytes"):
+    pdf_temp_path = state.get("pdf_temp_path")
+    pdf_bytes = state.get("pdf_bytes")
+
+    if not pdf_temp_path and not pdf_bytes:
         return {"error": "No PDF bytes found in state. Upload may have failed."}
 
     try:
         logger.info("Agent 1: Sending PDF to LlamaParse...")
-        raw_cv_text = await _parse_pdf_with_llamaparse(state["pdf_bytes"])
+        if pdf_temp_path:
+            raw_cv_text = await _parse_pdf_with_llamaparse(pdf_temp_path)
+        else:
+            raw_cv_text = await _parse_pdf_bytes_with_llamaparse(pdf_bytes)
         logger.info(f"Agent 1: LlamaParse returned {len(raw_cv_text)} characters")
         gemini_cv_text, original_cv_chars, capped_cv_chars, was_truncated = cap_text_for_llm(
             raw_cv_text,
@@ -157,14 +190,24 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
             capped_cv_chars,
             was_truncated,
         )
+    except LlamaParseTimeoutError:
+        return {
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
+            "error": "This file took too long to process. Please upload a standard PDF CV.",
+            "error_code": "PDF_PARSE_TIMEOUT",
+        }
     except Exception as e:
         logger.error(f"Agent 1 failed in Step A: {e}")
         return {
-            "error": (
-                "CV parsing failed after 2 attempts. "
-                "Please check the PDF is not password-protected and try again."
-            )
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
+            "error": "This file could not be processed safely. Please upload a standard PDF CV.",
+            "error_code": "PDF_PROCESSING_FAILED",
         }
+    finally:
+        if pdf_temp_path:
+            _delete_file(pdf_temp_path)
 
     try:
         logger.info("Agent 1: Sending parsed text to Gemini...")
@@ -174,10 +217,12 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         )
         logger.info("Agent 1: Gemini responded")
     except ValueError as e:
-        return {"raw_cv_text": raw_cv_text, "error": str(e)}
+        return {"pdf_bytes": None, "pdf_temp_path": None, "raw_cv_text": raw_cv_text, "error": str(e)}
     except Exception as e:
         logger.error(f"Agent 1 failed in Step B: {e}")
         return {
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
             "raw_cv_text": raw_cv_text,
             "error": (
                 "CV analysis failed after 2 attempts. "
@@ -193,14 +238,18 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
     except ValueError as e:
         logger.error(f"Agent 1 failed in Step C (JSON): {e}")
         return {
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
             "raw_cv_text": raw_cv_text,
             "error": "CV data extraction produced invalid output. Please try again.",
         }
     except Exception as e:
         logger.error(f"Agent 1 failed in Step C (Pydantic): {e}")
         return {
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
             "raw_cv_text": raw_cv_text,
-            "error": f"CV data validation failed: {e}",
+            "error": "CV data validation failed. Please try again.",
         }
 
     logger.info("Agent 1: Analysing GitHub URLs and calling interrupt()...")
@@ -269,6 +318,8 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         candidate = candidate.model_copy(update={"github_url": selected_url})
 
     return {
+        "pdf_bytes": None,
+        "pdf_temp_path": None,
         "raw_cv_text": raw_cv_text,
         "candidate": candidate,
     }

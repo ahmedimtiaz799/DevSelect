@@ -7,6 +7,9 @@ import json
 import urllib.parse
 import logging
 import re
+import os
+import tempfile
+from io import BytesIO
 from langgraph.types import Command
 
 from app.agents.follow_up import answer_follow_up_question, mock_follow_up_answer
@@ -106,6 +109,110 @@ REPORT_CONTEXT_HINTS = (
 )
 ASSISTANT_MESSAGE_PREFIX = "__DEVSELECT_ASSISTANT_MESSAGE__"
 EVALUATION_REPORT_MESSAGE_TYPE = "evaluation_report"
+MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024
+PDF_HEADER_READ_BYTES = 32
+UPLOAD_SECURITY_MESSAGES = {
+    "INVALID_FILE_TYPE": "Please upload a valid PDF CV under 10 MB.",
+    "FILE_TOO_LARGE": "Please upload a valid PDF CV under 10 MB.",
+    "INVALID_PDF": "This file could not be processed safely. Please upload a standard PDF CV.",
+    "ENCRYPTED_PDF": "This PDF is password-protected or encrypted. Please upload an unlocked PDF CV.",
+    "PDF_TOO_LONG": "This PDF is too long for evaluation.",
+    "PDF_PARSE_TIMEOUT": "This file took too long to process. Please upload a standard PDF CV.",
+    "PDF_PROCESSING_FAILED": "This file could not be processed safely. Please upload a standard PDF CV.",
+}
+
+
+class UploadSecurityError(Exception):
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
+
+def _upload_security_response(code: str, status_code: int = 400) -> JSONResponse:
+    error = (
+        f"This PDF is too long for evaluation. Please upload a CV under {settings.MAX_CV_PDF_PAGES} pages."
+        if code == "PDF_TOO_LONG"
+        else UPLOAD_SECURITY_MESSAGES.get(
+            code,
+            UPLOAD_SECURITY_MESSAGES["PDF_PROCESSING_FAILED"],
+        )
+    )
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error": error,
+            "code": code,
+        },
+    )
+
+
+def _safe_upload_name(filename: str | None) -> str:
+    original_name = filename or "upload.pdf"
+    safe_name = "".join(
+        c for c in original_name
+        if c.isalnum() or c in ("-", "_", ".")
+    )
+    safe_name = safe_name[:100]
+    return safe_name or "upload.pdf"
+
+
+def _has_pdf_header(prefix: bytes) -> bool:
+    return prefix.lstrip(b" \t\r\n\f").startswith(b"%PDF-")
+
+
+def _validate_pdf_structure(pdf_bytes: bytes) -> None:
+    try:
+        from pypdf import PdfReader
+    except ImportError as e:
+        logger.error("PDF validation dependency missing: pypdf")
+        raise UploadSecurityError("PDF_PROCESSING_FAILED") from e
+
+    try:
+        reader = PdfReader(BytesIO(pdf_bytes), strict=False)
+        if reader.is_encrypted:
+            raise UploadSecurityError("ENCRYPTED_PDF")
+
+        page_count = len(reader.pages)
+    except UploadSecurityError:
+        raise
+    except Exception as e:
+        logger.warning(
+            "PDF structural validation failed : bytes=%s error_type=%s",
+            len(pdf_bytes),
+            type(e).__name__,
+        )
+        raise UploadSecurityError("INVALID_PDF") from e
+
+    if page_count <= 0:
+        raise UploadSecurityError("INVALID_PDF")
+
+    if page_count > settings.MAX_CV_PDF_PAGES:
+        logger.info(
+            "PDF rejected by page limit : pages=%s max_pages=%s bytes=%s",
+            page_count,
+            settings.MAX_CV_PDF_PAGES,
+            len(pdf_bytes),
+        )
+        raise UploadSecurityError("PDF_TOO_LONG")
+
+
+def _write_temp_pdf(pdf_bytes: bytes) -> str:
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(pdf_bytes)
+        return tmp.name
+
+
+def _delete_temp_file(path: str | None) -> None:
+    if not path:
+        return
+
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        return
+    except Exception as e:
+        logger.warning("Temporary PDF cleanup failed : error_type=%s", type(e).__name__)
 
 
 def _field(value, name: str):
@@ -606,26 +713,29 @@ async def upload_cv(
     recruiter_instruction: Optional[str] = Form(None),
     user_id: str = Depends(verify_token),
 ):
-    if file.size and file.size > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File should be less than 10Mb.")
+    if file.size and file.size > MAX_CV_UPLOAD_BYTES:
+        return _upload_security_response("FILE_TOO_LARGE")
+
+    safe_name = _safe_upload_name(file.filename)
+    if not safe_name.lower().endswith(".pdf"):
+        return _upload_security_response("INVALID_FILE_TYPE")
 
     if file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="Invalid file type.")
+        return _upload_security_response("INVALID_FILE_TYPE")
 
-    magic = await file.read(4)
-    if magic != b"%PDF":
-        raise HTTPException(status_code=400, detail="Invalid file type.")
+    header = await file.read(PDF_HEADER_READ_BYTES)
+    if not _has_pdf_header(header):
+        return _upload_security_response("INVALID_PDF")
 
     await file.seek(0)
+    pdf_bytes = await file.read()
+    if len(pdf_bytes) > MAX_CV_UPLOAD_BYTES:
+        return _upload_security_response("FILE_TOO_LARGE")
 
-    original_name = file.filename or "upload.pdf"
-    safe_name = "".join(
-        c for c in original_name
-        if c.isalnum() or c in ("-", "_", ".")
-    )
-    safe_name = safe_name[:100]
-    if not safe_name:
-        safe_name = "upload.pdf"
+    try:
+        _validate_pdf_structure(pdf_bytes)
+    except UploadSecurityError as e:
+        return _upload_security_response(e.code)
 
     normalized_recruiter_instruction = _normalize_recruiter_instruction(recruiter_instruction)
     if not normalized_recruiter_instruction:
@@ -651,7 +761,7 @@ async def upload_cv(
         thread_id = str(uuid4())
         logger.info(f"Upload requested existing thread : old={old_thread_id} new={thread_id}")
 
-    estimated_budget_tokens = estimate_evaluation_budget(file.size)
+    estimated_budget_tokens = estimate_evaluation_budget(len(pdf_bytes))
     budget_decision = await record_budget_usage(user_id, estimated_budget_tokens)
     if not budget_decision.allowed:
         logger.warning(
@@ -666,10 +776,11 @@ async def upload_cv(
             content=budget_error_payload(budget_decision),
         )
 
-    pdf_bytes = await file.read()
+    pdf_temp_path = _write_temp_pdf(pdf_bytes)
 
     initial_state = {
-        "pdf_bytes": pdf_bytes,
+        "pdf_bytes": None,
+        "pdf_temp_path": pdf_temp_path,
         "thread_id": thread_id,
         "raw_cv_text": "",
         "recruiter_instruction": normalized_recruiter_instruction,
@@ -677,20 +788,31 @@ async def upload_cv(
         "github_analysis": None,
         "report": None,
         "error": None,
+        "error_code": None,
         "evaluation_status": EVALUATION_PENDING,
     }
 
-    result = await graph.ainvoke(
-        initial_state,
-        config={"configurable": {"thread_id": thread_id}},
-    )
+    try:
+        result = await graph.ainvoke(
+            initial_state,
+            config={"configurable": {"thread_id": thread_id}},
+        )
+    except Exception:
+        _delete_temp_file(pdf_temp_path)
+        raise
 
     if result.get("error"):
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         logger.warning(f"Upload evaluation failed before interrupt : thread={thread_id} error={result['error']}")
+        if result.get("error_code") in UPLOAD_SECURITY_MESSAGES:
+            return _upload_security_response(result["error_code"])
+
         return JSONResponse(
             status_code=503,
-            content={"error": result["error"]},
+            content={
+                "error": result["error"],
+                "code": result.get("error_code") or "EVALUATION_UPLOAD_FAILED",
+            },
         )
 
     interrupts = result.get("__interrupt__") or []
