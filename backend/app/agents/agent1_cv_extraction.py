@@ -26,9 +26,12 @@ from app.utils.llm_observability import (
     log_llm_request,
     log_llm_usage,
 )
+from app.utils.cv_likeness import assess_cv_likeness
 
 logger = logging.getLogger("devselect")
 AGENT1_MODEL = "gemini-2.5-flash"
+CV_NOT_LIKELY_MESSAGE = "This PDF does not look like a candidate CV. Please upload a CV or resume PDF."
+CV_EXTRACTION_INVALID_MESSAGE = "This PDF could not be read as a candidate CV. Please upload a standard CV or resume PDF."
 
 
 class LlamaParseTransientError(Exception):
@@ -107,6 +110,39 @@ async def _parse_pdf_bytes_with_llamaparse(pdf_bytes: bytes) -> str:
         _delete_file(tmp_path)
 
 
+def _cv_likeness_rejection(markdown_text: str, thread_id: str) -> dict[str, Any] | None:
+    if not settings.ENABLE_CV_LIKENESS_CHECK:
+        return None
+
+    assessment = assess_cv_likeness(
+        markdown_text,
+        min_text_chars=settings.CV_LIKENESS_MIN_TEXT_CHARS,
+        min_score=settings.CV_LIKENESS_MIN_SCORE,
+    )
+    logger.info(
+        "Agent 1: Parsed CV likeness check thread=%s text_chars=%s score=%s negative_score=%s categories=%s negative_categories=%s low_text=%s reject=%s decision_reason=%s",
+        thread_id,
+        assessment["text_chars"],
+        assessment["score"],
+        assessment["negative_score"],
+        ",".join(assessment["signal_categories"]) or "none",
+        ",".join(assessment["negative_categories"]) or "none",
+        assessment["low_text"],
+        assessment["should_reject"],
+        assessment.get("decision_reason", "unknown"),
+    )
+
+    if not assessment["should_reject"]:
+        return None
+
+    return {
+        "pdf_bytes": None,
+        "pdf_temp_path": None,
+        "error": CV_NOT_LIKELY_MESSAGE,
+        "error_code": "NOT_A_CV",
+    }
+
+
 @retry(
     stop=stop_after_attempt(2),
     wait=wait_exponential(multiplier=1, min=2, max=8),
@@ -179,6 +215,9 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         else:
             raw_cv_text = await _parse_pdf_bytes_with_llamaparse(pdf_bytes)
         logger.info(f"Agent 1: LlamaParse returned {len(raw_cv_text)} characters")
+        rejection = _cv_likeness_rejection(raw_cv_text, state["thread_id"])
+        if rejection:
+            return rejection
         gemini_cv_text, original_cv_chars, capped_cv_chars, was_truncated = cap_text_for_llm(
             raw_cv_text,
             settings.AGENT1_MAX_INPUT_CHARS,
@@ -236,20 +275,30 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         candidate = CandidateExtraction(**parsed_dict)
         logger.info(f"Agent 1: Extracted candidate — {candidate.full_name}")
     except ValueError as e:
-        logger.error(f"Agent 1 failed in Step C (JSON): {e}")
+        logger.error(
+            "Agent 1 failed in Step C (JSON): error_type=%s response_chars=%s",
+            type(e).__name__,
+            len(raw_json_str) if isinstance(raw_json_str, str) else 0,
+        )
         return {
             "pdf_bytes": None,
             "pdf_temp_path": None,
             "raw_cv_text": raw_cv_text,
-            "error": "CV data extraction produced invalid output. Please try again.",
+            "error": CV_EXTRACTION_INVALID_MESSAGE,
+            "error_code": "CV_EXTRACTION_INVALID",
         }
     except Exception as e:
-        logger.error(f"Agent 1 failed in Step C (Pydantic): {e}")
+        logger.error(
+            "Agent 1 failed in Step C (Pydantic): error_type=%s response_chars=%s",
+            type(e).__name__,
+            len(raw_json_str) if isinstance(raw_json_str, str) else 0,
+        )
         return {
             "pdf_bytes": None,
             "pdf_temp_path": None,
             "raw_cv_text": raw_cv_text,
-            "error": "CV data validation failed. Please try again.",
+            "error": CV_EXTRACTION_INVALID_MESSAGE,
+            "error_code": "CV_EXTRACTION_INVALID",
         }
 
     logger.info("Agent 1: Analysing GitHub URLs and calling interrupt()...")

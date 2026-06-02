@@ -23,6 +23,7 @@ from app.utils.budget_limits import (
     estimate_evaluation_budget,
     record_budget_usage,
 )
+from app.utils.cv_likeness import assess_cv_likeness
 from app.utils.llm_observability import cap_text_for_llm
 
 logger = logging.getLogger("devselect")
@@ -119,6 +120,8 @@ UPLOAD_SECURITY_MESSAGES = {
     "PDF_TOO_LONG": "This PDF is too long for evaluation.",
     "PDF_PARSE_TIMEOUT": "This file took too long to process. Please upload a standard PDF CV.",
     "PDF_PROCESSING_FAILED": "This file could not be processed safely. Please upload a standard PDF CV.",
+    "NOT_A_CV": "This PDF does not look like a candidate CV. Please upload a CV or resume PDF.",
+    "CV_EXTRACTION_INVALID": "This PDF could not be read as a candidate CV. Please upload a standard CV or resume PDF.",
 }
 
 
@@ -195,6 +198,61 @@ def _validate_pdf_structure(pdf_bytes: bytes) -> None:
             len(pdf_bytes),
         )
         raise UploadSecurityError("PDF_TOO_LONG")
+
+
+def _extract_pdf_preview_text(pdf_bytes: bytes) -> str:
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        return ""
+
+    try:
+        reader = PdfReader(BytesIO(pdf_bytes), strict=False)
+    except Exception as e:
+        logger.warning("PDF preview text extraction failed : error_type=%s", type(e).__name__)
+        return ""
+
+    text_parts = []
+    max_pages = max(1, settings.CV_LIKENESS_MAX_PAGES_TO_SCAN)
+    page_count = min(len(reader.pages), max_pages)
+
+    for index in range(page_count):
+        try:
+            text_parts.append(reader.pages[index].extract_text() or "")
+        except Exception as e:
+            logger.warning(
+                "PDF preview text page extraction failed : page=%s error_type=%s",
+                index + 1,
+                type(e).__name__,
+            )
+
+    return "\n".join(text_parts)
+
+
+def _run_cv_likeness_precheck(pdf_bytes: bytes) -> None:
+    if not settings.ENABLE_CV_LIKENESS_CHECK:
+        return
+
+    preview_text = _extract_pdf_preview_text(pdf_bytes)
+    assessment = assess_cv_likeness(
+        preview_text,
+        min_text_chars=settings.CV_LIKENESS_MIN_TEXT_CHARS,
+        min_score=settings.CV_LIKENESS_MIN_SCORE,
+    )
+    logger.info(
+        "CV likeness precheck : text_chars=%s score=%s negative_score=%s categories=%s negative_categories=%s low_text=%s reject=%s decision_reason=%s",
+        assessment["text_chars"],
+        assessment["score"],
+        assessment["negative_score"],
+        ",".join(assessment["signal_categories"]) or "none",
+        ",".join(assessment["negative_categories"]) or "none",
+        assessment["low_text"],
+        assessment["should_reject"],
+        assessment.get("decision_reason", "unknown"),
+    )
+
+    if assessment["should_reject"]:
+        raise UploadSecurityError("NOT_A_CV")
 
 
 def _write_temp_pdf(pdf_bytes: bytes) -> str:
@@ -734,6 +792,7 @@ async def upload_cv(
 
     try:
         _validate_pdf_structure(pdf_bytes)
+        _run_cv_likeness_precheck(pdf_bytes)
     except UploadSecurityError as e:
         return _upload_security_response(e.code)
 
