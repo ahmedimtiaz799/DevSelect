@@ -9,7 +9,9 @@ import logging
 import re
 import os
 import tempfile
+from datetime import datetime
 from io import BytesIO
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from langgraph.types import Command
 
 from app.agents.follow_up import answer_follow_up_question, mock_follow_up_answer
@@ -306,6 +308,40 @@ def _normalize_recruiter_instruction(value) -> str | None:
         was_truncated,
     )
     return capped or None
+
+
+def _load_timezone(timezone_name: str | None) -> ZoneInfo | None:
+    clean_timezone = _clean_text(timezone_name)
+    if not clean_timezone or len(clean_timezone) > 128:
+        return None
+
+    try:
+        return ZoneInfo(clean_timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        return None
+
+
+def _evaluation_datetime_context(client_timezone: str | None = None) -> dict[str, str]:
+    client_timezone_name = _clean_text(client_timezone)
+    client_zoneinfo = _load_timezone(client_timezone_name)
+    used_client_timezone = client_zoneinfo is not None
+
+    timezone_name = client_timezone_name if used_client_timezone else settings.EVALUATION_TIMEZONE
+    timezone_info = client_zoneinfo or _load_timezone(timezone_name)
+
+    if timezone_info is None:
+        logger.warning("Invalid fallback evaluation timezone configured : timezone=%s", timezone_name)
+        timezone_name = "UTC"
+        timezone_info = ZoneInfo(timezone_name)
+
+    evaluation_datetime = datetime.now(timezone_info)
+
+    return {
+        "evaluation_date": evaluation_datetime.date().isoformat(),
+        "evaluation_timezone": timezone_name,
+        "evaluation_datetime_iso": evaluation_datetime.isoformat(),
+        "evaluation_timezone_source": "browser" if used_client_timezone else "fallback",
+    }
 
 
 def _known_role(value) -> str | None:
@@ -836,6 +872,7 @@ async def upload_cv(
     file: UploadFile = File(...),
     thread_id: Optional[str] = Form(None),
     recruiter_instruction: Optional[str] = Form(None),
+    evaluation_timezone: Optional[str] = Form(None),
     user_id: str = Depends(verify_token),
 ):
     owned_chat = await _get_owned_chat(chat_id, user_id)
@@ -912,6 +949,14 @@ async def upload_cv(
     await _save_chat_thread_id(chat_id, user_id, thread_id)
 
     pdf_temp_path = _write_temp_pdf(pdf_bytes)
+    evaluation_context = _evaluation_datetime_context(evaluation_timezone)
+    logger.info(
+        "Evaluation date context : thread=%s date=%s timezone=%s source=%s",
+        thread_id,
+        evaluation_context["evaluation_date"],
+        evaluation_context["evaluation_timezone"],
+        evaluation_context["evaluation_timezone_source"],
+    )
 
     initial_state = {
         "pdf_bytes": None,
@@ -919,6 +964,10 @@ async def upload_cv(
         "thread_id": thread_id,
         "raw_cv_text": "",
         "recruiter_instruction": normalized_recruiter_instruction,
+        "evaluation_date": evaluation_context["evaluation_date"],
+        "evaluation_timezone": evaluation_context["evaluation_timezone"],
+        "evaluation_datetime_iso": evaluation_context["evaluation_datetime_iso"],
+        "evaluation_timezone_source": evaluation_context["evaluation_timezone_source"],
         "candidate": None,
         "github_analysis": None,
         "report": None,

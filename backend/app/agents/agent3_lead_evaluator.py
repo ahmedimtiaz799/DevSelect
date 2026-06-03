@@ -92,6 +92,10 @@ async def agent3_lead_evaluator(state: DevSelectState) -> dict:
     candidate = state.get("candidate")
     github = state.get("github_analysis")
     recruiter_instruction = state.get("recruiter_instruction")
+    evaluation_date = state.get("evaluation_date")
+    evaluation_timezone = state.get("evaluation_timezone")
+    evaluation_datetime_iso = state.get("evaluation_datetime_iso")
+    evaluation_timezone_source = state.get("evaluation_timezone_source")
     error = state.get("error")
 
     logger.info(f"Agent 3 generating report for thread {thread_id}")
@@ -101,13 +105,27 @@ async def agent3_lead_evaluator(state: DevSelectState) -> dict:
         bool(recruiter_instruction),
         len(recruiter_instruction or ""),
     )
+    logger.info(
+        "Agent 3 evaluation date context : thread=%s date=%s timezone=%s",
+        thread_id,
+        evaluation_date or "not_provided",
+        evaluation_timezone or "not_provided",
+    )
 
     candidate_section = _format_candidate(candidate)
     github_section = _format_github(github)
+    evaluation_date_section = _format_evaluation_date_context(
+        evaluation_date,
+        evaluation_timezone,
+        evaluation_datetime_iso,
+        evaluation_timezone_source,
+    )
     recruiter_instruction_section = _format_recruiter_instruction(recruiter_instruction)
 
     user_message = f"""
 Please evaluate the following candidate and generate a structured hiring report.
+{evaluation_date_section}
+
 {recruiter_instruction_section}
 
 --- CANDIDATE DATA (from CV) ---
@@ -148,6 +166,30 @@ Please evaluate the following candidate and generate a structured hiring report.
         "report": report_text,
         "error": error,
     }
+
+
+def _format_evaluation_date_context(
+    evaluation_date: str | None,
+    evaluation_timezone: str | None,
+    evaluation_datetime_iso: str | None,
+    evaluation_timezone_source: str | None,
+) -> str:
+    if not evaluation_date:
+        return "--- EVALUATION DATE CONTEXT ---\nCurrent evaluation date: Not provided by backend"
+
+    source_label = (
+        "Validated browser/device timezone"
+        if evaluation_timezone_source == "browser"
+        else "UTC/backend fallback because browser timezone was unavailable or invalid"
+    )
+
+    return f"""
+--- EVALUATION DATE CONTEXT ---
+Current evaluation date: {evaluation_date}
+Timezone: {evaluation_timezone or 'Not provided'}
+Current evaluation datetime: {evaluation_datetime_iso or 'Not provided'}
+Timezone source: {source_label}
+""".strip()
 
 
 def _format_candidate(candidate) -> str:

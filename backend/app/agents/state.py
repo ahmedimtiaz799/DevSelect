@@ -9,6 +9,10 @@ class DevSelectState(TypedDict):
     thread_id: str
     raw_cv_text: str
     recruiter_instruction: str | None
+    evaluation_date: str | None
+    evaluation_timezone: str | None
+    evaluation_datetime_iso: str | None
+    evaluation_timezone_source: str | None
     candidate: CandidateExtraction | None
     github_analysis: GitHubAnalysis | None
     report: str | None

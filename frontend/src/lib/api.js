@@ -3,6 +3,14 @@ import { normalizeUserInput } from './textLimits'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 
+function getBrowserTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+  } catch {
+    return ''
+  }
+}
+
 async function getAuthHeaders() {
   const { data } = await supabase.auth.getSession()
   return {
@@ -34,9 +42,11 @@ export async function uploadCV(chatId, file, threadId, recruiterInstruction) {
   const { data } = await supabase.auth.getSession()
   const formData = new FormData()
   const instruction = normalizeUserInput(recruiterInstruction)
+  const evaluationTimezone = getBrowserTimezone()
   formData.append('file', file)
   if (threadId) formData.append('thread_id', threadId)
   if (instruction) formData.append('recruiter_instruction', instruction)
+  if (evaluationTimezone) formData.append('evaluation_timezone', evaluationTimezone)
 
   const response = await fetch(`${BASE_URL}/api/chat/${chatId}/upload`, {
     method: 'POST',
