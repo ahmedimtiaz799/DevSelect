@@ -2,12 +2,12 @@ import { Check, Circle, LoaderCircle } from 'lucide-react';
 
 const STEPS = [
   'Analyzing CV',
-  'Checking Github Repository',
+  'Checking GitHub profile',
   'Generating Recommendation',
 ];
 
 const STATUS_TO_STEP = {
-  'Checking Github Repository...': 1,
+  'Checking GitHub profile...': 1,
   'Generating Recommendation...': 2,
 };
 
@@ -28,7 +28,7 @@ export function LoadingStates({ isLoading, statuses = [] }) {
         >
           {index < activeStep ? (
             <>
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-brand-systemText">
                 <Check size={15} strokeWidth={2.4} />
               </span>
               <span className="text-brand-dark">

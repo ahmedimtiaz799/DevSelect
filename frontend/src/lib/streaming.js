@@ -17,6 +17,81 @@ function parseEventData(data) {
   }
 }
 
+function retryAfterSeconds(response, payload) {
+  const retryAfter = Number(
+    payload?.retry_after_seconds ?? response.headers.get('Retry-After')
+  );
+
+  return Number.isFinite(retryAfter) && retryAfter > 0
+    ? Math.ceil(retryAfter)
+    : null;
+}
+
+function safeBackendErrorMessage(message) {
+  if (typeof message !== 'string') return '';
+
+  const value = message.trim();
+  if (!value || value.length > 240) return '';
+
+  const lower = value.toLowerCase();
+  if (
+    lower.includes('traceback') ||
+    lower.includes('stack trace') ||
+    lower.includes('exception') ||
+    lower.includes('api key') ||
+    lower.includes('secret') ||
+    lower.includes('token=')
+  ) {
+    return '';
+  }
+
+  return value;
+}
+
+function streamStartupCode(status) {
+  if (status === 429) return 'STREAM_RATE_LIMITED';
+  if (status === 503) return 'STREAM_SERVICE_UNAVAILABLE';
+  return 'STREAM_START_FAILED';
+}
+
+function streamStartupFallbackMessage(status, retryAfter) {
+  if (status === 429 && retryAfter) {
+    return `Too many requests. Please try again in ${retryAfter} seconds.`;
+  }
+  if (status === 429) {
+    return 'Too many requests. Please wait a moment and try again.';
+  }
+  if (status === 503) {
+    return 'AI evaluation is temporarily unavailable. Please try again later.';
+  }
+  return 'Streaming could not start. Please try again.';
+}
+
+async function readStreamStartupPayload(response) {
+  try {
+    return await response.clone().json();
+  } catch {
+    return {};
+  }
+}
+
+async function parseStreamStartupError(response) {
+  const payload = await readStreamStartupPayload(response);
+  const retryAfter = retryAfterSeconds(response, payload);
+  const safeError = safeBackendErrorMessage(payload?.error);
+  const error =
+    response.status === 429 && retryAfter
+      ? streamStartupFallbackMessage(response.status, retryAfter)
+      : safeError || streamStartupFallbackMessage(response.status, retryAfter);
+
+  return {
+    error,
+    code: payload?.code || streamStartupCode(response.status),
+    retry_after_seconds: retryAfter,
+    status: response.status,
+  };
+}
+
 export function streamChatResponse(
   chatId,
   threadId,
@@ -45,6 +120,13 @@ export function streamChatResponse(
     signal: controller.signal,
     headers: {
       Authorization: `Bearer ${token}`,
+    },
+    async onopen(response) {
+      if (response.ok) return;
+
+      settled = true;
+      onError(await parseStreamStartupError(response));
+      abortStream();
     },
     onmessage(event) {
       if (event.event === 'meta') {

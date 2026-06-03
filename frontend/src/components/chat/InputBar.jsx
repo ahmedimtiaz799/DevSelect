@@ -178,14 +178,14 @@ export function InputBar({
   return (
     <div className="mx-4 md:mx-12 mt-2">
       {fileError && (
-        <div className="flex items-center gap-2 text-amber-700 text-sm mb-2 px-1">
+        <div className="flex items-center gap-2 text-brand-warning text-sm mb-2 px-1">
           <AlertCircle size={13} className="shrink-0" />
           <span>{fileError}</span>
         </div>
       )}
 
       {fileWarning && (
-        <div className="flex items-center gap-2 text-amber-700 text-sm mb-2 px-1">
+        <div className="flex items-center gap-2 text-brand-warning text-sm mb-2 px-1">
           <AlertCircle size={13} className="shrink-0" />
           <span>You can only evaluate one CV at a time</span>
         </div>
@@ -202,7 +202,8 @@ export function InputBar({
 
             <button
               onClick={onFileClear}
-              className="flex items-center justify-center min-w-[20px] min-h-[20px] ml-0.5 text-brand-iconGray hover:text-red-500 transition-colors shrink-0"
+              aria-label="Remove selected CV"
+              className="flex items-center justify-center min-w-[20px] min-h-[20px] ml-0.5 rounded-md text-brand-iconGray hover:text-brand-error transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-1 focus-visible:ring-offset-white"
             >
               <X size={12} />
             </button>
@@ -220,7 +221,8 @@ export function InputBar({
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center min-w-[44px] min-h-[44px] text-brand-iconGray hover:text-brand-dark transition-colors cursor-pointer shrink-0"
+            aria-label="Attach CV"
+            className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg text-brand-iconGray hover:text-brand-dark transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             <Plus size={20} />
           </button>
@@ -233,20 +235,22 @@ export function InputBar({
             maxLength={MAX_USER_INPUT_CHARS}
             placeholder={placeholder}
             rows={1}
-            className="flex-1 bg-transparent outline-none text-base text-brand-body placeholder:text-brand-muted resize-none overflow-hidden leading-6 py-[9px]"
+            className="flex-1 rounded-md bg-transparent outline-none text-base text-brand-body placeholder:text-brand-muted resize-none overflow-hidden leading-6 py-[9px] focus-visible:ring-2 focus-visible:ring-brand-focusRing"
           />
 
           {isProcessing ? (
             <button
               onClick={handleStopClick}
-              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-brand-dark text-white rounded-full transition-colors shrink-0"
+              aria-label="Stop response"
+              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-brand-dark text-white rounded-full transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             >
               <Square size={14} fill="white" />
             </button>
           ) : canSend ? (
             <button
               onClick={handleSend}
-              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-brand-dark text-white rounded-lg transition-colors shrink-0"
+              aria-label="Send message"
+              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-brand-dark text-white rounded-lg transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             >
               <ArrowUp size={16} />
             </button>
@@ -254,7 +258,7 @@ export function InputBar({
         </div>
 
         {shouldShowCharacterCount && (
-          <div className="mt-1 text-right text-xs text-gray-500">
+          <div className="mt-1 text-right text-xs text-brand-systemText">
             {text.length}/{MAX_USER_INPUT_CHARS}
           </div>
         )}

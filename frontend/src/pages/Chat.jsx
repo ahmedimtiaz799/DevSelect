@@ -23,6 +23,7 @@ export function Chat() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [loadedMessagesByChat, setLoadedMessagesByChat] = useState({})
+  const [messageLoadErrorsByChat, setMessageLoadErrorsByChat] = useState({})
   const [secondEvaluationDraft, setSecondEvaluationDraft] = useState(null)
   const [isStartingNewEvaluation, setIsStartingNewEvaluation] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState(null)
@@ -80,7 +81,24 @@ export function Chat() {
             .eq('chat_id', chatId)
             .order('created_at', { ascending: true })
 
-          if (!ignore && !error && data) {
+          if (ignore) return
+
+          if (error) {
+            setMessageLoadErrorsByChat((prev) => ({
+              ...prev,
+              [chatId]: 'Could not load this chat. Please refresh and try again.',
+            }))
+            return
+          }
+
+          setMessageLoadErrorsByChat((prev) => {
+            if (!prev[chatId]) return prev
+            const next = { ...prev }
+            delete next[chatId]
+            return next
+          })
+
+          if (data) {
             const currentMessages =
               useChatStore.getState().messages[chatId] ?? []
             const hasOptimisticMessages = currentMessages.some((message) =>
@@ -245,6 +263,7 @@ export function Chat() {
           isLoading={isLoading}
           isStreaming={isStreaming}
           isMessagesLoading={isHydratingMessages}
+          messageLoadError={chatId ? messageLoadErrorsByChat[chatId] : ''}
           statuses={statusMessages}
           profiles={profiles}
           onProfileSelect={handleProfileSelect}
@@ -297,7 +316,7 @@ export function Chat() {
                 type="button"
                 onClick={handleCancelSecondEvaluation}
                 disabled={isStartingNewEvaluation}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 Cancel
               </button>
@@ -306,7 +325,7 @@ export function Chat() {
                 type="button"
                 onClick={handleStartSecondEvaluation}
                 disabled={isStartingNewEvaluation}
-                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 {isStartingNewEvaluation ? 'Starting...' : 'Start new evaluation'}
               </button>
@@ -342,7 +361,7 @@ export function Chat() {
               <button
                 type="button"
                 onClick={handleStayOnCurrentChat}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 Stay here
               </button>
@@ -350,7 +369,7 @@ export function Chat() {
               <button
                 type="button"
                 onClick={handleDiscardCvAndSwitch}
-                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90"
+                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 Switch without CV
               </button>

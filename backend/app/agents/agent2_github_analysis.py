@@ -120,6 +120,12 @@ class GeminiTransientError(Exception):
     pass
 
 
+GITHUB_ANALYSIS_FAILED_MESSAGE = "We could not complete the GitHub analysis. Please try again."
+GITHUB_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE = "We could not complete the GitHub analysis. Please try again in a few minutes."
+GITHUB_PROFILE_ACCESS_FAILED_MESSAGE = "We could not access this GitHub profile. Please try again."
+EVALUATION_PREPARATION_FAILED_MESSAGE = "We could not prepare this evaluation. Please upload the CV again."
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -148,10 +154,10 @@ async def _query_github_graphql(username: str) -> dict:
             remaining = response.headers.get("X-RateLimit-Remaining", "unknown")
             if remaining == "0" or "rate limit" in response.text.lower():
                 raise GitHubRateLimitError(
-                    "GitHub API rate limit reached. Please retry in 60 seconds."
+                    "GitHub is temporarily limiting requests. Please retry in 60 seconds."
                 )
             raise GitHubRateLimitError(
-                f"GitHub API returned 403. Response: {response.text[:200]}"
+                GITHUB_PROFILE_ACCESS_FAILED_MESSAGE
             )
 
         if response.status_code >= 500:
@@ -297,7 +303,7 @@ async def _analyse_with_gemini(
         error_str = str(e).lower()
         if "429" in error_str or "quota" in error_str:
             raise ValueError(
-                "Gemini API rate limit exceeded. Please try again in a few minutes."
+                GITHUB_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE
             )
         raise GeminiTransientError(f"Gemini transient error: {e}")
 
@@ -311,7 +317,7 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
 
     candidate = state.get("candidate")
     if not candidate:
-        return {"error": "Agent 2: No candidate data in state. Agent 1 may have failed."}
+        return {"error": EVALUATION_PREPARATION_FAILED_MESSAGE}
 
     github_url = candidate.github_url
     if not github_url:
@@ -340,8 +346,8 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
 
     try:
         username = _extract_username(github_url)
-    except ValueError as e:
-        return {"error": f"Agent 2: {e}"}
+    except ValueError:
+        return {"error": "We could not read the GitHub profile URL. Please check the URL and try again."}
 
     try:
         logger.info(f"Agent 2: Querying GitHub GraphQL for '{username}'...")
@@ -468,8 +474,7 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
         logger.error(f"Agent 2 Step C failed: {e}")
         return {
             "error": (
-                "GitHub analysis failed after 2 attempts. "
-                "Please try again in a few minutes."
+                GITHUB_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE
             )
         }
 
@@ -484,9 +489,9 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
         )
     except ValueError as e:
         logger.error(f"Agent 2 Step D JSON error: {e}")
-        return {"error": "GitHub analysis produced invalid output. Please try again."}
+        return {"error": GITHUB_ANALYSIS_FAILED_MESSAGE}
     except Exception as e:
         logger.error(f"Agent 2 Step D Pydantic error: {e}")
-        return {"error": f"GitHub analysis validation failed: {e}"}
+        return {"error": GITHUB_ANALYSIS_FAILED_MESSAGE}
 
     return {"github_analysis": github_analysis}

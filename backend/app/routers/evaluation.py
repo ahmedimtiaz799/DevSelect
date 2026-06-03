@@ -22,6 +22,7 @@ from app.dependencies import verify_token
 from app.models.requests import FollowUpRequest, ResumeRequest
 from app.utils.budget_limits import (
     budget_error_payload,
+    budget_error_status_code,
     estimate_evaluation_budget,
     record_budget_usage,
 )
@@ -62,7 +63,7 @@ MOCK_RESUME_PAYLOAD = {
 }
 MOCK_STATUSES = [
     "Analyzing CV",
-    "Checking Github Repository",
+    "Checking GitHub profile",
     "Generating Recommendation",
 ]
 MOCK_REPORT = """
@@ -104,6 +105,7 @@ EVALUATION_GUARD_LOCK = asyncio.Lock()
 RECRUITER_INSTRUCTION_MAX_CHARS = settings.MAX_USER_INPUT_CHARS
 PRE_CV_GUIDANCE_MESSAGE = "Please upload a candidate CV to begin an evaluation."
 FOLLOW_UP_REQUIRES_REPORT_MESSAGE = "A completed evaluation is required before follow-up questions."
+EVALUATION_RESTORE_FAILED_MESSAGE = "This evaluation session could not be restored. Please upload the CV again."
 REPORT_CONTEXT_HINTS = (
     "Candidate Overview",
     "Hiring Recommendation",
@@ -942,7 +944,7 @@ async def upload_cv(
             budget_decision.estimated_tokens,
         )
         return JSONResponse(
-            status_code=429,
+            status_code=budget_error_status_code(budget_decision),
             content=budget_error_payload(budget_decision),
         )
 
@@ -1170,7 +1172,7 @@ async def evaluation_stream_generator(
                 return
 
             if not agent_2_status_sent and state_snapshot.get("github_analysis") is not None:
-                yield f"event: status\ndata: {json.dumps({'text': 'Checking Github Repository...'})}\n\n"
+                yield f"event: status\ndata: {json.dumps({'text': 'Checking GitHub profile...'})}\n\n"
                 agent_2_status_sent = True
                 logger.info(f"Agent 2 completed : thread={thread_id}")
 
@@ -1252,13 +1254,13 @@ async def stream_evaluation(
     except (json.JSONDecodeError, ValueError) as e:
         raise HTTPException(
             status_code=422,
-            detail=f"resume_payload must be valid URL-encoded JSON: {e}",
+            detail=EVALUATION_RESTORE_FAILED_MESSAGE,
         )
 
     if "scenario" not in resume_payload:
         raise HTTPException(
             status_code=422,
-            detail="resume_payload must contain a 'scenario' field.",
+            detail=EVALUATION_RESTORE_FAILED_MESSAGE,
         )
 
     owned_chat = await _get_owned_chat(chat_id, user_id)
@@ -1266,7 +1268,7 @@ async def stream_evaluation(
 
     if settings.DEV_MOCK_EVALUATION:
         if not await _mock_run_exists(thread_id):
-            raise HTTPException(status_code=404, detail="No mock evaluation found. Run /upload first.")
+            raise HTTPException(status_code=404, detail=EVALUATION_SESSION_UNAVAILABLE_MESSAGE)
 
         mock_status = await _mock_run_status(thread_id)
         mock_report = await _mock_run_report(thread_id)
@@ -1303,10 +1305,10 @@ async def stream_evaluation(
         snapshot = await graph.aget_state(config)
     except Exception as e:
         logger.error(f"Failed to read checkpoint — thread={thread_id} error={e}")
-        raise HTTPException(status_code=404, detail="No evaluation checkpoint found. Run /upload first.")
+        raise HTTPException(status_code=404, detail=EVALUATION_SESSION_UNAVAILABLE_MESSAGE)
 
     if snapshot is None or not snapshot.values:
-        raise HTTPException(status_code=404, detail="No evaluation checkpoint found. Run /upload first.")
+        raise HTTPException(status_code=404, detail=EVALUATION_SESSION_UNAVAILABLE_MESSAGE)
 
     meta = _candidate_meta(snapshot.values, snapshot.tasks)
     evaluation_status = _evaluation_status(snapshot.values)

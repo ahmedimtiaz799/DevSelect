@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useChatStore } from '../store/chatStore'
@@ -8,6 +8,8 @@ import { normalizeChatTitle } from '../lib/chatUtils'
 export function useChatHistory() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const [chatListError, setChatListError] = useState('')
+  const [isChatListLoading, setIsChatListLoading] = useState(false)
   const {
     chats,
     setChats,
@@ -23,19 +25,37 @@ export function useChatHistory() {
   useEffect(() => {
     if (!user) return
 
+    let ignore = false
+
     async function fetchChats() {
-      const { data, error } = await supabase
-        .from('chats')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
+      setIsChatListLoading(true)
+      setChatListError('')
 
-      if (error) return
+      try {
+        const { data, error } = await supabase
+          .from('chats')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false })
 
-      setChats(data)
+        if (ignore) return
+
+        if (error) {
+          setChatListError('Could not load chats. Please refresh and try again.')
+          return
+        }
+
+        setChats(data)
+      } finally {
+        if (!ignore) setIsChatListLoading(false)
+      }
     }
 
     fetchChats()
+
+    return () => {
+      ignore = true
+    }
   }, [user, setChats])
 
   async function createNewChat(firstMessage) {
@@ -122,5 +142,14 @@ export function useChatHistory() {
     )
   }
 
-  return { chats, createNewChat, deleteChat, renameChat, pinChat, touchChatActivity }
+  return {
+    chats,
+    chatListError,
+    isChatListLoading,
+    createNewChat,
+    deleteChat,
+    renameChat,
+    pinChat,
+    touchChatActivity,
+  }
 }

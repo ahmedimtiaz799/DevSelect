@@ -1,13 +1,12 @@
 import time
 import logging
 import httpx
-import base64
-import json
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from app.config import settings
+from app.dependencies import verify_supabase_token
 
 logger = logging.getLogger("devselect")
 
@@ -61,30 +60,48 @@ async def _run_lua_on_upstash(key: str, now: float) -> tuple[str, int]:
     response = await _http_client.post(url, json=payload, headers=headers)
 
     if response.status_code != 200:
-        logger.error(f"Upstash Redis unreachable : status={response.status_code}. Failing open.")
-        return ("allowed", BUCKET_CAPACITY)
+        raise RuntimeError(f"status={response.status_code}")
 
     result = response.json().get("result", [])
+    if len(result) < 2:
+        raise RuntimeError("empty Redis rate-limit result")
+
     status = result[0]
     value = int(result[1])
     return (status, value)
 
 
-def _extract_user_id_from_header(request: Request) -> str | None:
+def _extract_bearer_token(request: Request) -> str | None:
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return None
 
-    token = auth_header.removeprefix("Bearer ")
+    return auth_header.removeprefix("Bearer ").strip() or None
+
+
+def _anonymous_rate_limit_key(request: Request) -> str:
+    client_host = request.client.host if request.client else "unknown"
+    return f"rate_limit:anonymous:{client_host}"
+
+
+async def _rate_limit_key_for_request(request: Request) -> str:
+    token = _extract_bearer_token(request)
+    if not token:
+        return _anonymous_rate_limit_key(request)
 
     try:
-        payload_segment = token.split(".")[1]
-        padding = 4 - len(payload_segment) % 4
-        payload_segment += "=" * padding
-        payload = json.loads(base64.urlsafe_b64decode(payload_segment))
-        return payload.get("sub")
-    except Exception:
-        return None
+        user_id = await verify_supabase_token(token)
+        return f"rate_limit:{user_id}"
+    except Exception as e:
+        logger.warning("Rate limiter using anonymous bucket for unverified token : error=%s", type(e).__name__)
+        return _anonymous_rate_limit_key(request)
+
+
+def _redis_unavailable_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"error": "Rate limiting is temporarily unavailable. Please try again later."},
+    )
 
 
 class RateLimiterMiddleware(BaseHTTPMiddleware):
@@ -92,21 +109,22 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         if not request.url.path.startswith("/api/chat"):
             return await call_next(request)
 
-        user_id = _extract_user_id_from_header(request)
-        if user_id is None:
-            return await call_next(request)
+        key = await _rate_limit_key_for_request(request)
 
-        key = f"rate_limit:{user_id}"
         now = time.time()
 
         try:
             status, value = await _run_lua_on_upstash(key, now)
         except Exception as e:
-            logger.error(f"Rate limiter error for user={user_id}: {e}. Failing open.")
-            return await call_next(request)
+            if settings.RATE_LIMIT_FAIL_OPEN:
+                logger.warning("Rate limiter Redis unavailable; failing open : key=%s error=%s", key, type(e).__name__)
+                return await call_next(request)
+
+            logger.warning("Rate limiter Redis unavailable; failing closed : key=%s error=%s", key, type(e).__name__)
+            return _redis_unavailable_response()
 
         if status == "denied":
-            logger.warning(f"Rate limit exceeded : user={user_id} retry_after={value}s")
+            logger.warning(f"Rate limit exceeded : key={key} retry_after={value}s")
             return JSONResponse(
                 status_code=429,
                 content={

@@ -15,7 +15,7 @@ export function SignUp() {
       </h1>
 
       {error && (
-        <p className="text-red-500 text-sm text-center -mb-2">{error}</p>
+        <p role="alert" className="text-brand-error text-sm text-center -mb-2">{error}</p>
       )}
 
       <div className="w-full max-w-xs flex flex-col gap-3">

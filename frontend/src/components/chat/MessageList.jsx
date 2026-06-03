@@ -11,6 +11,7 @@ export function MessageList({
   isLoading = false,
   isStreaming = false,
   isMessagesLoading = false,
+  messageLoadError = '',
   statuses = [],
   profiles = [],
   onProfileSelect,
@@ -27,7 +28,8 @@ export function MessageList({
   const hasActivity = isLoading || isStreaming
   const containerRef = useAutoScroll(activeMessages)
   const hasMessages = activeMessages.length > 0 || hasProfileSelector
-  const isEmptyIdle = !hasMessages && !hasActivity && !isMessagesLoading
+  const hasLoadError = Boolean(messageLoadError)
+  const isEmptyIdle = !hasMessages && !hasActivity && !isMessagesLoading && !hasLoadError
 
   return (
     <div
@@ -43,6 +45,14 @@ export function MessageList({
           isEmptyIdle ? 'min-h-full justify-center' : 'gap-6'
         }`}
       >
+        {hasLoadError && (
+          <div className="w-full py-1">
+            <p className="text-sm text-brand-systemText break-words [overflow-wrap:anywhere]">
+              {messageLoadError}
+            </p>
+          </div>
+        )}
+
         {activeMessages.length === 0
           ? hasActivity
             ? (
@@ -53,7 +63,9 @@ export function MessageList({
             )
             : isMessagesLoading
               ? null
-              : <EmptyState />
+              : hasLoadError
+                ? null
+                : <EmptyState />
           : (
             <>
               {activeMessages.map((msg) =>

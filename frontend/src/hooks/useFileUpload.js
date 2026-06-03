@@ -22,7 +22,7 @@ export function useFileUpload(chatId) {
       return;
     }
     if (selectedFile.size > 10 * 1024 * 1024) {
-      setError('File must be smaller than 10MB');
+      setError('File must be smaller than 10 MB.');
       setTimeout(() => setError(null), 3000);
       return;
     }

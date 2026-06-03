@@ -25,7 +25,7 @@ export function ChatContextMenu({ position, onRenameClick, onDeleteClick, onPinC
     <div
       ref={ref}
       style={{ top: position.top, left: position.left }}
-      className={`fixed z-[9999] w-44 bg-[#2b2d42] border border-white/15 rounded-xl shadow-xl overflow-hidden transition-all duration-150 ease-out
+      className={`fixed z-[9999] w-44 bg-brand-dark border border-white/15 rounded-xl shadow-xl overflow-hidden transition-all duration-150 ease-out
         ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
     >
       <div className="py-1">
@@ -35,7 +35,7 @@ export function ChatContextMenu({ position, onRenameClick, onDeleteClick, onPinC
             e.stopPropagation()
             onPinClick()
           }}
-          className="flex items-center gap-3 w-full px-4 py-2.5 text-ui text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+          className="flex items-center gap-3 w-full px-4 py-2.5 text-ui text-white/80 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-inset"
         >
           {isPinned
             ? <PinOff size={14} className="text-white/50 shrink-0" />
@@ -50,7 +50,7 @@ export function ChatContextMenu({ position, onRenameClick, onDeleteClick, onPinC
             e.stopPropagation()
             onRenameClick()
           }}
-          className="flex items-center gap-3 w-full px-4 py-2.5 text-ui text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+          className="flex items-center gap-3 w-full px-4 py-2.5 text-ui text-white/80 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-inset"
         >
           <Pencil size={14} className="text-white/50 shrink-0" />
           Rename
@@ -62,7 +62,7 @@ export function ChatContextMenu({ position, onRenameClick, onDeleteClick, onPinC
             e.stopPropagation()
             onDeleteClick()
           }}
-          className="flex items-center gap-3 w-full px-4 py-2.5 text-ui text-red-400 hover:text-red-300 hover:bg-red-500/15 transition-colors"
+          className="flex items-center gap-3 w-full px-4 py-2.5 text-ui text-red-400 hover:text-red-300 hover:bg-red-500/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-inset"
         >
           <Trash2 size={14} className="shrink-0" />
           Delete

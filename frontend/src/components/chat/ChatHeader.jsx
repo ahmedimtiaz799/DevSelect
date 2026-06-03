@@ -12,7 +12,8 @@ export function ChatHeader({ chatId, onMenuClick }) {
     <header className="sticky top-0 z-10 h-14 bg-white shadow-sm border-b border-gray-100 flex items-center px-4 md:px-6 gap-3 shrink-0 min-w-0 overflow-hidden">
       <button
         onClick={onMenuClick}
-        className="md:hidden text-brand-iconGray"
+        aria-label="Open sidebar"
+        className="rounded-md text-brand-iconGray focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white md:hidden"
       >
         <Menu size={22} />
       </button>

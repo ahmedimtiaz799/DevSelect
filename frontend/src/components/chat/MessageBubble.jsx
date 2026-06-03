@@ -53,10 +53,11 @@ export function MessageBubble({ content = '', fileName }) {
         {copyText && (
           <button
             onClick={handleCopy}
-            className="absolute -bottom-5 right-0 opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label="Copy message"
+            className="absolute -bottom-5 right-0 rounded-md opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             {copied
-              ? <Check size={14} className="text-gray-500" />
+              ? <Check size={14} className="text-brand-systemText" />
               : <Copy size={14} className="text-brand-iconGray" />
             }
           </button>

@@ -14,11 +14,13 @@ logger = logging.getLogger("devselect")
 DAILY_EVALUATION_LIMIT_REACHED = "DAILY_EVALUATION_LIMIT_REACHED"
 DAILY_USER_TOKEN_LIMIT_REACHED = "DAILY_USER_TOKEN_LIMIT_REACHED"
 DAILY_GLOBAL_TOKEN_LIMIT_REACHED = "DAILY_GLOBAL_TOKEN_LIMIT_REACHED"
+BUDGET_REDIS_UNAVAILABLE = "BUDGET_REDIS_UNAVAILABLE"
 
 BUDGET_MESSAGES = {
     DAILY_EVALUATION_LIMIT_REACHED: "Daily evaluation limit reached. Please try again tomorrow.",
     DAILY_USER_TOKEN_LIMIT_REACHED: "Daily AI budget limit reached. Please try again tomorrow.",
     DAILY_GLOBAL_TOKEN_LIMIT_REACHED: "Daily AI budget limit reached. Please try again tomorrow.",
+    BUDGET_REDIS_UNAVAILABLE: "Daily AI budget tracking is temporarily unavailable. Please try again later.",
 }
 
 _http_client = httpx.AsyncClient(timeout=5.0)
@@ -155,7 +157,18 @@ async def record_budget_usage(user_id: str, estimated_tokens: int) -> BudgetDeci
             _log_budget_decision(user_id, decision)
             return decision
         except Exception as e:
-            logger.warning(f"Daily budget Redis unavailable, using memory fallback : error={e}")
+            if settings.BUDGET_REDIS_FALLBACK_ENABLED:
+                logger.warning("Daily budget Redis unavailable, using memory fallback : error=%s", type(e).__name__)
+            else:
+                logger.warning("Daily budget Redis unavailable, blocking evaluation : error=%s", type(e).__name__)
+                decision = _blocked_decision(BUDGET_REDIS_UNAVAILABLE, estimated_tokens, date_key, "redis_unavailable")
+                _log_budget_decision(user_id, decision)
+                return decision
+
+    if not settings.BUDGET_REDIS_FALLBACK_ENABLED:
+        decision = _blocked_decision(BUDGET_REDIS_UNAVAILABLE, estimated_tokens, date_key, "redis_unavailable")
+        _log_budget_decision(user_id, decision)
+        return decision
 
     decision = await _record_memory_budget_usage(user_id, estimated_tokens, date_key)
     _log_budget_decision(user_id, decision)
@@ -167,6 +180,13 @@ def budget_error_payload(decision: BudgetDecision) -> dict:
         "error": decision.error or "Daily AI budget limit reached. Please try again tomorrow.",
         "code": decision.code or DAILY_GLOBAL_TOKEN_LIMIT_REACHED,
     }
+
+
+def budget_error_status_code(decision: BudgetDecision) -> int:
+    if decision.code == BUDGET_REDIS_UNAVAILABLE:
+        return 503
+
+    return 429
 
 
 async def _record_upstash_budget_usage(

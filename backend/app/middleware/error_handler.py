@@ -36,7 +36,7 @@ async def handle_unhandled_exception(request: Request, exc: Exception) -> JSONRe
     return JSONResponse(
         status_code=500,
         content={
-            "error": "An Unexpected error occurred. Our team has been notified."
+            "error": "An unexpected error occurred. Our team has been notified."
         },
     )
 

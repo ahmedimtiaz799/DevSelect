@@ -96,7 +96,7 @@ export function UserMenu({ isCollapsed }) {
     <div ref={menuRef} className="relative w-full">
       {open && (
         <div
-          className={`absolute bottom-full mb-3 w-60 rounded-2xl bg-[#2b2d42] border border-white/15 shadow-xl overflow-hidden z-[9999] ${
+          className={`absolute bottom-full mb-3 w-60 rounded-2xl bg-brand-dark border border-white/15 shadow-xl overflow-hidden z-[9999] ${
             isCollapsed ? 'left-0' : 'left-0'
           }`}
         >
@@ -123,7 +123,7 @@ export function UserMenu({ isCollapsed }) {
 
             <button
               onClick={() => handleThemeChange('light')}
-              className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+              className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm text-white/80 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-inset"
             >
               <span className="flex items-center gap-3">
                 <Sun size={15} className="text-white/50" />
@@ -137,7 +137,7 @@ export function UserMenu({ isCollapsed }) {
 
             <button
               onClick={() => handleThemeChange('dark')}
-              className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+              className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm text-white/80 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-inset"
             >
               <span className="flex items-center gap-3">
                 <Moon size={15} className="text-white/50" />
@@ -155,7 +155,7 @@ export function UserMenu({ isCollapsed }) {
           <div className="p-2">
             <button
               onClick={signOut}
-              className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-red-400 hover:text-red-300 hover:bg-red-500/15 transition-colors"
+              className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-red-400 hover:text-red-300 hover:bg-red-500/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-inset"
             >
               <LogOut size={15} />
               Log out
@@ -166,7 +166,8 @@ export function UserMenu({ isCollapsed }) {
 
       <button
         onClick={() => setOpen((prev) => !prev)}
-        className={`w-full min-h-[48px] flex items-center rounded-xl transition-colors hover:bg-white/10 ${
+        aria-label="Open user menu"
+        className={`w-full min-h-[48px] flex items-center rounded-xl transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-brand-dark ${
           isCollapsed ? 'justify-center p-2' : 'gap-3 px-2 py-2'
         }`}
         title={isCollapsed ? displayName : undefined}

@@ -25,6 +25,7 @@ const PLACEHOLDER_ROLE_LABELS = new Set([
   'null',
 ]);
 const PRE_CV_GUIDANCE_MESSAGE = 'Please upload a candidate CV to begin an evaluation.';
+const MESSAGE_SAVE_FAILED_MESSAGE = 'Message could not be saved. Please check your connection and try again.';
 const BUDGET_LIMIT_MESSAGES = {
   DAILY_EVALUATION_LIMIT_REACHED: 'Daily evaluation limit reached. Please try again tomorrow.',
   DAILY_USER_TOKEN_LIMIT_REACHED: 'Daily AI usage limit reached. Please try again tomorrow.',
@@ -55,6 +56,7 @@ export function useChat(chatId) {
   const cleanupRef = useRef(null);
   const activeRunRef = useRef(null);
   const runIdRef = useRef(0);
+  const saveWarningChatsRef = useRef(new Set());
 
   const threadIds = useChatStore((s) => s.threadIds);
   const addMessage = useChatStore((s) => s.addMessage);
@@ -98,6 +100,7 @@ export function useChat(chatId) {
 
     if (error) {
       console.warn('Failed to persist user upload message:', error.message);
+      addMessageSaveWarning(targetId);
     }
   }
 
@@ -114,7 +117,20 @@ export function useChat(chatId) {
 
     if (error) {
       console.warn('Failed to persist chat guidance messages:', error.message);
+      addMessageSaveWarning(targetId);
     }
+  }
+
+  function addMessageSaveWarning(targetId) {
+    if (!targetId || saveWarningChatsRef.current.has(targetId)) return;
+
+    saveWarningChatsRef.current.add(targetId);
+    addMessage(targetId, {
+      id: generateTempId(),
+      role: 'system',
+      content: MESSAGE_SAVE_FAILED_MESSAGE,
+      chat_id: targetId,
+    });
   }
 
   function hasCompletedReport(targetId) {
@@ -181,6 +197,24 @@ export function useChat(chatId) {
       errorPayload?.code === 'UNEXPECTED_STREAM_END'
     ) {
       return 'Evaluation stopped unexpectedly. Please try again.';
+    }
+
+    if (errorPayload?.code === 'STREAM_RATE_LIMITED') {
+      const retryAfter = Number(errorPayload.retry_after_seconds);
+
+      if (retryAfter > 0) {
+        return `Too many requests. Please try again in ${retryAfter} seconds.`;
+      }
+
+      return errorPayload?.error || 'Too many requests. Please wait a moment and try again.';
+    }
+
+    if (errorPayload?.code === 'STREAM_SERVICE_UNAVAILABLE') {
+      return errorPayload?.error || 'AI evaluation is temporarily unavailable. Please try again later.';
+    }
+
+    if (errorPayload?.code === 'STREAM_START_FAILED') {
+      return errorPayload?.error || 'Streaming could not start. Please try again.';
     }
 
     return 'Evaluation failed. Please try again.';
@@ -531,7 +565,7 @@ export function useChat(chatId) {
     setIsStreaming(true);
     setIsLoading(false);
     clearStatusMessages(targetId);
-    addStatusMessage(targetId, 'Checking Github Repository...');
+    addStatusMessage(targetId, 'Checking GitHub profile...');
 
     const assistantTempId = generateTempId();
     run.assistantTempId = assistantTempId;
@@ -644,7 +678,7 @@ export function useChat(chatId) {
           };
         });
 
-        await supabase.from('messages').insert({
+        const { error } = await supabase.from('messages').insert({
           chat_id: targetId,
           role: 'assistant',
           content: serializeAssistantMessage(
@@ -652,6 +686,11 @@ export function useChat(chatId) {
             EVALUATION_REPORT_MESSAGE_TYPE
           ),
         });
+
+        if (error) {
+          console.warn('Failed to persist assistant message:', error.message);
+          addMessageSaveWarning(targetId);
+        }
       },
 
       onError(errorPayload) {

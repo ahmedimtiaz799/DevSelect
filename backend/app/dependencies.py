@@ -42,9 +42,11 @@ async def verify_token(
             detail="Authorization header missing",
             headers={"WWW-Authenticate": "Bearer"},
         )
- 
-    token = credentials.credentials
- 
+
+    return await verify_supabase_token(credentials.credentials)
+
+
+async def verify_supabase_token(token: str) -> str:
     try:
         unverified_header = jwt.get_unverified_header(token)
         kid = unverified_header.get("kid")

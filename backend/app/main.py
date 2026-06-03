@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="DevSelect API",
-    description="CV and Github evaluator for tech recruiters",
+    description="CV and GitHub evaluator for tech recruiters",
     version="1.0.0",
     lifespan=lifespan,
 )

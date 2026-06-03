@@ -35,14 +35,14 @@ export function DeleteConfirmModal({ chatTitle, onConfirm, onCancel }) {
           <button
             ref={cancelRef}
             onClick={onCancel}
-            className="px-4 py-2 text-ui text-brand-body border border-gray-200 rounded-pill hover:bg-brand-inputBg transition-colors"
+            className="px-4 py-2 text-ui text-brand-body border border-gray-200 rounded-pill hover:bg-brand-inputBg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             Cancel
           </button>
 
           <button
             onClick={onConfirm}
-            className="px-4 py-2 text-ui text-white bg-red-600 rounded-pill hover:bg-red-700 transition-colors"
+            className="px-4 py-2 text-ui text-white bg-brand-error rounded-pill hover:bg-brand-error/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             Delete
           </button>

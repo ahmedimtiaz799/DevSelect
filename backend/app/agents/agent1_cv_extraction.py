@@ -32,6 +32,8 @@ logger = logging.getLogger("devselect")
 AGENT1_MODEL = "gemini-2.5-flash"
 CV_NOT_LIKELY_MESSAGE = "This PDF does not look like a candidate CV. Please upload a CV or resume PDF."
 CV_EXTRACTION_INVALID_MESSAGE = "This PDF could not be read as a candidate CV. Please upload a standard CV or resume PDF."
+CV_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE = "CV analysis is temporarily unavailable. Please try again in a few minutes."
+EVALUATION_PREPARATION_FAILED_MESSAGE = "We could not prepare this evaluation. Please upload the CV again."
 
 
 class LlamaParseTransientError(Exception):
@@ -178,7 +180,7 @@ async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None)
         error_str = str(e).lower()
         if "429" in error_str or "quota" in error_str:
             raise ValueError(
-                "Gemini API rate limit exceeded. Please try again in a few minutes."
+                CV_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE
             )
         raise GeminiTransientError(f"Gemini API error: {e}")
 
@@ -206,7 +208,7 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
     pdf_bytes = state.get("pdf_bytes")
 
     if not pdf_temp_path and not pdf_bytes:
-        return {"error": "No PDF bytes found in state. Upload may have failed."}
+        return {"error": EVALUATION_PREPARATION_FAILED_MESSAGE}
 
     try:
         logger.info("Agent 1: Sending PDF to LlamaParse...")
@@ -263,10 +265,7 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
             "pdf_bytes": None,
             "pdf_temp_path": None,
             "raw_cv_text": raw_cv_text,
-            "error": (
-                "CV analysis failed after 2 attempts. "
-                "Please try again in a few minutes."
-            ),
+            "error": CV_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE,
         }
 
     try:

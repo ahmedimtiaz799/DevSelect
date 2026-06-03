@@ -15,7 +15,7 @@ export function Landing() {
         </h1>
         <p className="text-base md:text-body text-brand-secondary max-w-subtitle mb-10 min-h-[40px]">
           <TypewriterText
-            text="DevSelect looks at every candidates CV and GitHub activity and gives you a straight answer on whether they are worth hiring."
+            text="DevSelect looks at every candidate's CV and GitHub activity and gives you a straight answer on whether they are worth hiring."
             typingSpeed={30}
           />
         </p>

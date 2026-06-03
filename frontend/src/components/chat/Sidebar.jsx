@@ -38,7 +38,15 @@ export function Sidebar({
   onToggleCollapse,
   onNavigateRequest,
 }) {
-  const { chats, createNewChat, deleteChat, renameChat, pinChat } = useChatHistory()
+  const {
+    chats,
+    chatListError,
+    isChatListLoading,
+    createNewChat,
+    deleteChat,
+    renameChat,
+    pinChat,
+  } = useChatHistory()
 
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -74,6 +82,13 @@ export function Sidebar({
     .filter((c) => !c.is_pinned)
     .sort(sortByLatestActivity)
   const hasBothSections = pinnedChats.length > 0 && unpinnedChats.length > 0
+  const hasNoSearchResults =
+    !isCollapsed &&
+    search.trim().length > 0 &&
+    chats.length > 0 &&
+    filtered.length === 0 &&
+    !isChatListLoading &&
+    !chatListError
 
   return (
     <>
@@ -104,7 +119,8 @@ export function Sidebar({
 
             <button
               onClick={onToggleCollapse}
-              className="hidden md:flex items-center justify-center text-white/50 hover:text-white transition-colors"
+              aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="hidden md:flex items-center justify-center rounded-md text-white/50 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-brand-dark"
               title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               {isCollapsed ? (
@@ -118,7 +134,8 @@ export function Sidebar({
           <div className={`flex ${isCollapsed ? 'justify-center' : ''}`}>
             <button
               onClick={handleNewChatClick}
-              className={`bg-white text-brand-dark text-btn-sm font-semibold rounded-pill py-2 hover:bg-gray-100 transition-colors
+              aria-label="New chat"
+              className={`bg-white text-brand-dark text-btn-sm font-semibold rounded-pill py-2 hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-brand-dark
                 ${
                   isCollapsed
                     ? 'w-10 h-10 flex items-center justify-center p-0 text-lg'
@@ -132,7 +149,7 @@ export function Sidebar({
           {!isCollapsed && chats.length > 0 && (
             <div className="flex items-center">
               {searchOpen ? (
-                <div className="flex items-center gap-2 bg-white/[0.07] rounded-search px-3 py-2 border border-white/30 w-full focus-within:border-white/50 transition-colors">
+                <div className="flex items-center gap-2 bg-white/[0.07] rounded-search px-3 py-2 border border-white/30 w-full focus-within:border-white/50 focus-within:ring-2 focus-within:ring-brand-focusRing focus-within:ring-offset-2 focus-within:ring-offset-brand-dark transition-colors">
                   <Search size={13} className="text-white/60 shrink-0" />
 
                   <input
@@ -147,7 +164,11 @@ export function Sidebar({
                   />
 
                   {search.length > 0 && (
-                    <button onClick={handleSearchClose}>
+                    <button
+                      onClick={handleSearchClose}
+                      aria-label="Clear chat search"
+                      className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-brand-dark"
+                    >
                       <X
                         size={13}
                         className="text-white/60 hover:text-white transition-colors"
@@ -158,7 +179,8 @@ export function Sidebar({
               ) : (
                 <button
                   onClick={() => setSearchOpen(true)}
-                  className="flex items-center gap-2 w-full px-3 py-2 rounded-search border border-white/20 hover:border-white/35 bg-white/[0.04] hover:bg-white/[0.07] text-white/60 hover:text-white/80 transition-all text-search"
+                  aria-label="Search chats"
+                  className="flex items-center gap-2 w-full px-3 py-2 rounded-search border border-white/20 hover:border-white/35 bg-white/[0.04] hover:bg-white/[0.07] text-white/60 hover:text-white/80 transition-all text-search focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-brand-dark"
                 >
                   <Search size={14} className="shrink-0" />
                   <span>Search chats...</span>
@@ -177,6 +199,18 @@ export function Sidebar({
           [&::-webkit-scrollbar-thumb]:rounded-full
           [&::-webkit-scrollbar-thumb:hover]:bg-[#a0a0b0]"
         >
+          {chatListError && !isCollapsed && (
+            <p className="px-2 py-2 text-sm leading-5 text-white/60">
+              {chatListError}
+            </p>
+          )}
+
+          {hasNoSearchResults && (
+            <p className="px-2 py-2 text-sm leading-5 text-white/60">
+              No chats match your search.
+            </p>
+          )}
+
           {pinnedChats.length > 0 && (
             <>
               {!isCollapsed && (

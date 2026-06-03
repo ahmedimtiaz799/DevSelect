@@ -38,20 +38,20 @@ export function RenameModal({ chatTitle, onConfirm, onCancel }) {
             if (e.key === 'Enter') handleSubmit()
             if (e.key === 'Escape') onCancel()
           }}
-          className="w-full px-4 py-3 text-brand-body text-msg border border-gray-200 rounded-input bg-brand-inputBg outline-none focus:border-brand-dark transition-colors mb-6"
+          className="w-full px-4 py-3 text-brand-body text-msg border border-gray-200 rounded-input bg-brand-inputBg outline-none focus:border-brand-dark transition-colors mb-6 focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
         />
 
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-ui text-brand-body border border-gray-200 rounded-pill hover:bg-brand-inputBg transition-colors"
+            className="px-4 py-2 text-ui text-brand-body border border-gray-200 rounded-pill hover:bg-brand-inputBg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             Cancel
           </button>
 
           <button
             onClick={handleSubmit}
-            className="px-4 py-2 text-ui text-white bg-brand-dark rounded-pill hover:opacity-90 transition-opacity"
+            className="px-4 py-2 text-ui text-white bg-brand-dark rounded-pill hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
           >
             Rename
           </button>

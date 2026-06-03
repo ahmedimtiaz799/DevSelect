@@ -245,7 +245,7 @@ Instruction handling rules:
 
 def _format_github(github) -> str:
     if not github:
-        return "Github analysis was not performed."
+        return "GitHub analysis was not performed."
 
     scenario = github.scenario
 
