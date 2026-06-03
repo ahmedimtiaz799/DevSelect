@@ -1,5 +1,11 @@
 import { useRef, useState, useEffect } from 'react'
 import { Plus, ArrowUp, Square, FileText, X, AlertCircle } from 'lucide-react'
+import {
+  MAX_USER_INPUT_CHARS,
+  MAX_USER_INPUT_WARNING_CHARS,
+  capUserInput,
+  normalizeUserInput,
+} from '../../lib/textLimits'
 
 const LOCAL_DRAFT_USER_ID = 'local'
 
@@ -15,7 +21,11 @@ function loadDraftText(keys) {
   try {
     for (const key of keys) {
       const value = localStorage.getItem(key)
-      if (value !== null) return value
+      if (value !== null) {
+        const capped = capUserInput(value)
+        if (capped !== value) localStorage.setItem(key, capped)
+        return capped
+      }
     }
   } catch {
     return ''
@@ -29,7 +39,7 @@ function migrateDraftText(targetKey, fallbackKeys) {
     if (localStorage.getItem(targetKey) !== null) return
 
     const value = loadDraftText(fallbackKeys)
-    if (value) localStorage.setItem(targetKey, value)
+    if (value) localStorage.setItem(targetKey, capUserInput(value))
   } catch {
     return
   }
@@ -74,6 +84,7 @@ export function InputBar({
   const hasContent = text.trim().length > 0 || !!file
   const isProcessing = isLoading || isStreaming || isSubmitting
   const canSend = hasContent && !isProcessing
+  const shouldShowCharacterCount = text.length >= MAX_USER_INPUT_WARNING_CHARS
 
   useEffect(() => {
     if (normalizedDraftUserId !== LOCAL_DRAFT_USER_ID) {
@@ -90,7 +101,7 @@ export function InputBar({
   }, [text])
 
   function handleTextChange(e) {
-    const value = e.target.value
+    const value = capUserInput(e.target.value)
     setText(value)
 
     try {
@@ -115,7 +126,7 @@ export function InputBar({
   function handleSend() {
     if (!canSend) return
 
-    const textToSend = text.trim()
+    const textToSend = normalizeUserInput(text)
     const fileToSend = file
 
     setIsSubmitting(true)
@@ -219,6 +230,7 @@ export function InputBar({
             value={text}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
+            maxLength={MAX_USER_INPUT_CHARS}
             placeholder={placeholder}
             rows={1}
             className="flex-1 bg-transparent outline-none text-base text-brand-body placeholder:text-brand-muted resize-none overflow-hidden leading-6 py-[9px]"
@@ -240,6 +252,12 @@ export function InputBar({
             </button>
           ) : null}
         </div>
+
+        {shouldShowCharacterCount && (
+          <div className="mt-1 text-right text-xs text-gray-500">
+            {text.length}/{MAX_USER_INPUT_CHARS}
+          </div>
+        )}
       </div>
     </div>
   )

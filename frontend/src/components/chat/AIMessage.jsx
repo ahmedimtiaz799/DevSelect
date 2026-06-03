@@ -6,6 +6,41 @@ import {
   isEvaluationReportMessage,
 } from '../../lib/messagePersistence';
 
+const ALLOWED_MARKDOWN_URL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
+
+function isSafeMarkdownUrl(href) {
+  if (typeof href !== 'string') return false;
+
+  const trimmedHref = href.trim();
+  if (!trimmedHref) return false;
+
+  try {
+    const url = new URL(trimmedHref);
+    return ALLOWED_MARKDOWN_URL_PROTOCOLS.has(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function MarkdownLink({ children, href }) {
+  const trimmedHref = typeof href === 'string' ? href.trim() : '';
+
+  if (!isSafeMarkdownUrl(trimmedHref)) {
+    return <span className="text-brand-dark underline underline-offset-2">{children}</span>;
+  }
+
+  return (
+    <a
+      href={trimmedHref}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-brand-dark underline underline-offset-2"
+    >
+      {children}
+    </a>
+  );
+}
+
 const reportMarkdownComponents = {
   h2: ({ children }) => (
     <h2 className="text-brand-dark font-bold text-lg mb-2 mt-4 break-words [overflow-wrap:anywhere]">{children}</h2>
@@ -28,6 +63,7 @@ const reportMarkdownComponents = {
   strong: ({ children }) => (
     <strong className="text-brand-dark font-semibold">{children}</strong>
   ),
+  a: MarkdownLink,
   hr: () => null,
 };
 
@@ -53,9 +89,7 @@ const followUpMarkdownComponents = {
   strong: ({ children }) => (
     <strong className="text-brand-dark font-medium">{children}</strong>
   ),
-  a: ({ children, href }) => (
-    <a href={href} className="text-brand-dark underline underline-offset-2">{children}</a>
-  ),
+  a: MarkdownLink,
   hr: () => null,
 };
 

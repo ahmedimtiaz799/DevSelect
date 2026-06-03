@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { normalizeUserInput } from './textLimits'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 
@@ -32,7 +33,7 @@ export async function apiGet(path) {
 export async function uploadCV(chatId, file, threadId, recruiterInstruction) {
   const { data } = await supabase.auth.getSession()
   const formData = new FormData()
-  const instruction = (recruiterInstruction ?? '').trim()
+  const instruction = normalizeUserInput(recruiterInstruction)
   formData.append('file', file)
   if (threadId) formData.append('thread_id', threadId)
   if (instruction) formData.append('recruiter_instruction', instruction)
@@ -61,7 +62,7 @@ export async function followUpQuestion(chatId, question) {
   const response = await fetch(`${BASE_URL}/api/chat/${chatId}/follow-up`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question: normalizeUserInput(question) }),
   })
 
   const result = await response.json()

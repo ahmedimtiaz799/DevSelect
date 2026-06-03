@@ -1,5 +1,10 @@
 from pydantic import BaseModel, HttpUrl, field_validator
 
+from app.config import settings
+
+
+USER_INPUT_TOO_LONG_MESSAGE = f"Message is too long. Please keep it under {settings.MAX_USER_INPUT_CHARS} characters."
+
 
 class ResumeRequest(BaseModel):
     thread_id: str
@@ -19,4 +24,7 @@ class FollowUpRequest(BaseModel):
     @field_validator("question", mode="before")
     @classmethod
     def normalize_question(cls, v):
-        return str(v or "").strip()
+        value = str(v or "").strip()
+        if len(value) > settings.MAX_USER_INPUT_CHARS:
+            raise ValueError(USER_INPUT_TOO_LONG_MESSAGE)
+        return value

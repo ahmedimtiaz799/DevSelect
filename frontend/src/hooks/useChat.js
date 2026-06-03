@@ -12,6 +12,7 @@ import {
   serializeUploadMessage,
 } from '../lib/messagePersistence';
 import { supabase } from '../lib/supabase';
+import { normalizeUserInput } from '../lib/textLimits';
 
 const PLACEHOLDER_ROLE_LABELS = new Set([
   'unknown role',
@@ -75,7 +76,7 @@ export function useChat(chatId) {
   const hasThread = (targetId) => !!threadIds[targetId]
 
   function getUserMessagePayload(file, userText) {
-    const text = (userText ?? '').trim();
+    const text = normalizeUserInput(userText);
 
     if (!file) {
       return { content: text };
@@ -123,7 +124,7 @@ export function useChat(chatId) {
   }
 
   async function sendPreCvGuidanceMessage(userText, targetId) {
-    const text = (userText ?? '').trim();
+    const text = normalizeUserInput(userText);
     if (!text || !targetId) return;
 
     const userMessage = {
@@ -430,7 +431,7 @@ export function useChat(chatId) {
   }
 
   async function sendFollowUpMessage(userText, targetId, run) {
-    const text = (userText ?? '').trim();
+    const text = normalizeUserInput(userText);
     if (!text || !targetId) {
       finishRun(run);
       return;

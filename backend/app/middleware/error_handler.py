@@ -9,6 +9,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from app.config import settings
 
 logger = logging.getLogger("devselect")
+USER_INPUT_TOO_LONG_MESSAGE = f"Message is too long. Please keep it under {settings.MAX_USER_INPUT_CHARS} characters."
 
 
 def init_sentry() -> None:
@@ -50,6 +51,16 @@ async def handle_http_exception(request: Request, exc: HTTPException) -> JSONRes
 
 
 async def handle_validation_exception(request: Request, exc: RequestValidationError) -> JSONResponse:
+    if any(USER_INPUT_TOO_LONG_MESSAGE in str(error.get("msg", "")) for error in exc.errors()):
+        logger.warning(f"User input too long on {request.method} {request.url.path}")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": USER_INPUT_TOO_LONG_MESSAGE,
+                "code": "MESSAGE_TOO_LONG",
+            },
+        )
+
     errors = [
         {
             "field": " -> ".join(str(loc) for loc in error["loc"]),

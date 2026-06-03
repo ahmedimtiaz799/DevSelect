@@ -99,7 +99,7 @@ Recommend moving Ahmed Imtiaz to the next interview stage for a Full Stack AI En
 ACTIVE_STREAM_THREADS: set[str] = set()
 MOCK_EVALUATION_RUNS: dict[str, dict] = {}
 EVALUATION_GUARD_LOCK = asyncio.Lock()
-RECRUITER_INSTRUCTION_MAX_CHARS = 2000
+RECRUITER_INSTRUCTION_MAX_CHARS = settings.MAX_USER_INPUT_CHARS
 PRE_CV_GUIDANCE_MESSAGE = "Please upload a candidate CV to begin an evaluation."
 FOLLOW_UP_REQUIRES_REPORT_MESSAGE = "A completed evaluation is required before follow-up questions."
 REPORT_CONTEXT_HINTS = (
@@ -112,6 +112,8 @@ ASSISTANT_MESSAGE_PREFIX = "__DEVSELECT_ASSISTANT_MESSAGE__"
 EVALUATION_REPORT_MESSAGE_TYPE = "evaluation_report"
 MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024
 PDF_HEADER_READ_BYTES = 32
+CHAT_ACCESS_DENIED_MESSAGE = "You do not have access to this chat."
+EVALUATION_SESSION_UNAVAILABLE_MESSAGE = "This evaluation session is no longer available. Please start a new evaluation."
 UPLOAD_SECURITY_MESSAGES = {
     "INVALID_FILE_TYPE": "Please upload a valid PDF CV under 10 MB.",
     "FILE_TOO_LARGE": "Please upload a valid PDF CV under 10 MB.",
@@ -511,18 +513,11 @@ def _completed_report_from_messages(messages: list[dict]) -> str | None:
 
 
 async def _load_completed_report_for_chat(chat_id: str, user_id: str) -> str | None:
-    supabase = await get_supabase()
-    chat_result = await (
-        supabase.table("chats")
-        .select("id")
-        .eq("id", chat_id)
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
-    )
-    if not getattr(chat_result, "data", None):
+    chat = await _get_owned_chat(chat_id, user_id, raise_on_missing=False)
+    if not chat:
         return None
 
+    supabase = await get_supabase()
     messages_result = await (
         supabase.table("messages")
         .select("role,content,created_at")
@@ -532,6 +527,78 @@ async def _load_completed_report_for_chat(chat_id: str, user_id: str) -> str | N
         .execute()
     )
     return _completed_report_from_messages(getattr(messages_result, "data", None) or [])
+
+
+async def _get_owned_chat(chat_id: str, user_id: str, raise_on_missing: bool = True) -> dict | None:
+    try:
+        supabase = await get_supabase()
+        chat_result = await (
+            supabase.table("chats")
+            .select("id,user_id,thread_id")
+            .eq("id", chat_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:
+        logger.exception("Chat ownership lookup failed : chat=%s user=%s error=%s", chat_id, user_id, type(e).__name__)
+        raise HTTPException(status_code=500, detail="Chat access could not be verified. Please try again.") from e
+
+    rows = getattr(chat_result, "data", None) or []
+    if rows:
+        return rows[0]
+
+    logger.warning("Chat ownership denied : chat=%s user=%s", chat_id, user_id)
+    if raise_on_missing:
+        raise HTTPException(status_code=403, detail=CHAT_ACCESS_DENIED_MESSAGE)
+
+    return None
+
+
+def _chat_thread_id(chat: dict | None) -> str | None:
+    if not chat:
+        return None
+
+    return _clean_text(chat.get("thread_id"))
+
+
+def _assert_chat_thread(chat: dict, thread_id: str) -> None:
+    stored_thread_id = _chat_thread_id(chat)
+    requested_thread_id = _clean_text(thread_id)
+
+    if stored_thread_id and requested_thread_id == stored_thread_id:
+        return
+
+    logger.warning(
+        "Evaluation thread access denied : chat=%s has_stored_thread=%s has_requested_thread=%s",
+        chat.get("id"),
+        bool(stored_thread_id),
+        bool(requested_thread_id),
+    )
+    raise HTTPException(status_code=403, detail=EVALUATION_SESSION_UNAVAILABLE_MESSAGE)
+
+
+async def _save_chat_thread_id(chat_id: str, user_id: str, thread_id: str) -> dict:
+    try:
+        supabase = await get_supabase()
+        result = await (
+            supabase.table("chats")
+            .update({"thread_id": thread_id})
+            .eq("id", chat_id)
+            .eq("user_id", user_id)
+            .select("id,user_id,thread_id")
+            .execute()
+        )
+    except Exception as e:
+        logger.exception("Chat thread binding failed : chat=%s user=%s error=%s", chat_id, user_id, type(e).__name__)
+        raise HTTPException(status_code=500, detail="Evaluation session could not be prepared. Please try again.") from e
+
+    rows = getattr(result, "data", None) or []
+    if not rows:
+        logger.warning("Chat thread binding denied : chat=%s user=%s", chat_id, user_id)
+        raise HTTPException(status_code=403, detail=CHAT_ACCESS_DENIED_MESSAGE)
+
+    return rows[0]
 
 
 def _thread_terminal_error_payload(status: str) -> dict:
@@ -771,6 +838,8 @@ async def upload_cv(
     recruiter_instruction: Optional[str] = Form(None),
     user_id: str = Depends(verify_token),
 ):
+    owned_chat = await _get_owned_chat(chat_id, user_id)
+
     if file.size and file.size > MAX_CV_UPLOAD_BYTES:
         return _upload_security_response("FILE_TOO_LARGE")
 
@@ -800,10 +869,15 @@ async def upload_cv(
     if not normalized_recruiter_instruction:
         logger.info("Recruiter instruction received : provided=%s chars=%s", False, 0)
 
-    thread_id = thread_id or str(uuid4())
+    stored_thread_id = _chat_thread_id(owned_chat)
+    if stored_thread_id and thread_id and thread_id != stored_thread_id:
+        raise HTTPException(status_code=403, detail=EVALUATION_SESSION_UNAVAILABLE_MESSAGE)
+
+    thread_id = stored_thread_id or thread_id or str(uuid4())
 
     if settings.DEV_MOCK_EVALUATION:
         thread_id = await _prepare_mock_thread(thread_id)
+        await _save_chat_thread_id(chat_id, user_id, thread_id)
         logger.info(f"Mock evaluation upload accepted : thread={thread_id}")
         return JSONResponse(
             status_code=200,
@@ -834,6 +908,8 @@ async def upload_cv(
             status_code=429,
             content=budget_error_payload(budget_decision),
         )
+
+    await _save_chat_thread_id(chat_id, user_id, thread_id)
 
     pdf_temp_path = _write_temp_pdf(pdf_bytes)
 
@@ -914,6 +990,9 @@ async def resume_evaluation(
     body: ResumeRequest,
     user_id: str = Depends(verify_token),
 ):
+    owned_chat = await _get_owned_chat(chat_id, user_id)
+    _assert_chat_thread(owned_chat, body.thread_id)
+
     resume_payload = {
         "github_url": str(body.selected_profile) if body.selected_profile else None,
         "scenario": "ACCESSIBLE",
@@ -1132,6 +1211,9 @@ async def stream_evaluation(
             status_code=422,
             detail="resume_payload must contain a 'scenario' field.",
         )
+
+    owned_chat = await _get_owned_chat(chat_id, user_id)
+    _assert_chat_thread(owned_chat, thread_id)
 
     if settings.DEV_MOCK_EVALUATION:
         if not await _mock_run_exists(thread_id):
