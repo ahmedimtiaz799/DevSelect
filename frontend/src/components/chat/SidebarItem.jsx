@@ -117,7 +117,7 @@ export function SidebarItem({
             ref={menuButtonRef}
             onClick={handleMenuButtonClick}
             aria-label="Open chat menu"
-            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity ml-1 shrink-0 rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-brand-dark"
+            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity ml-1 shrink-0 rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60"
           >
             <MoreVertical size={15} />
           </button>

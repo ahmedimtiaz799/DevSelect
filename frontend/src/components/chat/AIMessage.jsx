@@ -34,7 +34,7 @@ function MarkdownLink({ children, href }) {
       href={trimmedHref}
       target="_blank"
       rel="noopener noreferrer"
-      className="rounded-sm text-brand-dark underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+      className="rounded-sm text-brand-dark underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70"
     >
       {children}
     </a>
@@ -156,7 +156,7 @@ export function AIMessage({ message }) {
         <button
           onClick={handleCopy}
           aria-label="Copy message"
-          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity mt-1 flex items-center gap-1 rounded-md text-brand-iconGray hover:text-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity mt-1 flex items-center gap-1 rounded-md text-brand-iconGray hover:text-brand-dark focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70"
         >
           {copied ? (
             <Check size={14} className="text-brand-systemText" />

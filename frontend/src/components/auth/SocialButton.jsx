@@ -25,7 +25,7 @@ export function SocialButton({ provider, label, icon, onError, primary }) {
   return (
     <button
       onClick={handleClick}
-      className={`flex items-center justify-center gap-3 w-full px-6 rounded-full text-white text-sm font-medium hover:opacity-90 transition-opacity bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
+      className={`flex items-center justify-center gap-3 w-full px-6 rounded-full text-white text-sm font-medium hover:opacity-90 transition-opacity bg-brand-dark focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white ${
         primary ? 'py-4 font-semibold' : 'py-3'
       }`}
     >

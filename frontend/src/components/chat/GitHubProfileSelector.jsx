@@ -57,7 +57,7 @@ export function GitHubProfileSelector({ profiles, onSelect }) {
           return (
             <label
               key={url}
-              className={`flex min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-brand-focusRing focus-within:ring-offset-2 focus-within:ring-offset-white ${
+              className={`flex min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors focus-within:outline-none focus-within:ring-1 focus-within:ring-brand-focusRing/70 ${
                 isSelected
                   ? 'border-brand-dark bg-brand-dark/5 ring-1 ring-brand-dark'
                   : 'border-gray-200 bg-white hover:border-brand-dark/40 hover:bg-gray-50'
@@ -89,7 +89,7 @@ export function GitHubProfileSelector({ profiles, onSelect }) {
         <button
           type="submit"
           disabled={!selected || isSubmitting}
-          className="min-h-[44px] w-full rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white sm:w-auto"
+          className="min-h-[44px] w-full rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white sm:w-auto"
         >
           {isSubmitting ? 'Continuing...' : 'Continue evaluation'}
         </button>

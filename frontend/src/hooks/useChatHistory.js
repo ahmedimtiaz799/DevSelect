@@ -9,7 +9,7 @@ export function useChatHistory() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [chatListError, setChatListError] = useState('')
-  const [isChatListLoading, setIsChatListLoading] = useState(false)
+  const [isChatListLoading, setIsChatListLoading] = useState(true)
   const {
     chats,
     setChats,

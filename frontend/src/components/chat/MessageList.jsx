@@ -6,10 +6,29 @@ import { EmptyState } from './EmptyState'
 import { LoadingStates } from './LoadingStates'
 import { GitHubProfileSelector } from './GitHubProfileSelector'
 
+function MessageHistorySkeleton() {
+  return (
+    <div aria-hidden="true" className="flex flex-col gap-6 animate-pulse">
+      <div className="flex justify-end">
+        <div className="h-14 w-56 max-w-[75%] rounded-2xl bg-gray-100" />
+      </div>
+
+      <div className="w-full max-w-2xl space-y-3">
+        <div className="h-4 w-36 rounded-full bg-gray-200" />
+        <div className="h-3 w-full rounded-full bg-gray-100" />
+        <div className="h-3 w-11/12 rounded-full bg-gray-100" />
+        <div className="h-3 w-4/5 rounded-full bg-gray-100" />
+        <div className="h-3 w-2/3 rounded-full bg-gray-100" />
+      </div>
+    </div>
+  )
+}
+
 export function MessageList({
   chatId = null,
   isLoading = false,
   isStreaming = false,
+  isChatHistoryLoading = false,
   isMessagesLoading = false,
   messageLoadError = '',
   statuses = [],
@@ -29,7 +48,14 @@ export function MessageList({
   const containerRef = useAutoScroll(activeMessages)
   const hasMessages = activeMessages.length > 0 || hasProfileSelector
   const hasLoadError = Boolean(messageLoadError)
-  const isEmptyIdle = !hasMessages && !hasActivity && !isMessagesLoading && !hasLoadError
+  const isHydratingData = isChatHistoryLoading || isMessagesLoading
+  const showMessageSkeleton =
+    Boolean(chatId) &&
+    activeMessages.length === 0 &&
+    isMessagesLoading &&
+    !hasActivity &&
+    !hasLoadError
+  const isEmptyIdle = !hasMessages && !hasActivity && !isHydratingData && !hasLoadError
 
   return (
     <div
@@ -61,8 +87,12 @@ export function MessageList({
                 statuses={statuses}
               />
             )
+            : showMessageSkeleton
+              ? <MessageHistorySkeleton />
             : isMessagesLoading
               ? null
+              : isChatHistoryLoading
+                ? null
               : hasLoadError
                 ? null
                 : <EmptyState />

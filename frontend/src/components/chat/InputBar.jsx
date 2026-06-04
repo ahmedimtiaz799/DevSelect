@@ -203,7 +203,7 @@ export function InputBar({
             <button
               onClick={onFileClear}
               aria-label="Remove selected CV"
-              className="flex items-center justify-center min-w-[20px] min-h-[20px] ml-0.5 rounded-md text-brand-iconGray hover:text-brand-error transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-1 focus-visible:ring-offset-white"
+              className="flex items-center justify-center min-w-[20px] min-h-[20px] ml-0.5 rounded-md text-brand-iconGray hover:text-brand-error transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70"
             >
               <X size={12} />
             </button>
@@ -222,7 +222,7 @@ export function InputBar({
           <button
             onClick={() => fileInputRef.current?.click()}
             aria-label="Attach CV"
-            className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg text-brand-iconGray hover:text-brand-dark transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+            className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg text-brand-iconGray hover:text-brand-dark transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70"
           >
             <Plus size={20} />
           </button>
@@ -235,14 +235,14 @@ export function InputBar({
             maxLength={MAX_USER_INPUT_CHARS}
             placeholder={placeholder}
             rows={1}
-            className="flex-1 rounded-md bg-transparent outline-none text-base text-brand-body placeholder:text-brand-muted resize-none overflow-hidden leading-6 py-[9px] focus-visible:ring-2 focus-visible:ring-brand-focusRing"
+            className="flex-1 bg-transparent outline-none focus:outline-none text-base text-brand-body placeholder:text-brand-muted resize-none overflow-hidden leading-6 py-[9px]"
           />
 
           {isProcessing ? (
             <button
               onClick={handleStopClick}
               aria-label="Stop response"
-              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-brand-dark text-white rounded-full transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-brand-dark text-white rounded-full transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
             >
               <Square size={14} fill="white" />
             </button>
@@ -250,7 +250,7 @@ export function InputBar({
             <button
               onClick={handleSend}
               aria-label="Send message"
-              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-brand-dark text-white rounded-lg transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-brand-dark text-white rounded-lg transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
             >
               <ArrowUp size={16} />
             </button>

@@ -43,7 +43,7 @@ export function Chat() {
   const inputChatId = chatId ?? 'new-chat'
   const draftUserId = user?.id ?? 'local'
 
-  const { createNewChat } = useChatHistory()
+  const { createNewChat, isChatListLoading } = useChatHistory()
   const sendMessageRef = useRef(null)
   const stopRequestedRef = useRef(false)
 
@@ -256,12 +256,17 @@ export function Chat() {
           isCollapsed ? 'md:ml-16' : 'md:ml-64'
         }`}
       >
-        <ChatHeader chatId={chatId ?? null} onMenuClick={() => setMobileOpen(true)} />
+        <ChatHeader
+          chatId={chatId ?? null}
+          isTitleLoading={Boolean(chatId) && isChatListLoading}
+          onMenuClick={() => setMobileOpen(true)}
+        />
 
         <MessageList
           chatId={chatId ?? null}
           isLoading={isLoading}
           isStreaming={isStreaming}
+          isChatHistoryLoading={isChatListLoading}
           isMessagesLoading={isHydratingMessages}
           messageLoadError={chatId ? messageLoadErrorsByChat[chatId] : ''}
           statuses={statusMessages}
@@ -316,7 +321,7 @@ export function Chat() {
                 type="button"
                 onClick={handleCancelSecondEvaluation}
                 disabled={isStartingNewEvaluation}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
               >
                 Cancel
               </button>
@@ -325,7 +330,7 @@ export function Chat() {
                 type="button"
                 onClick={handleStartSecondEvaluation}
                 disabled={isStartingNewEvaluation}
-                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
               >
                 {isStartingNewEvaluation ? 'Starting...' : 'Start new evaluation'}
               </button>
@@ -361,7 +366,7 @@ export function Chat() {
               <button
                 type="button"
                 onClick={handleStayOnCurrentChat}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
               >
                 Stay here
               </button>
@@ -369,7 +374,7 @@ export function Chat() {
               <button
                 type="button"
                 onClick={handleDiscardCvAndSwitch}
-                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-focusRing focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
               >
                 Switch without CV
               </button>
