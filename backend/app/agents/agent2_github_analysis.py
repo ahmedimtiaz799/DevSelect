@@ -25,7 +25,6 @@ from app.utils.llm_observability import (
 )
 
 logger = logging.getLogger("devselect")
-AGENT2_MODEL = "gemini-2.5-flash"
 
 GITHUB_GRAPHQL_QUERY = """
 query FetchDeveloperProfile($login: String!) {
@@ -258,7 +257,7 @@ async def _analyse_with_gemini(
     thread_id: str | None = None,
 ) -> str:
     llm = ChatGoogleGenerativeAI(
-        model=AGENT2_MODEL,
+        model=settings.AGENT2_MODEL,
         google_api_key=settings.GEMINI_API_KEY,
         temperature=0.2,
         max_tokens=settings.AGENT2_MAX_OUTPUT_TOKENS,
@@ -291,13 +290,13 @@ async def _analyse_with_gemini(
         log_llm_request(
             logger,
             "agent2",
-            AGENT2_MODEL,
+            settings.AGENT2_MODEL,
             thread_id,
             estimated_input_tokens,
             settings.AGENT2_MAX_OUTPUT_TOKENS,
         )
         response = await llm.ainvoke(prompt)
-        log_llm_usage(logger, "agent2", AGENT2_MODEL, thread_id, response)
+        log_llm_usage(logger, "agent2", settings.AGENT2_MODEL, thread_id, response)
         return response.content
     except Exception as e:
         error_str = str(e).lower()

@@ -14,7 +14,6 @@ from app.utils.llm_observability import (
 
 logger = logging.getLogger("devselect")
 
-FOLLOW_UP_MODEL = "gemini-2.5-flash"
 FOLLOW_UP_SYSTEM_PROMPT = """
 You are DevSelect's hiring evaluation assistant.
 Answer the recruiter's follow-up question using only the completed evaluation report and available stored evaluation context.
@@ -73,7 +72,7 @@ Untrusted recruiter follow-up question:
     ]
     estimated_input_tokens = estimate_tokens_from_messages(messages)
     llm = ChatGoogleGenerativeAI(
-        model=FOLLOW_UP_MODEL,
+        model=settings.FOLLOW_UP_MODEL,
         google_api_key=settings.GEMINI_API_KEY,
         temperature=0.2,
         max_tokens=settings.FOLLOW_UP_MAX_OUTPUT_TOKENS,
@@ -85,17 +84,17 @@ Untrusted recruiter follow-up question:
         log_llm_request(
             logger,
             "follow_up",
-            FOLLOW_UP_MODEL,
+            settings.FOLLOW_UP_MODEL,
             chat_id,
             estimated_input_tokens,
             settings.FOLLOW_UP_MAX_OUTPUT_TOKENS,
         )
         response = await llm.ainvoke(messages)
-        log_llm_usage(logger, "follow_up", FOLLOW_UP_MODEL, chat_id, response)
+        log_llm_usage(logger, "follow_up", settings.FOLLOW_UP_MODEL, chat_id, response)
     except Exception as e:
         if _is_gemini_quota_error(e):
             logger.warning(f"Follow-up Gemini quota/rate limit error : chat={chat_id} error={e}")
-            raise GeminiQuotaExceededError(FOLLOW_UP_MODEL, e) from e
+            raise GeminiQuotaExceededError(settings.FOLLOW_UP_MODEL, e) from e
         raise
 
     answer = str(response.content or "").strip()

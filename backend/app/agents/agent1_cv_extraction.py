@@ -29,7 +29,6 @@ from app.utils.llm_observability import (
 from app.utils.cv_likeness import assess_cv_likeness
 
 logger = logging.getLogger("devselect")
-AGENT1_MODEL = "gemini-2.5-flash"
 CV_NOT_LIKELY_MESSAGE = "This PDF does not look like a candidate CV. Please upload a CV or resume PDF."
 CV_EXTRACTION_INVALID_MESSAGE = "This PDF could not be read as a candidate CV. Please upload a standard CV or resume PDF."
 CV_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE = "CV analysis is temporarily unavailable. Please try again in a few minutes."
@@ -153,7 +152,7 @@ def _cv_likeness_rejection(markdown_text: str, thread_id: str) -> dict[str, Any]
 )
 async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None) -> str:
     llm = ChatGoogleGenerativeAI(
-        model=AGENT1_MODEL,
+        model=settings.AGENT1_MODEL,
         google_api_key=settings.GEMINI_API_KEY,
         temperature=0.2,
         max_tokens=settings.AGENT1_MAX_OUTPUT_TOKENS,
@@ -168,13 +167,13 @@ async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None)
         log_llm_request(
             logger,
             "agent1",
-            AGENT1_MODEL,
+            settings.AGENT1_MODEL,
             thread_id,
             estimated_input_tokens,
             settings.AGENT1_MAX_OUTPUT_TOKENS,
         )
         response = await llm.ainvoke(prompt)
-        log_llm_usage(logger, "agent1", AGENT1_MODEL, thread_id, response)
+        log_llm_usage(logger, "agent1", settings.AGENT1_MODEL, thread_id, response)
         return response.content
     except Exception as e:
         error_str = str(e).lower()

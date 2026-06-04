@@ -14,8 +14,6 @@ from app.utils.llm_observability import (
 
 logger = logging.getLogger("devselect")
 
-PRIMARY_MODEL = "gemini-2.5-pro"
-FALLBACK_MODEL = "gemini-2.5-flash"
 GEMINI_QUOTA_RETRY_AFTER_SECONDS = 20
 
 
@@ -42,7 +40,7 @@ def _is_gemini_quota_error(error: Exception) -> bool:
 async def _stream_with_fallback(messages: list, thread_id: str | None = None) -> str:
     estimated_input_tokens = estimate_tokens_from_messages(messages)
 
-    for model_name in [PRIMARY_MODEL, FALLBACK_MODEL]:
+    for model_name in [settings.AGENT3_MODEL, settings.AGENT3_FALLBACK_MODEL]:
         llm = ChatGoogleGenerativeAI(
             model=model_name,
             google_api_key=settings.GEMINI_API_KEY,
@@ -72,19 +70,19 @@ async def _stream_with_fallback(messages: list, thread_id: str | None = None) ->
                 if chunk.content:
                     report_text += chunk.content
             log_llm_usage(logger, "agent3", model_name, thread_id, usage_source)
-            if model_name == FALLBACK_MODEL:
-                logger.warning(f"Agent 3: used fallback model {FALLBACK_MODEL} — primary quota exhausted.")
+            if model_name == settings.AGENT3_FALLBACK_MODEL:
+                logger.warning(f"Agent 3: used fallback model {settings.AGENT3_FALLBACK_MODEL} — primary quota exhausted.")
             return report_text
         except Exception as e:
             if _is_gemini_quota_error(e):
                 logger.warning(f"Agent 3: {model_name} quota/rate limit error: {e}")
-                if model_name == PRIMARY_MODEL:
-                    logger.warning(f"Agent 3: {PRIMARY_MODEL} quota exhausted, retrying with {FALLBACK_MODEL}.")
+                if model_name == settings.AGENT3_MODEL:
+                    logger.warning(f"Agent 3: {settings.AGENT3_MODEL} quota exhausted, retrying with {settings.AGENT3_FALLBACK_MODEL}.")
                     continue
                 raise GeminiQuotaExceededError(model_name, e) from e
             raise
 
-    raise GeminiQuotaExceededError(PRIMARY_MODEL, RuntimeError("Fallback was not attempted."))
+    raise GeminiQuotaExceededError(settings.AGENT3_MODEL, RuntimeError("Fallback was not attempted."))
 
 
 async def agent3_lead_evaluator(state: DevSelectState) -> dict:

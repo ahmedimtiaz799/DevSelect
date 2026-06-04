@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str
 
     GEMINI_API_KEY: str
+    AGENT1_MODEL: str = "gemini-2.5-flash"
+    AGENT2_MODEL: str = "gemini-2.5-flash"
+    AGENT3_MODEL: str = "gemini-2.5-pro"
+    AGENT3_FALLBACK_MODEL: str = "gemini-2.5-flash"
+    FOLLOW_UP_MODEL: str = "gemini-2.5-flash"
     AGENT1_MAX_INPUT_CHARS: int = 30000
     AGENT2_MAX_INPUT_CHARS: int = 30000
     AGENT3_MAX_INPUT_CHARS: int = 25000
