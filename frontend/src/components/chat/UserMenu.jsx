@@ -1,38 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, LogOut, Moon, Sun } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
-
-function getDisplayName(user) {
-  if (!user) return 'User'
-
-  const metadata = user.user_metadata ?? {}
-
-  const name =
-    metadata.full_name ||
-    metadata.name ||
-    metadata.user_name ||
-    metadata.preferred_username
-
-  if (name) return name
-
-  if (user.email) {
-    return user.email.split('@')[0]
-  }
-
-  return 'User'
-}
+import { getAuthProfileDisplay } from '../../lib/authProfile'
 
 function getFirstName(displayName) {
   if (!displayName) return 'User'
 
   return displayName.trim().split(' ')[0]
-}
-
-function getInitial(name, email) {
-  const source = name || email || 'U'
-  const match = source.match(/[a-zA-Z0-9]/)
-
-  return match ? match[0].toUpperCase() : 'U'
 }
 
 function getSavedTheme() {
@@ -51,10 +25,9 @@ export function UserMenu({ isCollapsed }) {
 
   const menuRef = useRef(null)
 
-  const displayName = getDisplayName(user)
+  const { displayName, subtitle, avatarInitial, avatarUrl } =
+    getAuthProfileDisplay(user)
   const firstName = getFirstName(displayName)
-  const email = user?.email ?? ''
-  const initial = getInitial(displayName, email)
 
   useEffect(() => {
     function handleOutsideClick(e) {
@@ -105,9 +78,9 @@ export function UserMenu({ isCollapsed }) {
               {displayName}
             </p>
 
-            {email && (
+            {subtitle && (
               <p className="text-xs text-white/50 truncate mt-0.5">
-                {email}
+                {subtitle}
               </p>
             )}
           </div>
@@ -173,7 +146,16 @@ export function UserMenu({ isCollapsed }) {
         title={isCollapsed ? displayName : undefined}
       >
         <div className="flex items-center justify-center w-9 h-9 rounded-full bg-white text-brand-dark text-sm font-extrabold shrink-0">
-          {initial}
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="w-full h-full rounded-full object-cover"
+            />
+          ) : (
+            avatarInitial
+          )}
         </div>
 
         {!isCollapsed && (
