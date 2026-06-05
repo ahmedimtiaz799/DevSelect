@@ -20,6 +20,7 @@ def init_sentry() -> None:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         traces_sample_rate=0.1,
+        ignore_errors=[GeneratorExit],
         integrations=[
             StarletteIntegration(),
             FastApiIntegration(),

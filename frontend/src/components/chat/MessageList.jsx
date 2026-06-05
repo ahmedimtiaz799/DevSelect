@@ -45,6 +45,7 @@ export function MessageList({
     : []
   const hasProfileSelector = profiles.length > 0 && !!onProfileSelect
   const hasActivity = isLoading || isStreaming
+  const showLoadingStates = isLoading || (isStreaming && statuses.length > 0)
   const containerRef = useAutoScroll(activeMessages)
   const hasMessages = activeMessages.length > 0 || hasProfileSelector
   const hasLoadError = Boolean(messageLoadError)
@@ -83,7 +84,7 @@ export function MessageList({
           ? hasActivity
             ? (
               <LoadingStates
-                isLoading={hasActivity}
+                isLoading={showLoadingStates}
                 statuses={statuses}
               />
             )
@@ -117,7 +118,7 @@ export function MessageList({
                 />
               )}
               <LoadingStates
-                isLoading={hasActivity}
+                isLoading={showLoadingStates}
                 statuses={statuses}
               />
             </>

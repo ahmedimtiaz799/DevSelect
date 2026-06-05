@@ -10,6 +10,8 @@ STRICT RULES:
 6. Extract ALL github.com URLs you find — do not pick just one.
 7. Output must be valid JSON parsable by json.loads(). No trailing commas.
 8. Programming languages go in "languages". Frameworks and tools go in "frameworks".
+9. For "current_title", use the clear role/title shown under the candidate name, in the professional summary, or in the most recent work experience. Do not leave it null when a role/title is explicitly present.
+10. For "projects", extract concise project entries containing the project name and the strongest technologies or purpose explicitly stated in the CV.
 
 REQUIRED JSON STRUCTURE:
 {{
@@ -23,6 +25,7 @@ REQUIRED JSON STRUCTURE:
   "skills": [],
   "languages": [],
   "frameworks": [],
+  "projects": [],
   "education": [
     {{
       "degree": "",
@@ -59,6 +62,7 @@ Output:
   "skills": ["Python"],
   "languages": ["Python"],
   "frameworks": [],
+  "projects": [],
   "education": [],
   "work_experience": [],
   "github_urls": ["https://github.com/ali-dev"],
@@ -80,6 +84,7 @@ Output:
   "skills": ["React"],
   "languages": ["JavaScript"],
   "frameworks": ["React"],
+  "projects": [],
   "education": [],
   "work_experience": [],
   "github_urls": [],

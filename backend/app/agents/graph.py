@@ -4,11 +4,17 @@ from app.agents.agent1_cv_extraction import agent1_cv_extraction
 from app.agents.agent2_github_analysis import agent2_github_analysis
 from app.agents.agent3_lead_evaluator import agent3_lead_evaluator
 
+def _candidate_field(candidate, name: str):
+    if isinstance(candidate, dict):
+        return candidate.get(name)
+    return getattr(candidate, name, None)
+
+
 def route_after_agent1(state: DevSelectState) -> str:
     if state.get("error"):
         return END
     candidate = state.get("candidate")
-    if candidate and candidate.github_url:
+    if candidate and _candidate_field(candidate, "github_url"):
         return "agent_2"
     return "agent_3"
 

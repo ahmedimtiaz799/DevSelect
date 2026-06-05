@@ -121,7 +121,7 @@ export function Sidebar({
     !isChatListLoading &&
     !chatListError
   const showChatListSkeleton =
-    isChatListLoading && !chatListError && chats.length === 0
+    !isCollapsed && isChatListLoading && !chatListError && chats.length === 0
 
   return (
     <>
@@ -248,7 +248,7 @@ export function Sidebar({
             </p>
           )}
 
-          {pinnedChats.length > 0 && (
+          {!isCollapsed && pinnedChats.length > 0 && (
             <>
               {!isCollapsed && (
                 <div className="px-2 pt-2 pb-1">
@@ -280,7 +280,7 @@ export function Sidebar({
             </div>
           )}
 
-          {unpinnedChats.map((chat) => (
+          {!isCollapsed && unpinnedChats.map((chat) => (
             <SidebarItem
               key={chat.id}
               chat={chat}

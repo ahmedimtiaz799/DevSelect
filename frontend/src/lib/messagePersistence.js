@@ -9,6 +9,7 @@ const REPORT_CONTEXT_HINTS = [
 
 export const EVALUATION_REPORT_MESSAGE_TYPE = 'evaluation_report'
 export const FOLLOW_UP_ANSWER_MESSAGE_TYPE = 'follow_up_answer'
+export const FINAL_ERROR_MESSAGE_TYPE = 'final_error'
 
 export function serializeUploadMessage(message) {
   return `${CV_UPLOAD_PREFIX}${JSON.stringify({
@@ -22,6 +23,10 @@ export function serializeAssistantMessage(message, messageType) {
   return `${ASSISTANT_MESSAGE_PREFIX}${JSON.stringify({
     content: message.content ?? '',
     message_type: messageType,
+    ...(message.error_code ? { error_code: message.error_code } : {}),
+    ...(message.retry_after_seconds
+      ? { retry_after_seconds: message.retry_after_seconds }
+      : {}),
   })}`
 }
 
@@ -70,6 +75,12 @@ export function normalizePersistedMessage(message) {
         ...message,
         content: typeof payload.content === 'string' ? payload.content : '',
         ...(messageType ? { message_type: messageType } : {}),
+        ...(typeof payload.error_code === 'string'
+          ? { error_code: payload.error_code }
+          : {}),
+        ...(Number.isFinite(Number(payload.retry_after_seconds))
+          ? { retry_after_seconds: Number(payload.retry_after_seconds) }
+          : {}),
       }
     } catch {
       return message

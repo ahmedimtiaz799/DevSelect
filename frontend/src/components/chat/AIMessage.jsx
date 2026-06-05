@@ -5,6 +5,7 @@ import {
   FOLLOW_UP_ANSWER_MESSAGE_TYPE,
   isEvaluationReportMessage,
 } from '../../lib/messagePersistence';
+import { markdownToPlainText } from '../../lib/markdownToPlainText';
 
 const ALLOWED_MARKDOWN_URL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
 
@@ -109,7 +110,12 @@ export function AIMessage({ message }) {
   const renderMode = getAssistantMessageRenderMode(message);
 
   function handleCopy() {
-    navigator.clipboard.writeText(message.content);
+    const copyText =
+      renderMode === 'report' || renderMode === 'follow_up'
+        ? markdownToPlainText(message.content)
+        : message.content;
+
+    navigator.clipboard.writeText(copyText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -152,7 +158,7 @@ export function AIMessage({ message }) {
         )}
       </div>
 
-      {message.content && (
+      {message.content && !message.isStreaming && (
         <button
           onClick={handleCopy}
           aria-label="Copy message"

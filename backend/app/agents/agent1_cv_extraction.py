@@ -8,6 +8,7 @@ from typing import Any
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.types import interrupt
 from llama_parse import LlamaParse
+from pydantic import ValidationError
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -19,7 +20,6 @@ from app.agents.state import DevSelectState
 from app.config import settings
 from app.models.candidate import CandidateExtraction
 from app.prompts.agent1_prompt import AGENT1_PROMPT
-from app.utils.json_parser import parse_llm_json
 from app.utils.llm_observability import (
     cap_text_for_llm,
     estimate_tokens_from_text,
@@ -43,8 +43,35 @@ class LlamaParseTimeoutError(Exception):
     pass
 
 
+class LlamaParseEmptyResultError(Exception):
+    pass
+
+
 class GeminiTransientError(Exception):
     pass
+
+
+class Agent1StructuredOutputError(Exception):
+    pass
+
+
+def _safe_cv_preview(text: str) -> str:
+    preview = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[email]", text or "")
+    preview = re.sub(r"https?://\S+|www\.\S+", "[url]", preview)
+    preview = re.sub(r"\b(?:\+?\d[\d\s().-]{7,}\d)\b", "[phone]", preview)
+    return re.sub(r"\s+", " ", preview).strip()[:100]
+
+
+def _cv_evidence_flags(text: str) -> dict[str, bool]:
+    upper_text = (text or "").upper()
+    return {
+        "skills": "SKILLS" in upper_text,
+        "projects": "PROJECTS" in upper_text,
+        "education": "EDUCATION" in upper_text,
+        "certifications": "CERTIFICATIONS" in upper_text,
+        "devselect": "DEVSELECT" in upper_text,
+        "casex": "CASEX" in upper_text,
+    }
 
 
 def _delete_file(path: str | None) -> None:
@@ -81,23 +108,71 @@ async def _parse_pdf_with_llamaparse(pdf_path: str) -> str:
         )
 
         if not documents:
-            raise ValueError("LlamaParse returned no documents.")
+            raise LlamaParseEmptyResultError("LlamaParse returned no documents.")
 
         markdown_text = "\n\n".join(doc.text for doc in documents)
 
         if not markdown_text.strip():
-            raise ValueError("LlamaParse returned empty markdown.")
+            raise LlamaParseEmptyResultError("LlamaParse returned empty markdown.")
 
         return markdown_text
 
     except asyncio.TimeoutError as e:
         logger.warning("LlamaParse timed out after %s seconds", settings.LLAMA_PARSE_TIMEOUT_SECONDS)
         raise LlamaParseTimeoutError("LlamaParse timed out.") from e
-    except ValueError:
+    except LlamaParseEmptyResultError:
         raise
     except Exception as e:
         logger.error(f"LlamaParse error: {e}")
         raise LlamaParseTransientError(f"LlamaParse transient error: {e}")
+
+
+def _response_content_length(response: Any) -> int:
+    content = getattr(response, "content", None)
+    if content is None:
+        return 0
+
+    if isinstance(content, str):
+        return len(content)
+
+    return len(str(content))
+
+
+def _response_finish_reason(response: Any) -> str:
+    metadata = getattr(response, "response_metadata", None)
+    if isinstance(metadata, dict):
+        for key in ("finish_reason", "finishReason", "finish_reasons"):
+            value = metadata.get(key)
+            if value:
+                return str(value)
+
+    return "unknown"
+
+
+def _is_structured_output_exception(error: Exception) -> bool:
+    error_type = type(error).__name__.lower()
+    error_text = str(error).lower()
+    return any(
+        marker in error_type or marker in error_text
+        for marker in ("json", "parse", "parser", "validation", "schema")
+    )
+
+
+def _structured_failure_stage(response_chars: int, error: Exception | None = None) -> str:
+    if response_chars == 0:
+        return "no_model_text"
+
+    if response_chars < 120:
+        return "short_or_refusal_response"
+
+    if error:
+        error_type = type(error).__name__.lower()
+        if "validation" in error_type:
+            return "pydantic_validation"
+        if "json" in error_type or "parse" in error_type or "parser" in error_type:
+            return "invalid_json"
+
+    return "structured_output"
 
 
 async def _parse_pdf_bytes_with_llamaparse(pdf_bytes: bytes) -> str:
@@ -109,6 +184,25 @@ async def _parse_pdf_bytes_with_llamaparse(pdf_bytes: bytes) -> str:
         return await _parse_pdf_with_llamaparse(tmp_path)
     finally:
         _delete_file(tmp_path)
+
+
+def _preview_fallback_text(state: DevSelectState, reason: str) -> str | None:
+    preview_text = (state.get("pdf_preview_text") or "").strip()
+    fallback_text_chars = len(preview_text)
+    fallback_available = fallback_text_chars >= settings.CV_LIKENESS_MIN_TEXT_CHARS
+
+    logger.info(
+        "Agent 1: LlamaParse fallback check thread=%s reason=%s llamaparse_docs=0 fallback_used=%s fallback_text_chars=%s",
+        state["thread_id"],
+        reason,
+        fallback_available,
+        fallback_text_chars,
+    )
+
+    if fallback_available:
+        return preview_text
+
+    return None
 
 
 def _cv_likeness_rejection(markdown_text: str, thread_id: str) -> dict[str, Any] | None:
@@ -150,7 +244,7 @@ def _cv_likeness_rejection(markdown_text: str, thread_id: str) -> dict[str, Any]
     retry=retry_if_exception_type(GeminiTransientError),
     reraise=True,
 )
-async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None) -> str:
+async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None) -> CandidateExtraction:
     llm = ChatGoogleGenerativeAI(
         model=settings.AGENT1_MODEL,
         google_api_key=settings.GEMINI_API_KEY,
@@ -158,6 +252,12 @@ async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None)
         max_tokens=settings.AGENT1_MAX_OUTPUT_TOKENS,
         request_timeout=settings.GEMINI_TIMEOUT_SECONDS,
         max_retries=0,
+        thinking_budget=0,
+    )
+    structured_llm = llm.with_structured_output(
+        CandidateExtraction,
+        method="json_schema",
+        include_raw=True,
     )
 
     prompt = AGENT1_PROMPT.format(cv_text=markdown_text)
@@ -172,16 +272,100 @@ async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None)
             estimated_input_tokens,
             settings.AGENT1_MAX_OUTPUT_TOKENS,
         )
-        response = await llm.ainvoke(prompt)
-        log_llm_usage(logger, "agent1", settings.AGENT1_MODEL, thread_id, response)
-        return response.content
+        result = await structured_llm.ainvoke(prompt)
     except Exception as e:
         error_str = str(e).lower()
         if "429" in error_str or "quota" in error_str:
             raise ValueError(
                 CV_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE
             )
+        if _is_structured_output_exception(e):
+            logger.error(
+                "Agent 1 structured extraction failed : stage=%s error_type=%s model=%s thread=%s response_chars=%s",
+                _structured_failure_stage(0, e),
+                type(e).__name__,
+                settings.AGENT1_MODEL,
+                thread_id or "unknown",
+                0,
+            )
+            raise Agent1StructuredOutputError("Agent 1 structured extraction failed.") from e
         raise GeminiTransientError(f"Gemini API error: {e}")
+
+    raw_response = result.get("raw") if isinstance(result, dict) else None
+    log_llm_usage(logger, "agent1", settings.AGENT1_MODEL, thread_id, raw_response or result)
+    finish_reason = _response_finish_reason(raw_response)
+    logger.info(
+        "Agent 1 response diagnostics : thread=%s model=%s response_chars=%s finish_reason=%s",
+        thread_id or "unknown",
+        settings.AGENT1_MODEL,
+        _response_content_length(raw_response),
+        finish_reason,
+    )
+    if "MAX_TOKENS" in finish_reason.upper():
+        logger.error(
+            "Agent 1 structured extraction failed : stage=max_tokens error_type=%s model=%s thread=%s response_chars=%s",
+            Agent1StructuredOutputError.__name__,
+            settings.AGENT1_MODEL,
+            thread_id or "unknown",
+            _response_content_length(raw_response),
+        )
+        raise Agent1StructuredOutputError("Agent 1 structured extraction reached the output limit.")
+
+    if isinstance(result, CandidateExtraction):
+        return result
+
+    if isinstance(result, dict):
+        parsed = result.get("parsed")
+        parsing_error = result.get("parsing_error")
+        response_chars = _response_content_length(raw_response)
+
+        if parsing_error:
+            logger.error(
+                "Agent 1 structured extraction failed : stage=%s error_type=%s model=%s thread=%s response_chars=%s",
+                _structured_failure_stage(response_chars, parsing_error),
+                type(parsing_error).__name__,
+                settings.AGENT1_MODEL,
+                thread_id or "unknown",
+                response_chars,
+            )
+            raise Agent1StructuredOutputError("Agent 1 structured extraction failed.") from parsing_error
+
+        if isinstance(parsed, CandidateExtraction):
+            return parsed
+
+        if isinstance(parsed, dict):
+            try:
+                return CandidateExtraction.model_validate(parsed)
+            except ValidationError as e:
+                logger.error(
+                    "Agent 1 structured extraction failed : stage=%s error_type=%s model=%s thread=%s response_chars=%s",
+                    _structured_failure_stage(response_chars, e),
+                    type(e).__name__,
+                    settings.AGENT1_MODEL,
+                    thread_id or "unknown",
+                    response_chars,
+                )
+                raise Agent1StructuredOutputError("Agent 1 structured extraction failed.") from e
+
+        logger.error(
+            "Agent 1 structured extraction failed : stage=%s error_type=%s model=%s thread=%s response_chars=%s",
+            _structured_failure_stage(response_chars),
+            type(parsed).__name__,
+            settings.AGENT1_MODEL,
+            thread_id or "unknown",
+            response_chars,
+        )
+        raise Agent1StructuredOutputError("Agent 1 structured extraction failed.")
+
+    logger.error(
+        "Agent 1 structured extraction failed : stage=%s error_type=%s model=%s thread=%s response_chars=%s",
+        "unexpected_result",
+        type(result).__name__,
+        settings.AGENT1_MODEL,
+        thread_id or "unknown",
+        0,
+    )
+    raise Agent1StructuredOutputError("Agent 1 structured extraction failed.")
 
 
 def is_valid_github_url(url: str) -> bool:
@@ -196,6 +380,190 @@ def normalize_github_url(url: str) -> str:
     return url
 
 
+GITHUB_URL_PATTERN = re.compile(
+    r"(?:https?://)?(?:www\.)?github\.com/[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)?",
+    re.IGNORECASE,
+)
+GITHUB_OWNER_BLOCKLIST = {
+    "about",
+    "collections",
+    "events",
+    "explore",
+    "features",
+    "join",
+    "login",
+    "marketplace",
+    "new",
+    "orgs",
+    "pricing",
+    "search",
+    "settings",
+    "topics",
+    "trending",
+}
+
+ROLE_KEYWORDS = (
+    "engineer",
+    "developer",
+    "architect",
+    "designer",
+    "manager",
+    "analyst",
+    "scientist",
+    "specialist",
+    "consultant",
+    "devops",
+    "qa",
+    "frontend",
+    "front-end",
+    "backend",
+    "back-end",
+    "full stack",
+    "full-stack",
+    "machine learning",
+    "ml",
+    "ai",
+    "data",
+    "product",
+    "scrum",
+)
+
+ROLE_STOP_LINES = {
+    "professional summary",
+    "summary",
+    "experience",
+    "work experience",
+    "projects",
+    "skills",
+    "education",
+    "certifications",
+    "contact",
+}
+
+
+def _extract_github_profile_urls(text: str) -> list[str]:
+    profiles: list[str] = []
+
+    for match in GITHUB_URL_PATTERN.finditer(text or ""):
+        raw_url = match.group(0).rstrip(".,;:)]}>\"'")
+        path = re.sub(
+            r"^(?:https?://)?(?:www\.)?github\.com/",
+            "",
+            raw_url,
+            flags=re.IGNORECASE,
+        ).strip("/")
+        parts = [part for part in path.split("/") if part]
+        if not parts:
+            continue
+
+        owner = parts[0]
+        if owner.lower() in GITHUB_OWNER_BLOCKLIST:
+            continue
+
+        profile_url = f"https://github.com/{owner}"
+        if is_valid_github_url(profile_url) and profile_url not in profiles:
+            profiles.append(profile_url)
+
+    return profiles
+
+
+def _clean_role(value: str | None) -> str | None:
+    role = re.sub(r"\s+", " ", (value or "").strip(" :-|•\t"))
+    if not role or len(role) > 80:
+        return None
+
+    lowered = role.lower()
+    if lowered in ROLE_STOP_LINES:
+        return None
+
+    if any(marker in lowered for marker in ("@", "http://", "https://", "github.com", "linkedin.com")):
+        return None
+
+    if not any(keyword in lowered for keyword in ROLE_KEYWORDS):
+        return None
+
+    return role
+
+
+def _candidate_role_from_experience(candidate: CandidateExtraction) -> str | None:
+    for experience in candidate.work_experience or []:
+        role = _clean_role(experience.title)
+        if role:
+            return role
+
+    return None
+
+
+def _candidate_role_from_header(raw_cv_text: str, full_name: str | None) -> str | None:
+    lines = [
+        re.sub(r"\s+", " ", line).strip()
+        for line in (raw_cv_text or "").splitlines()
+        if line.strip()
+    ]
+    if not lines:
+        return None
+
+    if full_name:
+        target_name = re.sub(r"\s+", " ", full_name).strip().lower()
+        for index, line in enumerate(lines[:12]):
+            if line.lower() == target_name:
+                for next_line in lines[index + 1:index + 5]:
+                    role = _clean_role(next_line)
+                    if role:
+                        return role
+
+    for line in lines[:8]:
+        role = _clean_role(line)
+        if role:
+            return role
+
+    return None
+
+
+def _candidate_role_from_summary(summary: str | None) -> str | None:
+    text = re.sub(r"\s+", " ", (summary or "").strip())
+    if not text:
+        return None
+
+    leading = re.split(r"\bwith\b|\bwho\b|,|\.|;", text, maxsplit=1, flags=re.IGNORECASE)[0]
+    role = _clean_role(leading)
+    if role:
+        return role
+
+    match = re.search(
+        r"\b([A-Z][A-Za-z0-9+/# .-]{2,80}?\b(?:Engineer|Developer|Architect|Designer|Manager|Analyst|Scientist|Specialist|Consultant|DevOps|QA)\b)",
+        text,
+    )
+    if match:
+        return _clean_role(match.group(1))
+
+    return None
+
+
+def _ensure_candidate_role(
+    candidate: CandidateExtraction,
+    raw_cv_text: str,
+) -> tuple[CandidateExtraction, str]:
+    existing_role = _clean_role(candidate.current_title)
+    if existing_role:
+        if existing_role != candidate.current_title:
+            return candidate.model_copy(update={"current_title": existing_role}), "schema"
+        return candidate, "schema"
+
+    role_sources = (
+        ("work_experience", _candidate_role_from_experience(candidate)),
+        ("cv_header", _candidate_role_from_header(raw_cv_text, candidate.full_name)),
+        ("summary", _candidate_role_from_summary(candidate.summary)),
+        ("raw_cv_summary", _candidate_role_from_summary(raw_cv_text)),
+    )
+
+    for source, role in role_sources:
+        if role:
+            return candidate.model_copy(update={"current_title": role}), source
+
+    return candidate, "missing"
+
+
 async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
     logger.info(f"Agent 1 starting for thread_id={state['thread_id']}")
 
@@ -205,17 +573,46 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
 
     pdf_temp_path = state.get("pdf_temp_path")
     pdf_bytes = state.get("pdf_bytes")
+    preview_text = (state.get("pdf_preview_text") or "").strip()
 
-    if not pdf_temp_path and not pdf_bytes:
+    if not pdf_temp_path and not pdf_bytes and not preview_text:
         return {"error": EVALUATION_PREPARATION_FAILED_MESSAGE}
 
     try:
         logger.info("Agent 1: Sending PDF to LlamaParse...")
-        if pdf_temp_path:
-            raw_cv_text = await _parse_pdf_with_llamaparse(pdf_temp_path)
-        else:
-            raw_cv_text = await _parse_pdf_bytes_with_llamaparse(pdf_bytes)
-        logger.info(f"Agent 1: LlamaParse returned {len(raw_cv_text)} characters")
+        try:
+            if pdf_temp_path:
+                if not os.path.exists(pdf_temp_path):
+                    raise LlamaParseEmptyResultError("PDF temp path unavailable.")
+                raw_cv_text = await _parse_pdf_with_llamaparse(pdf_temp_path)
+            elif pdf_bytes:
+                raw_cv_text = await _parse_pdf_bytes_with_llamaparse(pdf_bytes)
+            else:
+                raise LlamaParseEmptyResultError("PDF payload unavailable.")
+            logger.info(f"Agent 1: LlamaParse returned {len(raw_cv_text)} characters")
+        except LlamaParseEmptyResultError as e:
+            fallback_text = _preview_fallback_text(state, type(e).__name__)
+            if not fallback_text:
+                raise
+            raw_cv_text = fallback_text
+            logger.info(
+                "Agent 1: Using PDF preview fallback thread=%s fallback_text_chars=%s",
+                state["thread_id"],
+                len(raw_cv_text),
+            )
+        parsed_flags = _cv_evidence_flags(raw_cv_text)
+        logger.info(
+            "Agent 1: Parsed CV evidence thread=%s parsed_cv_text_length=%s first_100=%r has_skills=%s has_projects=%s has_education=%s has_certifications=%s has_devselect=%s has_casex=%s",
+            state["thread_id"],
+            len(raw_cv_text),
+            _safe_cv_preview(raw_cv_text),
+            parsed_flags["skills"],
+            parsed_flags["projects"],
+            parsed_flags["education"],
+            parsed_flags["certifications"],
+            parsed_flags["devselect"],
+            parsed_flags["casex"],
+        )
         rejection = _cv_likeness_rejection(raw_cv_text, state["thread_id"])
         if rejection:
             return rejection
@@ -237,6 +634,14 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
             "error": "This file took too long to process. Please upload a standard PDF CV.",
             "error_code": "PDF_PARSE_TIMEOUT",
         }
+    except LlamaParseEmptyResultError as e:
+        logger.error("Agent 1 failed in Step A: LlamaParse empty and fallback unavailable error_type=%s", type(e).__name__)
+        return {
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
+            "error": "This file could not be processed safely. Please upload a standard PDF CV.",
+            "error_code": "PDF_PROCESSING_FAILED",
+        }
     except Exception as e:
         logger.error(f"Agent 1 failed in Step A: {e}")
         return {
@@ -251,13 +656,21 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
 
     try:
         logger.info("Agent 1: Sending parsed text to Gemini...")
-        raw_json_str = await _extract_with_gemini(
+        candidate = await _extract_with_gemini(
             gemini_cv_text,
             thread_id=state["thread_id"],
         )
         logger.info("Agent 1: Gemini responded")
     except ValueError as e:
         return {"pdf_bytes": None, "pdf_temp_path": None, "raw_cv_text": raw_cv_text, "error": str(e)}
+    except Agent1StructuredOutputError:
+        return {
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
+            "raw_cv_text": raw_cv_text,
+            "error": CV_EXTRACTION_INVALID_MESSAGE,
+            "error_code": "CV_EXTRACTION_INVALID",
+        }
     except Exception as e:
         logger.error(f"Agent 1 failed in Step B: {e}")
         return {
@@ -267,42 +680,76 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
             "error": CV_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE,
         }
 
-    try:
-        logger.info("Agent 1: Parsing and validating Gemini response...")
-        parsed_dict = parse_llm_json(raw_json_str)
-        candidate = CandidateExtraction(**parsed_dict)
-        logger.info(f"Agent 1: Extracted candidate — {candidate.full_name}")
-    except ValueError as e:
+    candidate, role_source = _ensure_candidate_role(candidate, raw_cv_text)
+    candidate_log_state = candidate.model_dump(mode="json")
+    candidate_state_text = str(candidate_log_state).lower()
+    raw_section_count = sum(
+        parsed_flags[key]
+        for key in ("skills", "projects", "education", "certifications")
+    )
+    extracted_evidence_groups = sum(
+        bool(group)
+        for group in (
+            candidate.skills,
+            candidate.languages,
+            candidate.frameworks,
+            candidate.projects,
+            candidate.work_experience,
+            candidate.education,
+            candidate.certifications,
+        )
+    )
+    logger.info(
+        "Agent 1: Extracted candidate thread=%s keys=%s candidate_name=%s role=%s role_source=%s skills=%s languages=%s frameworks=%s projects=%s experience=%s education_present=%s certifications=%s has_devselect=%s has_casex=%s candidate_state_chars=%s parsed_cv_chars=%s",
+        state["thread_id"],
+        ",".join(candidate_log_state.keys()),
+        candidate.full_name or "not_found",
+        candidate.current_title or "not_detected",
+        role_source,
+        len(candidate.skills or []),
+        len(candidate.languages or []),
+        len(candidate.frameworks or []),
+        len(candidate.projects or []),
+        len(candidate.work_experience or []),
+        bool(candidate.education),
+        len(candidate.certifications or []),
+        "devselect" in candidate_state_text,
+        "casex" in candidate_state_text,
+        len(candidate_state_text),
+        len(raw_cv_text),
+    )
+    if (
+        len(raw_cv_text) >= 1000
+        and raw_section_count >= 2
+        and extracted_evidence_groups == 0
+    ):
         logger.error(
-            "Agent 1 failed in Step C (JSON): error_type=%s response_chars=%s",
-            type(e).__name__,
-            len(raw_json_str) if isinstance(raw_json_str, str) else 0,
+            "Agent 1 blocked incomplete structured extraction : thread=%s parsed_cv_chars=%s raw_section_count=%s extracted_evidence_groups=%s max_output_tokens=%s",
+            state["thread_id"],
+            len(raw_cv_text),
+            raw_section_count,
+            extracted_evidence_groups,
+            settings.AGENT1_MAX_OUTPUT_TOKENS,
         )
         return {
             "pdf_bytes": None,
             "pdf_temp_path": None,
             "raw_cv_text": raw_cv_text,
             "error": CV_EXTRACTION_INVALID_MESSAGE,
-            "error_code": "CV_EXTRACTION_INVALID",
-        }
-    except Exception as e:
-        logger.error(
-            "Agent 1 failed in Step C (Pydantic): error_type=%s response_chars=%s",
-            type(e).__name__,
-            len(raw_json_str) if isinstance(raw_json_str, str) else 0,
-        )
-        return {
-            "pdf_bytes": None,
-            "pdf_temp_path": None,
-            "raw_cv_text": raw_cv_text,
-            "error": CV_EXTRACTION_INVALID_MESSAGE,
-            "error_code": "CV_EXTRACTION_INVALID",
+            "error_code": "CANDIDATE_EVIDENCE_INCOMPLETE",
         }
 
     logger.info("Agent 1: Analysing GitHub URLs and calling interrupt()...")
 
     github_urls: list[str] = candidate.github_urls or []
-    github_urls = [u for u in github_urls if "github.com" in u.lower()]
+    github_urls = _extract_github_profile_urls("\n".join(github_urls + [raw_cv_text]))
+    if github_urls:
+        candidate = candidate.model_copy(update={"github_urls": github_urls})
+        logger.info(
+            "Agent 1: Deterministic GitHub URL detection thread=%s profile_count=%s",
+            state["thread_id"],
+            len(github_urls),
+        )
 
     if len(github_urls) == 0:
         logger.info("Agent 1: No GitHub URLs found")
@@ -368,5 +815,5 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         "pdf_bytes": None,
         "pdf_temp_path": None,
         "raw_cv_text": raw_cv_text,
-        "candidate": candidate,
+        "candidate": candidate.model_dump(mode="json"),
     }

@@ -51,9 +51,12 @@ ADDITIONAL FIELDS TO POPULATE:
 - red_flags: list of specific concerns. Empty list [] if none found.
 - top_repos: list of up to 3 repo names that best demonstrate this candidate's ability
 - language_breakdown: dict of {language: percentage} from the data provided
+- original_repo_count: exact integer from pre_scores.repo_count
+- repos_with_readme: exact integer from pre_scores.repos_with_readme
 - total_commits: integer from the data
 - active_days_per_month: your estimate based on commit timeline data
 - scenario: must be one of "ACCESSIBLE", "PRIVATE", "COULD_NOT_BE_ACCESSED"
+- analysis_status: use "VERIFIED" only when the supplied GitHub data was successfully retrieved
 
 CANDIDATE CV SKILLS (for language relevance scoring):
 {cv_skills}

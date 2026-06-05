@@ -6,6 +6,7 @@ import { followUpQuestion, uploadCV, resumePipeline } from '../lib/api';
 import { generateTempId, extractGitHubUsername, normalizeChatTitle } from '../lib/chatUtils';
 import {
   EVALUATION_REPORT_MESSAGE_TYPE,
+  FINAL_ERROR_MESSAGE_TYPE,
   FOLLOW_UP_ANSWER_MESSAGE_TYPE,
   isEvaluationReportMessage,
   serializeAssistantMessage,
@@ -26,6 +27,7 @@ const PLACEHOLDER_ROLE_LABELS = new Set([
 ]);
 const PRE_CV_GUIDANCE_MESSAGE = 'Please upload a candidate CV to begin an evaluation.';
 const MESSAGE_SAVE_FAILED_MESSAGE = 'Message could not be saved. Please check your connection and try again.';
+const GENERATING_STATUS_MIN_DISPLAY_MS = 400;
 const BUDGET_LIMIT_MESSAGES = {
   DAILY_EVALUATION_LIMIT_REACHED: 'Daily evaluation limit reached. Please try again tomorrow.',
   DAILY_USER_TOKEN_LIMIT_REACHED: 'Daily AI usage limit reached. Please try again tomorrow.',
@@ -46,6 +48,10 @@ function getValidRole(role) {
 function getCurrentTitleRole(title) {
   const parts = cleanMetaText(title).split(' — ');
   return parts.length > 1 ? getValidRole(parts.slice(1).join(' — ')) : '';
+}
+
+function isGeneratingRecommendationStatus(text) {
+  return cleanMetaText(text).toLowerCase().startsWith('generating recommendation');
 }
 
 export function useChat(chatId) {
@@ -121,6 +127,32 @@ export function useChat(chatId) {
     }
   }
 
+  async function addAndPersistFinalError(targetId, content, run, errorPayload = {}) {
+    if (!targetId || !content || run?.finalErrorHandled) return;
+
+    if (run) {
+      run.finalErrorHandled = true;
+    }
+
+    const retryAfter = Number(errorPayload?.retry_after_seconds);
+    const assistantMessage = {
+      id: generateTempId(),
+      role: 'assistant',
+      content,
+      message_type: FINAL_ERROR_MESSAGE_TYPE,
+      ...(typeof errorPayload?.code === 'string'
+        ? { error_code: errorPayload.code }
+        : {}),
+      ...(Number.isFinite(retryAfter) && retryAfter > 0
+        ? { retry_after_seconds: retryAfter }
+        : {}),
+      chat_id: targetId,
+    };
+
+    addMessage(targetId, assistantMessage);
+    await persistPlainMessages(targetId, [assistantMessage]);
+  }
+
   function addMessageSaveWarning(targetId) {
     if (!targetId || saveWarningChatsRef.current.has(targetId)) return;
 
@@ -181,6 +213,27 @@ export function useChat(chatId) {
     });
   }
 
+  function getSafeBackendMessage(message) {
+    if (typeof message !== 'string') return '';
+
+    const value = message.trim();
+    if (!value || value.length > 240) return '';
+
+    const lower = value.toLowerCase();
+    if (
+      lower.includes('traceback') ||
+      lower.includes('stack trace') ||
+      lower.includes('exception') ||
+      lower.includes('api key') ||
+      lower.includes('secret') ||
+      lower.includes('token=')
+    ) {
+      return '';
+    }
+
+    return value;
+  }
+
   function getStreamErrorMessage(errorPayload) {
     if (errorPayload?.code === 'GEMINI_QUOTA_EXCEEDED') {
       const retryAfter = Number(errorPayload.retry_after_seconds);
@@ -216,6 +269,9 @@ export function useChat(chatId) {
     if (errorPayload?.code === 'STREAM_START_FAILED') {
       return errorPayload?.error || 'Streaming could not start. Please try again.';
     }
+
+    const safeError = getSafeBackendMessage(errorPayload?.error);
+    if (safeError) return safeError;
 
     return 'Evaluation failed. Please try again.';
   }
@@ -262,6 +318,13 @@ export function useChat(chatId) {
       chatId: targetId,
       stopped: false,
       assistantTempId: null,
+      hasReceivedToken: false,
+      generatingStatusAt: null,
+      tokenHandoffUntil: null,
+      tokenHandoffTimer: null,
+      tokenBuffer: '',
+      tokensRevealed: false,
+      finalErrorHandled: false,
     };
 
     runIdRef.current = run.id;
@@ -273,10 +336,74 @@ export function useChat(chatId) {
     return !!run && activeRunRef.current?.id === run.id && !run.stopped;
   }
 
+  function clearTokenHandoffTimer(run) {
+    if (!run?.tokenHandoffTimer) return;
+
+    clearTimeout(run.tokenHandoffTimer);
+    run.tokenHandoffTimer = null;
+  }
+
   function finishRun(run) {
+    clearTokenHandoffTimer(run);
+
     if (activeRunRef.current?.id === run?.id) {
       activeRunRef.current = null;
     }
+  }
+
+  function appendAssistantContent(targetId, assistantTempId, content, run) {
+    if (!content || !isRunActive(run)) return;
+
+    useChatStore.setState((state) => {
+      if (!isRunActive(run)) return;
+
+      const chatMessages = state.messages[targetId];
+      if (!chatMessages || chatMessages.length === 0) return;
+
+      const assistantIndex = chatMessages.findIndex(
+        (message) => message.id === assistantTempId
+      );
+      if (assistantIndex === -1) return;
+
+      const assistantMessage = chatMessages[assistantIndex];
+      if (assistantMessage.role !== 'assistant') return;
+
+      const updatedMessages = [...chatMessages];
+      updatedMessages[assistantIndex] = {
+        ...assistantMessage,
+        content: assistantMessage.content + content,
+      };
+
+      return {
+        messages: {
+          ...state.messages,
+          [targetId]: updatedMessages,
+        },
+      };
+    });
+  }
+
+  function revealBufferedTokens(targetId, assistantTempId, run) {
+    if (!isRunActive(run) || run.tokensRevealed) return;
+
+    clearTokenHandoffTimer(run);
+    run.tokensRevealed = true;
+    clearStatusMessages(targetId);
+
+    const bufferedContent = run.tokenBuffer;
+    run.tokenBuffer = '';
+    appendAssistantContent(targetId, assistantTempId, bufferedContent, run);
+  }
+
+  async function waitForTokenHandoff(targetId, assistantTempId, run) {
+    if (run.tokensRevealed || !run.hasReceivedToken) return;
+
+    const remaining = Math.max(0, (run.tokenHandoffUntil ?? 0) - Date.now());
+    if (remaining > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remaining));
+    }
+
+    revealBufferedTokens(targetId, assistantTempId, run);
   }
 
   function removeAssistantMessage(targetId, assistantTempId) {
@@ -311,6 +438,8 @@ export function useChat(chatId) {
 
     if (run) {
       run.stopped = true;
+      clearTokenHandoffTimer(run);
+      run.tokenBuffer = '';
     }
 
     if (cleanupRef.current) {
@@ -455,12 +584,11 @@ export function useChat(chatId) {
       setIsLoading(false);
       clearStatusMessages(targetId);
       finishRun(run);
-      addMessage(targetId, {
-        id: generateTempId(),
-        role: 'assistant',
-        content: getRequestErrorMessage(error),
-        chat_id: targetId,
-      });
+      await addAndPersistFinalError(
+        targetId,
+        getRequestErrorMessage(error),
+        run
+      );
     }
   }
 
@@ -545,12 +673,11 @@ export function useChat(chatId) {
       setIsLoading(false);
       clearStatusMessages(chatId);
       finishRun(run);
-      addMessage(chatId, {
-        id: generateTempId(),
-        role: 'assistant',
-        content: getRequestErrorMessage(error),
-        chat_id: chatId,
-      });
+      await addAndPersistFinalError(
+        chatId,
+        getRequestErrorMessage(error),
+        run
+      );
     }
   }
 
@@ -574,6 +701,7 @@ export function useChat(chatId) {
       id: assistantTempId,
       role: 'assistant',
       content: '',
+      isStreaming: true,
       chat_id: targetId,
     });
 
@@ -600,45 +728,50 @@ export function useChat(chatId) {
       },
 
       onStatus(text) {
-        if (!isRunActive(run)) return;
+        if (!isRunActive(run) || run.hasReceivedToken) return;
 
         addStatusMessage(targetId, text);
+        if (isGeneratingRecommendationStatus(text) && !run.generatingStatusAt) {
+          run.generatingStatusAt = Date.now();
+        }
       },
 
       onToken(char) {
         if (!isRunActive(run)) return;
 
-        useChatStore.setState((state) => {
-          if (!isRunActive(run)) return;
+        if (!run.hasReceivedToken) {
+          run.hasReceivedToken = true;
+          const elapsed = run.generatingStatusAt
+            ? Date.now() - run.generatingStatusAt
+            : GENERATING_STATUS_MIN_DISPLAY_MS;
+          const remaining = Math.max(0, GENERATING_STATUS_MIN_DISPLAY_MS - elapsed);
 
-          const chatMessages = state.messages[targetId];
-          if (!chatMessages || chatMessages.length === 0) return;
+          if (remaining > 0) {
+            run.tokenHandoffUntil = Date.now() + remaining;
+            run.tokenBuffer += char;
+            run.tokenHandoffTimer = setTimeout(
+              () => revealBufferedTokens(targetId, assistantTempId, run),
+              remaining
+            );
+            return;
+          }
 
-          const assistantIndex = chatMessages.findIndex(
-            (m) => m.id === assistantTempId
-          );
-          if (assistantIndex === -1) return;
+          run.tokensRevealed = true;
+          clearStatusMessages(targetId);
+        }
 
-          const assistantMessage = chatMessages[assistantIndex];
-          if (assistantMessage.role !== 'assistant') return;
+        if (!run.tokensRevealed) {
+          run.tokenBuffer += char;
+          return;
+        }
 
-          const updated = {
-            ...assistantMessage,
-            content: assistantMessage.content + char,
-          };
-          const updatedMessages = [...chatMessages];
-          updatedMessages[assistantIndex] = updated;
-
-          return {
-            messages: {
-              ...state.messages,
-              [targetId]: updatedMessages,
-            },
-          };
-        });
+        appendAssistantContent(targetId, assistantTempId, char, run);
       },
 
       async onDone() {
+        if (!isRunActive(run)) return;
+
+        await waitForTokenHandoff(targetId, assistantTempId, run);
         if (!isRunActive(run)) return;
 
         setIsStreaming(false);
@@ -655,12 +788,12 @@ export function useChat(chatId) {
 
         if (!assistantMessage?.content) {
           removeAssistantMessage(targetId, assistantTempId);
-          addMessage(targetId, {
-            id: generateTempId(),
-            role: 'assistant',
-            content: 'Evaluation stopped unexpectedly. Please try again.',
-            chat_id: targetId,
-          });
+          await addAndPersistFinalError(
+            targetId,
+            'Evaluation stopped unexpectedly. Please try again.',
+            run,
+            { code: 'EVALUATION_STOPPED_UNEXPECTEDLY' }
+          );
           return;
         }
 
@@ -671,7 +804,11 @@ export function useChat(chatId) {
               ...state.messages,
               [targetId]: chatMessages.map((message) =>
                 message.id === assistantTempId
-                  ? { ...message, message_type: EVALUATION_REPORT_MESSAGE_TYPE }
+                  ? {
+                      ...message,
+                      message_type: EVALUATION_REPORT_MESSAGE_TYPE,
+                      isStreaming: false,
+                    }
                   : message
               ),
             },
@@ -693,9 +830,11 @@ export function useChat(chatId) {
         }
       },
 
-      onError(errorPayload) {
+      async onError(errorPayload) {
         if (!isRunActive(run)) return;
 
+        clearTokenHandoffTimer(run);
+        run.tokenBuffer = '';
         setIsStreaming(false);
         setIsLoading(false);
         clearStatusMessages(targetId);
@@ -720,12 +859,12 @@ export function useChat(chatId) {
           };
         });
 
-        addMessage(targetId, {
-          id: generateTempId(),
-          role: 'assistant',
-          content: getStreamErrorMessage(errorPayload),
-          chat_id: targetId,
-        });
+        await addAndPersistFinalError(
+          targetId,
+          getStreamErrorMessage(errorPayload),
+          run,
+          errorPayload
+        );
       },
     });
 

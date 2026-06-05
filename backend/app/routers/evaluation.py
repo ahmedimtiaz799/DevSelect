@@ -235,9 +235,9 @@ def _extract_pdf_preview_text(pdf_bytes: bytes) -> str:
     return "\n".join(text_parts)
 
 
-def _run_cv_likeness_precheck(pdf_bytes: bytes) -> None:
+def _run_cv_likeness_precheck(pdf_bytes: bytes) -> str:
     if not settings.ENABLE_CV_LIKENESS_CHECK:
-        return
+        return ""
 
     preview_text = _extract_pdf_preview_text(pdf_bytes)
     assessment = assess_cv_likeness(
@@ -259,6 +259,8 @@ def _run_cv_likeness_precheck(pdf_bytes: bytes) -> None:
 
     if assessment["should_reject"]:
         raise UploadSecurityError("NOT_A_CV")
+
+    return preview_text
 
 
 def _write_temp_pdf(pdf_bytes: bytes) -> str:
@@ -619,19 +621,26 @@ def _assert_chat_thread(chat: dict, thread_id: str) -> None:
 async def _save_chat_thread_id(chat_id: str, user_id: str, thread_id: str) -> dict:
     try:
         supabase = await get_supabase()
-        result = await (
+        await (
             supabase.table("chats")
             .update({"thread_id": thread_id})
             .eq("id", chat_id)
             .eq("user_id", user_id)
+            .execute()
+        )
+        verify_result = await (
+            supabase.table("chats")
             .select("id,user_id,thread_id")
+            .eq("id", chat_id)
+            .eq("user_id", user_id)
+            .eq("thread_id", thread_id)
             .execute()
         )
     except Exception as e:
         logger.exception("Chat thread binding failed : chat=%s user=%s error=%s", chat_id, user_id, type(e).__name__)
         raise HTTPException(status_code=500, detail="Evaluation session could not be prepared. Please try again.") from e
 
-    rows = getattr(result, "data", None) or []
+    rows = getattr(verify_result, "data", None) or []
     if not rows:
         logger.warning("Chat thread binding denied : chat=%s user=%s", chat_id, user_id)
         raise HTTPException(status_code=403, detail=CHAT_ACCESS_DENIED_MESSAGE)
@@ -900,7 +909,7 @@ async def upload_cv(
 
     try:
         _validate_pdf_structure(pdf_bytes)
-        _run_cv_likeness_precheck(pdf_bytes)
+        pdf_preview_text = _run_cv_likeness_precheck(pdf_bytes)
     except UploadSecurityError as e:
         return _upload_security_response(e.code)
 
@@ -933,6 +942,8 @@ async def upload_cv(
         thread_id = str(uuid4())
         logger.info(f"Upload requested existing thread : old={old_thread_id} new={thread_id}")
 
+    await _save_chat_thread_id(chat_id, user_id, thread_id)
+
     estimated_budget_tokens = estimate_evaluation_budget(len(pdf_bytes))
     budget_decision = await record_budget_usage(user_id, estimated_budget_tokens)
     if not budget_decision.allowed:
@@ -948,8 +959,6 @@ async def upload_cv(
             content=budget_error_payload(budget_decision),
         )
 
-    await _save_chat_thread_id(chat_id, user_id, thread_id)
-
     pdf_temp_path = _write_temp_pdf(pdf_bytes)
     evaluation_context = _evaluation_datetime_context(evaluation_timezone)
     logger.info(
@@ -963,6 +972,7 @@ async def upload_cv(
     initial_state = {
         "pdf_bytes": None,
         "pdf_temp_path": pdf_temp_path,
+        "pdf_preview_text": pdf_preview_text,
         "thread_id": thread_id,
         "raw_cv_text": "",
         "recruiter_instruction": normalized_recruiter_instruction,
@@ -975,6 +985,7 @@ async def upload_cv(
         "report": None,
         "error": None,
         "error_code": None,
+        "retry_after_seconds": None,
         "evaluation_status": EVALUATION_PENDING,
     }
 
@@ -1166,8 +1177,10 @@ async def evaluation_stream_generator(
                 logger.warning(f"SSE pipeline state error : thread={thread_id} error={error}")
                 payload = {
                     "error": error,
-                    "code": "EVALUATION_PIPELINE_ERROR",
+                    "code": state_snapshot.get("error_code") or "EVALUATION_PIPELINE_ERROR",
                 }
+                if state_snapshot.get("retry_after_seconds"):
+                    payload["retry_after_seconds"] = state_snapshot["retry_after_seconds"]
                 yield f"event: error\ndata: {json.dumps(payload)}\n\n"
                 return
 

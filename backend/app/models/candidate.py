@@ -10,6 +10,13 @@ class GitHubScenario(str, Enum):
     ACCESSIBLE = "ACCESSIBLE"
 
 
+class GitHubAnalysisStatus(str, Enum):
+    VERIFIED = "VERIFIED"
+    NOT_FOUND = "NOT_FOUND"
+    UNAVAILABLE = "UNAVAILABLE"
+    PRIVATE = "PRIVATE"
+
+
 class WorkExperience(BaseModel):
     title: str | None = None
     company: str | None = None
@@ -34,6 +41,7 @@ class CandidateExtraction(BaseModel):
     skills: list[str] = []
     languages: list[str] = []
     frameworks: list[str] = []
+    projects: list[str] = []
     education: list[Education] = []
     work_experience: list[WorkExperience] = []
     github_urls: list[str] = []
@@ -41,7 +49,7 @@ class CandidateExtraction(BaseModel):
     linkedin_url: str | None = None
     certifications: list[str] = []
 
-    @field_validator("skills", "languages", "frameworks", "certifications")
+    @field_validator("skills", "languages", "frameworks", "projects", "certifications")
     @classmethod
     def lists_must_not_be_empty_strings(cls, v: list[str]) -> list[str]:
         return [item.strip() for item in v if item.strip()]
@@ -49,6 +57,7 @@ class CandidateExtraction(BaseModel):
 
 class GitHubAnalysis(BaseModel):
     scenario: GitHubScenario
+    analysis_status: GitHubAnalysisStatus = GitHubAnalysisStatus.UNAVAILABLE
     summary: str = ""
     overall_score: int = 0
     original_repo_score: int = 0
@@ -63,8 +72,14 @@ class GitHubAnalysis(BaseModel):
     red_flags: list[str] = []
     top_repos: list[str] = []
     language_breakdown: dict[str, float] = {}
-    total_commits: int = 0
-    active_days_per_month: float = 0.0
+    original_repo_count: int | None = None
+    repos_with_readme: int | None = None
+    total_commits: int | None = None
+    profile_contribution_count: int | None = None
+    repository_commit_count: int | None = None
+    commit_message_sample_count: int | None = None
+    recent_activity_days: int | None = None
+    active_days_per_month: float | None = None
 
     @field_validator(
         "overall_score",
