@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import Navbar from '../components/layout/Navbar'
+import { Footer } from '../components/layout/Footer'
 import Button from '../components/ui/Button'
 import { CheckCircle } from 'lucide-react'
 
@@ -21,7 +22,7 @@ export function Pricing() {
 
       <main className="flex flex-col items-center px-6 py-14 md:py-20">
         <section className="w-full max-w-4xl text-center mb-10 md:mb-12">
-          <h1 className="text-3xl sm:text-4xl md:text-display font-extrabold text-brand-dark mb-5">
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-brand-dark mb-5">
             Start evaluating candidates for free during beta
           </h1>
 
@@ -92,6 +93,8 @@ export function Pricing() {
           </p>
         </section>
       </main>
+
+      <Footer />
     </div>
   )
 }

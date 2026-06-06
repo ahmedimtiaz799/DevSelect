@@ -1,4 +1,5 @@
 import Navbar from '../components/layout/Navbar'
+import { Footer } from '../components/layout/Footer'
 
 export function About() {
   return (
@@ -38,6 +39,8 @@ export function About() {
         </div>
 
       </div>
+
+      <Footer />
     </div>
   )
 }
