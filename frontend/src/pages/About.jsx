@@ -8,12 +8,34 @@ export function About() {
       <div className="flex flex-col items-center px-6 py-16 md:py-20">
 
         <h1 className="text-display font-extrabold text-brand-dark mb-8 text-center">
-          About
+          About DevSelect
         </h1>
 
-        <p className="text-body text-brand-secondary max-w-subtitle text-left mx-auto">
-          I am Ahmed Imtiaz, a software Engineer who built DevSelect as a portfolio project. The idea came from thinking about how much time hiring managers spend reviewing CVs and GitHub profiles manually before even scheduling an interview. DevSelect tries to make that first filter faster and more informed. It scans a candidate's CV, looks through their GitHub activity, and gives you a straightforward answer on whether they are worth interviewing. This is not a funded startup. It is a real working product I built to demonstrate what I can do as a developer. If you are a hiring manager who finds it useful, that genuinely makes me happy.
-        </p>
+        <div className="text-body text-brand-secondary max-w-subtitle text-left mx-auto flex flex-col gap-5">
+          <p>
+            DevSelect is an AI-assisted hiring evaluation tool built by Ahmed
+            Imtiaz, a Software Engineer focused on full-stack AI systems.
+          </p>
+
+          <p>
+            The idea came from a simple problem: hiring teams spend too much
+            time manually reviewing CVs and GitHub profiles before deciding who
+            is worth interviewing.
+          </p>
+
+          <p>
+            DevSelect helps with that first filter. It analyzes a candidate's
+            CV, reviews their GitHub activity, and generates a structured hiring
+            report with a clear recommendation.
+          </p>
+
+          <p>
+            This is an independent portfolio project built to demonstrate
+            production-style AI engineering, including CV parsing, GitHub
+            analysis, multi-agent workflows, authentication, streaming
+            responses, and saved chat history.
+          </p>
+        </div>
 
       </div>
     </div>
