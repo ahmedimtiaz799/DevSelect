@@ -266,7 +266,7 @@ export function Chat() {
           chatId={chatId ?? null}
           isLoading={isLoading}
           isStreaming={isStreaming}
-          isChatHistoryLoading={isChatListLoading}
+          isChatHistoryLoading={Boolean(chatId) && isChatListLoading}
           isMessagesLoading={isHydratingMessages}
           messageLoadError={chatId ? messageLoadErrorsByChat[chatId] : ''}
           statuses={statusMessages}

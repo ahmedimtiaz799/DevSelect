@@ -13,6 +13,7 @@ from datetime import datetime
 from io import BytesIO
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from langgraph.types import Command
+from psycopg import InterfaceError, OperationalError
 
 from app.agents.follow_up import answer_follow_up_question, mock_follow_up_answer
 from app.agents.agent3_lead_evaluator import GeminiQuotaExceededError
@@ -28,6 +29,7 @@ from app.utils.budget_limits import (
 )
 from app.utils.cv_likeness import assess_cv_likeness
 from app.utils.llm_observability import cap_text_for_llm
+from app.utils.llm_provider import LLMProviderUnavailableError
 
 logger = logging.getLogger("devselect")
 
@@ -102,6 +104,8 @@ Recommend moving Ahmed Imtiaz to the next interview stage for a Full Stack AI En
 ACTIVE_STREAM_THREADS: set[str] = set()
 MOCK_EVALUATION_RUNS: dict[str, dict] = {}
 EVALUATION_GUARD_LOCK = asyncio.Lock()
+CHECKPOINT_STATE_READ_ATTEMPTS = 2
+CHECKPOINT_STATE_READ_RETRY_DELAY_SECONDS = 0.25
 RECRUITER_INSTRUCTION_MAX_CHARS = settings.MAX_USER_INPUT_CHARS
 PRE_CV_GUIDANCE_MESSAGE = "Please upload a candidate CV to begin an evaluation."
 FOLLOW_UP_REQUIRES_REPORT_MESSAGE = "A completed evaluation is required before follow-up questions."
@@ -749,9 +753,66 @@ async def _set_graph_evaluation_status(graph, thread_id: str, status: str) -> No
         logger.warning(f"Evaluation status update failed : thread={thread_id} status={status} error={e}")
 
 
+def _is_checkpoint_connection_error(error: Exception) -> bool:
+    if isinstance(error, (OperationalError, InterfaceError)):
+        return True
+
+    error_text = str(error).lower()
+    return any(
+        marker in error_text
+        for marker in (
+            "server closed the connection unexpectedly",
+            "connection is closed",
+            "closed connection",
+            "bad connection",
+            "consuming input failed",
+        )
+    )
+
+
+async def _read_graph_state_with_retry(graph, thread_id: str, operation_name: str):
+    config = {"configurable": {"thread_id": thread_id}}
+    last_error = None
+
+    for attempt in range(1, CHECKPOINT_STATE_READ_ATTEMPTS + 1):
+        try:
+            snapshot = await graph.aget_state(config)
+            if attempt > 1:
+                logger.info(
+                    "Checkpoint state read retry succeeded : thread=%s operation=%s attempt=%s",
+                    thread_id,
+                    operation_name,
+                    attempt,
+                )
+            return snapshot
+        except Exception as e:
+            last_error = e
+            retryable = _is_checkpoint_connection_error(e)
+            should_retry = retryable and attempt < CHECKPOINT_STATE_READ_ATTEMPTS
+            logger.warning(
+                "Checkpoint state read failed : thread=%s operation=%s attempt=%s error_type=%s retryable=%s retry_attempted=%s",
+                thread_id,
+                operation_name,
+                attempt,
+                type(e).__name__,
+                retryable,
+                should_retry,
+                exc_info=True,
+            )
+            if not should_retry:
+                break
+            await asyncio.sleep(CHECKPOINT_STATE_READ_RETRY_DELAY_SECONDS)
+
+    raise last_error
+
+
 async def _graph_thread_has_state(graph, thread_id: str) -> bool:
     try:
-        snapshot = await graph.aget_state({"configurable": {"thread_id": thread_id}})
+        snapshot = await _read_graph_state_with_retry(
+            graph,
+            thread_id,
+            "checkpoint_existence_check",
+        )
     except Exception as e:
         logger.exception(
             "Checkpoint existence check failed : thread=%s error_type=%s",
@@ -1118,6 +1179,24 @@ async def follow_up_question(
                 "retry_after_seconds": e.retry_after_seconds,
             },
         )
+    except LLMProviderUnavailableError as e:
+        logger.warning(
+            "Follow-up provider unavailable : chat=%s provider=%s model=%s status_code=%s provider_status=%s",
+            chat_id,
+            e.provider,
+            e.model,
+            e.status_code or "unknown",
+            e.provider_status,
+            exc_info=True,
+        )
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": e.user_message,
+                "code": e.error_code,
+                "retry_after_seconds": e.retry_after_seconds,
+            },
+        )
     except Exception as e:
         logger.exception(f"Follow-up failed : chat={chat_id} error={e}")
         return JSONResponse(
@@ -1242,6 +1321,24 @@ async def evaluation_stream_generator(
             "retry_after_seconds": e.retry_after_seconds,
         }
         yield f"event: error\ndata: {json.dumps(payload)}\n\n"
+    except LLMProviderUnavailableError as e:
+        await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
+        logger.warning(
+            "SSE pipeline provider unavailable : thread=%s provider=%s model=%s status_code=%s provider_status=%s",
+            thread_id,
+            e.provider,
+            e.model,
+            e.status_code or "unknown",
+            e.provider_status,
+            exc_info=True,
+        )
+        payload = {
+            "error": e.user_message,
+            "code": e.error_code,
+        }
+        if e.retry_after_seconds:
+            payload["retry_after_seconds"] = e.retry_after_seconds
+        yield f"event: error\ndata: {json.dumps(payload)}\n\n"
     except asyncio.CancelledError:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
         logger.info(f"SSE stream cancelled : thread={thread_id}")
@@ -1316,7 +1413,6 @@ async def stream_evaluation(
         return _sse_response(mock_evaluation_stream_generator(request, thread_id))
 
     graph = request.app.state.graph
-    config = {"configurable": {"thread_id": thread_id}}
 
     if not await _claim_stream_thread(thread_id):
         logger.info("Duplicate SSE stream rejected : chat=%s thread=%s", chat_id, thread_id)
@@ -1325,7 +1421,11 @@ async def stream_evaluation(
         )
 
     try:
-        snapshot = await graph.aget_state(config)
+        snapshot = await _read_graph_state_with_retry(
+            graph,
+            thread_id,
+            "stream_checkpoint_read",
+        )
     except Exception as e:
         await _release_stream_thread(thread_id)
         logger.exception(

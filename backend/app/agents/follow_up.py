@@ -1,7 +1,6 @@
 import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.agents.agent3_lead_evaluator import GeminiQuotaExceededError
 from app.config import settings
@@ -10,6 +9,16 @@ from app.utils.llm_observability import (
     estimate_tokens_from_messages,
     log_llm_request,
     log_llm_usage,
+)
+from app.utils.llm_provider import (
+    LLMProviderConfigurationError,
+    LLMProviderUnavailableError,
+    create_chat_llm,
+    current_ai_provider,
+    llm_error_details,
+    llm_model_name,
+    llm_rate_limit_code,
+    llm_rate_limit_message,
 )
 
 logger = logging.getLogger("devselect")
@@ -71,30 +80,61 @@ Untrusted recruiter follow-up question:
         HumanMessage(content=human_message),
     ]
     estimated_input_tokens = estimate_tokens_from_messages(messages)
-    llm = ChatGoogleGenerativeAI(
-        model=settings.FOLLOW_UP_MODEL,
-        google_api_key=settings.GEMINI_API_KEY,
-        temperature=0.2,
-        max_tokens=settings.FOLLOW_UP_MAX_OUTPUT_TOKENS,
-        request_timeout=settings.GEMINI_TIMEOUT_SECONDS,
-        max_retries=0,
-    )
+    provider = current_ai_provider()
+    model_name = llm_model_name("follow_up")
 
     try:
+        llm = create_chat_llm(
+            "follow_up",
+            temperature=0.2,
+            max_tokens=settings.FOLLOW_UP_MAX_OUTPUT_TOKENS,
+            max_retries=0,
+        )
         log_llm_request(
             logger,
             "follow_up",
-            settings.FOLLOW_UP_MODEL,
+            model_name,
             chat_id,
             estimated_input_tokens,
             settings.FOLLOW_UP_MAX_OUTPUT_TOKENS,
         )
         response = await llm.ainvoke(messages)
-        log_llm_usage(logger, "follow_up", settings.FOLLOW_UP_MODEL, chat_id, response)
+        log_llm_usage(logger, "follow_up", model_name, chat_id, response)
+    except LLMProviderConfigurationError as e:
+        raise LLMProviderUnavailableError(
+            provider,
+            model_name,
+            e,
+            None,
+            "configuration_error",
+        ) from e
     except Exception as e:
-        if _is_gemini_quota_error(e):
-            logger.warning(f"Follow-up Gemini quota/rate limit error : chat={chat_id} error={e}")
-            raise GeminiQuotaExceededError(settings.FOLLOW_UP_MODEL, e) from e
+        details = llm_error_details(e)
+        if details.rate_limited or _is_gemini_quota_error(e):
+            logger.warning(
+                "Follow-up provider rate limit : chat=%s provider=%s model=%s status_code=%s provider_status=%s",
+                chat_id or "unknown",
+                provider,
+                model_name,
+                details.status_code or "unknown",
+                details.provider_status,
+            )
+            raise GeminiQuotaExceededError(
+                model_name,
+                e,
+                user_message=llm_rate_limit_message(provider),
+                code=llm_rate_limit_code(provider),
+                retry_after_seconds=details.retry_after_seconds,
+            ) from e
+        if details.transient:
+            raise LLMProviderUnavailableError(
+                provider,
+                model_name,
+                e,
+                details.status_code,
+                details.provider_status,
+                details.retry_after_seconds,
+            ) from e
         raise
 
     answer = str(response.content or "").strip()

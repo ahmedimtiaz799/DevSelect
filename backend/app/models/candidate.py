@@ -1,4 +1,6 @@
+import re
 from enum import Enum
+from typing import Any
 from pydantic import BaseModel, field_validator
 
 
@@ -29,6 +31,19 @@ class Education(BaseModel):
     institution: str | None = None
     year: int | None = None
 
+    @field_validator("year", mode="before")
+    @classmethod
+    def year_must_be_int(cls, v: Any) -> Any:
+        if v is None or isinstance(v, int):
+            return v
+
+        text = str(v).strip()
+        if not text:
+            return None
+
+        match = re.search(r"\b(19|20)\d{2}\b", text)
+        return int(match.group(0)) if match else None
+
 
 class CandidateExtraction(BaseModel):
     full_name: str | None = None
@@ -48,6 +63,36 @@ class CandidateExtraction(BaseModel):
     github_url: str | None = None
     linkedin_url: str | None = None
     certifications: list[str] = []
+
+    @field_validator("projects", mode="before")
+    @classmethod
+    def project_items_must_be_strings(cls, v: Any) -> Any:
+        if not isinstance(v, list):
+            return v
+
+        projects = []
+        for item in v:
+            if isinstance(item, str):
+                projects.append(item)
+                continue
+
+            if isinstance(item, dict):
+                name = item.get("project") or item.get("name") or item.get("title")
+                detail = (
+                    item.get("technologies")
+                    or item.get("tech_stack")
+                    or item.get("purpose")
+                    or item.get("description")
+                )
+                text = " - ".join(str(part).strip() for part in (name, detail) if part)
+                if text:
+                    projects.append(text)
+                continue
+
+            if item is not None:
+                projects.append(str(item))
+
+        return projects
 
     @field_validator("skills", "languages", "frameworks", "projects", "certifications")
     @classmethod

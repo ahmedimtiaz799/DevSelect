@@ -19,6 +19,7 @@ export function SidebarItem({
   onPin,
   onNavigateRequest,
   isCollapsed,
+  labelsVisible = true,
 }) {
   const navigate = useNavigate()
   const { activeChatId, setActiveChatId } = useChatStore()
@@ -105,7 +106,9 @@ export function SidebarItem({
           {!isCollapsed && (
             <span
               title={chatTitle}
-              className="text-ui truncate max-w-[140px] whitespace-nowrap overflow-hidden"
+              className={`text-ui truncate max-w-[140px] whitespace-nowrap overflow-hidden transition-opacity duration-150 ${
+                labelsVisible ? 'opacity-100' : 'opacity-0'
+              }`}
             >
               {truncateTitle(chatTitle)}
             </span>
@@ -117,7 +120,11 @@ export function SidebarItem({
             ref={menuButtonRef}
             onClick={handleMenuButtonClick}
             aria-label="Open chat menu"
-            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity ml-1 shrink-0 rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60"
+            className={`ml-1 shrink-0 rounded-md p-0.5 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60 ${
+              labelsVisible
+                ? 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+                : 'opacity-0'
+            }`}
           >
             <MoreVertical size={15} />
           </button>

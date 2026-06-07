@@ -5,7 +5,6 @@ import os
 import asyncio
 from typing import Any
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.types import interrupt
 from llama_parse import LlamaParse
 from pydantic import ValidationError
@@ -27,12 +26,24 @@ from app.utils.llm_observability import (
     log_llm_usage,
 )
 from app.utils.cv_likeness import assess_cv_likeness
+from app.utils.llm_provider import (
+    GROQ_PROVIDER,
+    LLMProviderConfigurationError,
+    LLMProviderRateLimitError,
+    LLMProviderUnavailableError,
+    create_chat_llm,
+    current_ai_provider,
+    llm_error_details,
+    llm_model_name,
+    structured_output_kwargs,
+)
 
 logger = logging.getLogger("devselect")
 CV_NOT_LIKELY_MESSAGE = "This PDF does not look like a candidate CV. Please upload a CV or resume PDF."
 CV_EXTRACTION_INVALID_MESSAGE = "This PDF could not be read as a candidate CV. Please upload a standard CV or resume PDF."
 CV_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE = "CV analysis is temporarily unavailable. Please try again in a few minutes."
 EVALUATION_PREPARATION_FAILED_MESSAGE = "We could not prepare this evaluation. Please upload the CV again."
+GROQ_VALIDATION_FAILED_MESSAGE = "Groq returned an incomplete structured response. Please try again."
 
 
 class LlamaParseTransientError(Exception):
@@ -241,23 +252,21 @@ def _cv_likeness_rejection(markdown_text: str, thread_id: str) -> dict[str, Any]
 @retry(
     stop=stop_after_attempt(2),
     wait=wait_exponential(multiplier=1, min=2, max=8),
-    retry=retry_if_exception_type(GeminiTransientError),
+    retry=retry_if_exception_type((GeminiTransientError, LLMProviderUnavailableError)),
     reraise=True,
 )
 async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None) -> CandidateExtraction:
-    llm = ChatGoogleGenerativeAI(
-        model=settings.AGENT1_MODEL,
-        google_api_key=settings.GEMINI_API_KEY,
+    provider = current_ai_provider()
+    model_name = llm_model_name("agent1")
+    llm = create_chat_llm(
+        "agent1",
         temperature=0.2,
         max_tokens=settings.AGENT1_MAX_OUTPUT_TOKENS,
-        request_timeout=settings.GEMINI_TIMEOUT_SECONDS,
         max_retries=0,
-        thinking_budget=0,
     )
     structured_llm = llm.with_structured_output(
         CandidateExtraction,
-        method="json_schema",
-        include_raw=True,
+        **structured_output_kwargs(include_raw=True),
     )
 
     prompt = AGENT1_PROMPT.format(cv_text=markdown_text)
@@ -267,37 +276,49 @@ async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None)
         log_llm_request(
             logger,
             "agent1",
-            settings.AGENT1_MODEL,
+            model_name,
             thread_id,
             estimated_input_tokens,
             settings.AGENT1_MAX_OUTPUT_TOKENS,
         )
         result = await structured_llm.ainvoke(prompt)
     except Exception as e:
-        error_str = str(e).lower()
-        if "429" in error_str or "quota" in error_str:
-            raise ValueError(
-                CV_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE
-            )
+        details = llm_error_details(e)
+        if details.rate_limited:
+            raise LLMProviderRateLimitError(
+                provider,
+                model_name,
+                e,
+                details.retry_after_seconds,
+            ) from e
         if _is_structured_output_exception(e):
             logger.error(
                 "Agent 1 structured extraction failed : stage=%s error_type=%s model=%s thread=%s response_chars=%s",
                 _structured_failure_stage(0, e),
                 type(e).__name__,
-                settings.AGENT1_MODEL,
+                model_name,
                 thread_id or "unknown",
                 0,
             )
             raise Agent1StructuredOutputError("Agent 1 structured extraction failed.") from e
-        raise GeminiTransientError(f"Gemini API error: {e}")
+        if details.transient:
+            raise LLMProviderUnavailableError(
+                provider,
+                model_name,
+                e,
+                details.status_code,
+                details.provider_status,
+                details.retry_after_seconds,
+            ) from e
+        raise GeminiTransientError(f"{provider} API error: {type(e).__name__}") from e
 
     raw_response = result.get("raw") if isinstance(result, dict) else None
-    log_llm_usage(logger, "agent1", settings.AGENT1_MODEL, thread_id, raw_response or result)
+    log_llm_usage(logger, "agent1", model_name, thread_id, raw_response or result)
     finish_reason = _response_finish_reason(raw_response)
     logger.info(
         "Agent 1 response diagnostics : thread=%s model=%s response_chars=%s finish_reason=%s",
         thread_id or "unknown",
-        settings.AGENT1_MODEL,
+        model_name,
         _response_content_length(raw_response),
         finish_reason,
     )
@@ -305,7 +326,7 @@ async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None)
         logger.error(
             "Agent 1 structured extraction failed : stage=max_tokens error_type=%s model=%s thread=%s response_chars=%s",
             Agent1StructuredOutputError.__name__,
-            settings.AGENT1_MODEL,
+            model_name,
             thread_id or "unknown",
             _response_content_length(raw_response),
         )
@@ -324,7 +345,7 @@ async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None)
                 "Agent 1 structured extraction failed : stage=%s error_type=%s model=%s thread=%s response_chars=%s",
                 _structured_failure_stage(response_chars, parsing_error),
                 type(parsing_error).__name__,
-                settings.AGENT1_MODEL,
+                model_name,
                 thread_id or "unknown",
                 response_chars,
             )
@@ -341,7 +362,7 @@ async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None)
                     "Agent 1 structured extraction failed : stage=%s error_type=%s model=%s thread=%s response_chars=%s",
                     _structured_failure_stage(response_chars, e),
                     type(e).__name__,
-                    settings.AGENT1_MODEL,
+                    model_name,
                     thread_id or "unknown",
                     response_chars,
                 )
@@ -351,7 +372,7 @@ async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None)
             "Agent 1 structured extraction failed : stage=%s error_type=%s model=%s thread=%s response_chars=%s",
             _structured_failure_stage(response_chars),
             type(parsed).__name__,
-            settings.AGENT1_MODEL,
+            model_name,
             thread_id or "unknown",
             response_chars,
         )
@@ -361,7 +382,7 @@ async def _extract_with_gemini(markdown_text: str, thread_id: str | None = None)
         "Agent 1 structured extraction failed : stage=%s error_type=%s model=%s thread=%s response_chars=%s",
         "unexpected_result",
         type(result).__name__,
-        settings.AGENT1_MODEL,
+        model_name,
         thread_id or "unknown",
         0,
     )
@@ -655,15 +676,50 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
             _delete_file(pdf_temp_path)
 
     try:
-        logger.info("Agent 1: Sending parsed text to Gemini...")
+        logger.info("Agent 1: Sending parsed text to LLM...")
         candidate = await _extract_with_gemini(
             gemini_cv_text,
             thread_id=state["thread_id"],
         )
-        logger.info("Agent 1: Gemini responded")
+        logger.info("Agent 1: LLM responded")
+    except LLMProviderRateLimitError as e:
+        return {
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
+            "raw_cv_text": raw_cv_text,
+            "error": e.user_message,
+            "error_code": e.error_code,
+            "retry_after_seconds": e.retry_after_seconds,
+        }
+    except LLMProviderUnavailableError as e:
+        return {
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
+            "raw_cv_text": raw_cv_text,
+            "error": e.user_message,
+            "error_code": e.error_code,
+            "retry_after_seconds": e.retry_after_seconds,
+        }
+    except LLMProviderConfigurationError:
+        logger.error("Agent 1 provider configuration failed : thread=%s", state["thread_id"])
+        return {
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
+            "raw_cv_text": raw_cv_text,
+            "error": CV_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE,
+            "error_code": "LLM_PROVIDER_CONFIGURATION_ERROR",
+        }
     except ValueError as e:
         return {"pdf_bytes": None, "pdf_temp_path": None, "raw_cv_text": raw_cv_text, "error": str(e)}
     except Agent1StructuredOutputError:
+        if current_ai_provider() == GROQ_PROVIDER:
+            return {
+                "pdf_bytes": None,
+                "pdf_temp_path": None,
+                "raw_cv_text": raw_cv_text,
+                "error": GROQ_VALIDATION_FAILED_MESSAGE,
+                "error_code": "GROQ_VALIDATION_FAILED",
+            }
         return {
             "pdf_bytes": None,
             "pdf_temp_path": None,

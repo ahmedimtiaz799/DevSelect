@@ -40,22 +40,17 @@ const SIDEBAR_SKELETON_WIDTHS = [
   'w-24',
   'w-36',
 ]
+const SIDEBAR_LABEL_DELAY_MS = 100
 
-function SidebarChatSkeleton({ isCollapsed }) {
+function SidebarChatSkeleton() {
   return (
     <div aria-hidden="true" className="flex flex-col gap-1 px-1 py-2 animate-pulse">
       {SIDEBAR_SKELETON_WIDTHS.map((width, index) => (
         <div
           key={index}
-          className={`flex items-center rounded-card px-2 py-2 ${
-            isCollapsed ? 'justify-center' : ''
-          }`}
+          className="flex items-center rounded-card px-2 py-2"
         >
-          {isCollapsed ? (
-            <div className="h-8 w-8 rounded-lg bg-white/10" />
-          ) : (
-            <div className={`h-3 rounded-full bg-white/10 ${width}`} />
-          )}
+          <div className={`h-3 rounded-full bg-white/10 ${width}`} />
         </div>
       ))}
     </div>
@@ -81,8 +76,17 @@ export function Sidebar({
 
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
+  const [showExpandedLabels, setShowExpandedLabels] = useState(() => !isCollapsed)
 
   const searchRef = useRef(null)
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setShowExpandedLabels(!isCollapsed)
+    }, isCollapsed ? 0 : SIDEBAR_LABEL_DELAY_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [isCollapsed])
 
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus()
@@ -112,16 +116,18 @@ export function Sidebar({
   const unpinnedChats = filtered
     .filter((c) => !c.is_pinned)
     .sort(sortByLatestActivity)
+  const expandedStructureVisible = !isCollapsed
+  const expandedLabelsVisible = expandedStructureVisible && showExpandedLabels
   const hasBothSections = pinnedChats.length > 0 && unpinnedChats.length > 0
   const hasNoSearchResults =
-    !isCollapsed &&
+    expandedStructureVisible &&
     search.trim().length > 0 &&
     chats.length > 0 &&
     filtered.length === 0 &&
     !isChatListLoading &&
     !chatListError
   const showChatListSkeleton =
-    !isCollapsed && isChatListLoading && !chatListError && chats.length === 0
+    expandedStructureVisible && isChatListLoading && !chatListError && chats.length === 0
 
   return (
     <>
@@ -144,8 +150,12 @@ export function Sidebar({
               isCollapsed ? 'justify-center' : 'justify-between'
             }`}
           >
-            {!isCollapsed && (
-              <span className="text-logo-chat text-white uppercase tracking-widest">
+            {expandedStructureVisible && (
+              <span
+                className={`overflow-hidden whitespace-nowrap text-logo-chat text-white uppercase tracking-widest transition-opacity duration-150 ${
+                  expandedLabelsVisible ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
                 DevSelect
               </span>
             )}
@@ -168,18 +178,29 @@ export function Sidebar({
             <button
               onClick={handleNewChatClick}
               aria-label="New chat"
-              className={`bg-white text-brand-dark text-btn-sm font-semibold rounded-pill py-2 hover:bg-gray-100 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-brand-dark
+              className={`flex items-center justify-center rounded-pill border border-[#e8e4dc]/80 bg-[#f4f1ea] py-2 text-btn-sm font-semibold text-brand-dark shadow-sm shadow-black/5 transition-[background-color,border-color,box-shadow] duration-150 hover:border-[#ded8cf] hover:bg-[#ebe6dc] hover:shadow-sm hover:shadow-black/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-brand-dark
                 ${
                   isCollapsed
-                    ? 'w-10 h-10 flex items-center justify-center p-0 text-lg'
-                    : 'w-full'
+                    ? 'w-10 h-10 p-0 text-lg'
+                    : 'w-full px-3'
                 }`}
             >
-              {isCollapsed ? '+' : '+ New Chat'}
+              {isCollapsed ? (
+                '+'
+              ) : (
+                <span
+                  className={`inline-flex items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap transition-opacity duration-150 ${
+                    expandedLabelsVisible ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
+                  <span aria-hidden="true" className="text-[15px] leading-none">+</span>
+                  <span>New Chat</span>
+                </span>
+              )}
             </button>
           </div>
 
-          {!isCollapsed && chats.length > 0 && (
+          {expandedStructureVisible && chats.length > 0 && (
             <div className="flex items-center">
               {searchOpen ? (
                 <div className="flex items-center gap-2 bg-white/[0.07] rounded-search px-3 py-2 border border-white/30 w-full focus-within:border-white/50 focus-within:bg-white/[0.09] transition-colors">
@@ -216,7 +237,13 @@ export function Sidebar({
                   className="flex items-center gap-2 w-full px-3 py-2 rounded-search border border-white/20 hover:border-white/35 bg-white/[0.04] hover:bg-white/[0.07] text-white/60 hover:text-white/80 transition-all text-search focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60"
                 >
                   <Search size={14} className="shrink-0" />
-                  <span>Search chats...</span>
+                  <span
+                    className={`overflow-hidden whitespace-nowrap transition-opacity duration-150 ${
+                      expandedLabelsVisible ? 'opacity-100' : 'opacity-0'
+                    }`}
+                  >
+                    Search chats...
+                  </span>
                 </button>
               )}
             </div>
@@ -232,31 +259,41 @@ export function Sidebar({
           [&::-webkit-scrollbar-thumb]:rounded-full
           [&::-webkit-scrollbar-thumb:hover]:bg-[#a0a0b0]"
         >
-          {chatListError && !isCollapsed && (
-            <p className="px-2 py-2 text-sm leading-5 text-white/60">
+          {chatListError && expandedStructureVisible && (
+            <p
+              className={`px-2 py-2 text-sm leading-5 text-white/60 transition-opacity duration-150 ${
+                expandedLabelsVisible ? 'opacity-100' : 'opacity-0'
+              }`}
+            >
               {chatListError}
             </p>
           )}
 
           {showChatListSkeleton && (
-            <SidebarChatSkeleton isCollapsed={isCollapsed} />
+            <SidebarChatSkeleton />
           )}
 
           {hasNoSearchResults && (
-            <p className="px-2 py-2 text-sm leading-5 text-white/60">
+            <p
+              className={`px-2 py-2 text-sm leading-5 text-white/60 transition-opacity duration-150 ${
+                expandedLabelsVisible ? 'opacity-100' : 'opacity-0'
+              }`}
+            >
               No chats match your search.
             </p>
           )}
 
-          {!isCollapsed && pinnedChats.length > 0 && (
+          {expandedStructureVisible && pinnedChats.length > 0 && (
             <>
-              {!isCollapsed && (
-                <div className="px-2 pt-2 pb-1">
-                  <span className="text-[10px] uppercase tracking-widest text-white/50 font-bold">
-                    Pinned
-                  </span>
-                </div>
-              )}
+              <div className="px-2 pt-2 pb-1">
+                <span
+                  className={`block overflow-hidden whitespace-nowrap text-[10px] uppercase tracking-widest text-white/50 font-bold transition-opacity duration-150 ${
+                    expandedLabelsVisible ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
+                  Pinned
+                </span>
+              </div>
 
               {pinnedChats.map((chat) => (
                 <SidebarItem
@@ -267,20 +304,25 @@ export function Sidebar({
                   onPin={pinChat}
                   onNavigateRequest={onNavigateRequest}
                   isCollapsed={isCollapsed}
+                  labelsVisible={expandedLabelsVisible}
                 />
               ))}
             </>
           )}
 
-          {hasBothSections && !isCollapsed && (
+          {hasBothSections && expandedStructureVisible && (
             <div className="px-2 pt-2 pb-1">
-              <span className="text-[10px] uppercase tracking-widest text-white/50 font-bold">
+              <span
+                className={`block overflow-hidden whitespace-nowrap text-[10px] uppercase tracking-widest text-white/50 font-bold transition-opacity duration-150 ${
+                  expandedLabelsVisible ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
                 Recent
               </span>
             </div>
           )}
 
-          {!isCollapsed && unpinnedChats.map((chat) => (
+          {expandedStructureVisible && unpinnedChats.map((chat) => (
             <SidebarItem
               key={chat.id}
               chat={chat}
@@ -289,12 +331,13 @@ export function Sidebar({
               onPin={pinChat}
               onNavigateRequest={onNavigateRequest}
               isCollapsed={isCollapsed}
+              labelsVisible={expandedLabelsVisible}
             />
           ))}
         </div>
 
         <div className="px-3 py-3 border-t border-white/10">
-          <UserMenu isCollapsed={isCollapsed} />
+          <UserMenu isCollapsed={isCollapsed} labelsVisible={expandedLabelsVisible} />
         </div>
       </aside>
     </>

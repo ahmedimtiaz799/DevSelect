@@ -1,6 +1,5 @@
 import logging
 import re
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.agents.state import DevSelectState
@@ -11,6 +10,18 @@ from app.utils.llm_observability import (
     estimate_tokens_from_messages,
     log_llm_request,
     log_llm_usage,
+)
+from app.utils.llm_provider import (
+    GEMINI_PROVIDER,
+    GROQ_PROVIDER,
+    LLMProviderConfigurationError,
+    LLMProviderUnavailableError,
+    create_chat_llm,
+    current_ai_provider,
+    llm_error_details,
+    llm_model_name,
+    llm_rate_limit_code,
+    llm_rate_limit_message,
 )
 
 logger = logging.getLogger("devselect")
@@ -61,8 +72,22 @@ class GeminiQuotaExceededError(Exception):
     user_message = "Gemini quota reached. Please wait and try again."
     retry_after_seconds = GEMINI_QUOTA_RETRY_AFTER_SECONDS
 
-    def __init__(self, model_name: str, original_error: Exception):
-        super().__init__(f"Gemini quota exceeded for {model_name}: {original_error}")
+    def __init__(
+        self,
+        model_name: str,
+        original_error: Exception,
+        user_message: str | None = None,
+        code: str | None = None,
+        retry_after_seconds: int | None = None,
+    ):
+        self.user_message = user_message or type(self).user_message
+        self.code = code or type(self).code
+        self.retry_after_seconds = (
+            retry_after_seconds
+            if retry_after_seconds is not None
+            else type(self).retry_after_seconds
+        )
+        super().__init__(f"LLM provider quota exceeded for {model_name}: {type(original_error).__name__}")
 
 
 class Agent3IncompleteReportError(Exception):
@@ -303,19 +328,23 @@ def _unique_text_values(*groups) -> list[str]:
 
 async def _stream_with_fallback(messages: list, thread_id: str | None = None) -> str:
     estimated_input_tokens = estimate_tokens_from_messages(messages)
+    provider = current_ai_provider()
+    model_names = (
+        [llm_model_name("agent3")]
+        if provider == GROQ_PROVIDER
+        else [llm_model_name("agent3"), llm_model_name("agent3", fallback=True)]
+    )
 
-    for model_name in [settings.AGENT3_MODEL, settings.AGENT3_FALLBACK_MODEL]:
-        llm = ChatGoogleGenerativeAI(
-            model=model_name,
-            google_api_key=settings.GEMINI_API_KEY,
-            temperature=0.2,
-            streaming=True,
-            max_tokens=settings.AGENT3_MAX_OUTPUT_TOKENS,
-            request_timeout=settings.GEMINI_TIMEOUT_SECONDS,
-            max_retries=0,
-            thinking_budget=0 if "flash" in model_name.lower() else None,
-        )
+    for model_name in model_names:
         try:
+            llm = create_chat_llm(
+                "agent3",
+                model_name=model_name,
+                temperature=0.2,
+                streaming=True,
+                max_tokens=settings.AGENT3_MAX_OUTPUT_TOKENS,
+                max_retries=0,
+            )
             log_llm_request(
                 logger,
                 "agent3",
@@ -333,7 +362,7 @@ async def _stream_with_fallback(messages: list, thread_id: str | None = None) ->
                 ):
                     usage_source = chunk
                 if chunk.content:
-                    report_text += chunk.content
+                    report_text += chunk.content if isinstance(chunk.content, str) else str(chunk.content)
             log_llm_usage(logger, "agent3", model_name, thread_id, usage_source)
             finish_reason = _finish_reason(usage_source)
             has_closing_section = REQUIRED_REPORT_CLOSING_SECTION in report_text
@@ -363,19 +392,55 @@ async def _stream_with_fallback(messages: list, thread_id: str | None = None) ->
                 raise Agent3IncompleteReportError(
                     f"Agent 3 report incomplete for {model_name}: finish_reason={finish_reason}"
                 )
-            if model_name == settings.AGENT3_FALLBACK_MODEL:
+            if provider == GEMINI_PROVIDER and model_name == settings.AGENT3_FALLBACK_MODEL:
                 logger.warning(f"Agent 3: used fallback model {settings.AGENT3_FALLBACK_MODEL} — primary quota exhausted.")
             return report_text
+        except LLMProviderConfigurationError as e:
+            raise LLMProviderUnavailableError(
+                provider,
+                model_name,
+                e,
+                None,
+                "configuration_error",
+            ) from e
         except Exception as e:
-            if _is_gemini_quota_error(e):
-                logger.warning(f"Agent 3: {model_name} quota/rate limit error: {e}")
-                if model_name == settings.AGENT3_MODEL:
+            details = llm_error_details(e)
+            if details.rate_limited or _is_gemini_quota_error(e):
+                logger.warning(
+                    "Agent 3 provider rate limit : thread=%s provider=%s model=%s status_code=%s provider_status=%s",
+                    thread_id or "unknown",
+                    provider,
+                    model_name,
+                    details.status_code or "unknown",
+                    details.provider_status,
+                )
+                if provider == GEMINI_PROVIDER and model_name == settings.AGENT3_MODEL:
                     logger.warning(f"Agent 3: {settings.AGENT3_MODEL} quota exhausted, retrying with {settings.AGENT3_FALLBACK_MODEL}.")
                     continue
-                raise GeminiQuotaExceededError(model_name, e) from e
+                raise GeminiQuotaExceededError(
+                    model_name,
+                    e,
+                    user_message=llm_rate_limit_message(provider),
+                    code=llm_rate_limit_code(provider),
+                    retry_after_seconds=details.retry_after_seconds or GEMINI_QUOTA_RETRY_AFTER_SECONDS,
+                ) from e
+            if details.transient:
+                raise LLMProviderUnavailableError(
+                    provider,
+                    model_name,
+                    e,
+                    details.status_code,
+                    details.provider_status,
+                    details.retry_after_seconds,
+                ) from e
             raise
 
-    raise GeminiQuotaExceededError(settings.AGENT3_MODEL, RuntimeError("Fallback was not attempted."))
+    raise GeminiQuotaExceededError(
+        llm_model_name("agent3"),
+        RuntimeError("Fallback was not attempted."),
+        user_message=llm_rate_limit_message(provider),
+        code=llm_rate_limit_code(provider),
+    )
 
 
 async def agent3_lead_evaluator(state: DevSelectState) -> dict:

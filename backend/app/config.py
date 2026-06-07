@@ -22,7 +22,10 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
 
+    AI_PROVIDER: str = "gemini"
     GEMINI_API_KEY: str
+    GROQ_API_KEY: str | None = None
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
     AGENT1_MODEL: str = "gemini-2.5-flash"
     AGENT2_MODEL: str = "gemini-2.5-flash"
     AGENT3_MODEL: str = "gemini-2.5-pro"

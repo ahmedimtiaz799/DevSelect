@@ -17,7 +17,7 @@ function getSavedTheme() {
   }
 }
 
-export function UserMenu({ isCollapsed }) {
+export function UserMenu({ isCollapsed, labelsVisible = true }) {
   const { user, signOut } = useAuth()
 
   const [open, setOpen] = useState(false)
@@ -159,7 +159,11 @@ export function UserMenu({ isCollapsed }) {
         </div>
 
         {!isCollapsed && (
-          <p className="text-sm leading-none font-semibold text-white truncate max-w-[150px] text-left">
+          <p
+            className={`overflow-hidden whitespace-nowrap text-sm leading-none font-semibold text-white truncate max-w-[150px] text-left transition-opacity duration-150 ${
+              labelsVisible ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
             {firstName}
           </p>
         )}

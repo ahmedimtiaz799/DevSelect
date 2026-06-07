@@ -1,13 +1,10 @@
 import json
 import logging
-import math
-import re
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import ValidationError
 from tenacity import (
     retry,
@@ -25,6 +22,19 @@ from app.utils.llm_observability import (
     estimate_tokens_from_text,
     log_llm_request,
     log_llm_usage,
+)
+from app.utils.llm_provider import (
+    GROQ_PROVIDER,
+    LLMProviderConfigurationError,
+    create_chat_llm,
+    current_ai_provider,
+    llm_error_details,
+    llm_model_name,
+    llm_rate_limit_code,
+    llm_rate_limit_message,
+    llm_unavailable_code,
+    llm_unavailable_message,
+    structured_output_kwargs,
 )
 
 logger = logging.getLogger("devselect")
@@ -160,7 +170,7 @@ class GeminiProviderError(Exception):
         retry_after_seconds: int | None,
         retryable: bool,
     ):
-        super().__init__("Gemini provider request failed.")
+        super().__init__("LLM provider request failed.")
         self.error_type = error_type
         self.status_code = status_code
         self.provider_status = provider_status
@@ -180,82 +190,15 @@ class Agent2StructuredOutputError(Exception):
     pass
 
 
-def _error_status_code(error: Exception) -> int | None:
-    for attr in ("status_code", "code"):
-        value = getattr(error, attr, None)
-        if isinstance(value, int):
-            return value
-        if isinstance(value, str) and value.isdigit():
-            return int(value)
-        enum_value = getattr(value, "value", None)
-        if isinstance(enum_value, int):
-            return enum_value
-
-    response = getattr(error, "response", None)
-    value = getattr(response, "status_code", None)
-    return value if isinstance(value, int) else None
-
-
-def _error_provider_status(error: Exception, lowered_text: str) -> str:
-    for attr in ("status", "reason"):
-        value = getattr(error, attr, None)
-        if value:
-            status = str(getattr(value, "name", value)).strip()
-            if status:
-                return status
-
-    return next(
-        (
-            status
-            for status in (
-                "RESOURCE_EXHAUSTED",
-                "UNAVAILABLE",
-                "DEADLINE_EXCEEDED",
-                "INVALID_ARGUMENT",
-                "INTERNAL",
-            )
-            if status.lower() in lowered_text
-        ),
-        "unknown",
-    )
-
-
 def _gemini_error_details(error: Exception) -> dict[str, Any]:
-    text = str(error)
-    lowered = text.lower()
-    status_code_match = re.search(r"\b(400|401|403|408|429|500|502|503|504)\b", text)
-    retry_match = re.search(
-        r"(?:retry(?:Delay|_delay| in)?[\"':=\s]*)(\d+(?:\.\d+)?)\s*s",
-        text,
-        re.IGNORECASE,
-    )
-    provider_status = _error_provider_status(error, lowered)
-    status_code = _error_status_code(error)
-    if status_code is None and status_code_match:
-        status_code = int(status_code_match.group(1))
-    retry_after_seconds = (
-        math.ceil(float(retry_match.group(1)))
-        if retry_match
-        else None
-    )
-    rate_limited = (
-        status_code == 429
-        or provider_status == "RESOURCE_EXHAUSTED"
-        or any(marker in lowered for marker in ("quota", "rate limit", "too many requests"))
-    )
-    transient = (
-        status_code in {408, 500, 502, 503, 504}
-        or provider_status in {"UNAVAILABLE", "DEADLINE_EXCEEDED", "INTERNAL"}
-        or any(marker in lowered for marker in ("timeout", "timed out", "overloaded"))
-    )
-
+    details = llm_error_details(error)
     return {
-        "error_type": type(error).__name__,
-        "status_code": 429 if rate_limited and status_code is None else status_code,
-        "provider_status": "RESOURCE_EXHAUSTED" if rate_limited and provider_status == "unknown" else provider_status,
-        "retry_after_seconds": retry_after_seconds,
-        "rate_limited": rate_limited,
-        "transient": transient,
+        "error_type": details.error_type,
+        "status_code": details.status_code,
+        "provider_status": details.provider_status,
+        "retry_after_seconds": details.retry_after_seconds,
+        "rate_limited": details.rate_limited,
+        "transient": details.transient,
     }
 
 
@@ -265,10 +208,13 @@ def _log_gemini_provider_failure(
     retryable: bool,
     attempt: int,
 ) -> None:
+    provider = current_ai_provider()
+    model_name = llm_model_name("agent2")
     logger.warning(
-        "Agent 2 provider failure : thread=%s step=gemini_structured_analysis provider=gemini model=%s error_type=%s status_code=%s provider_status=%s retry_after_seconds=%s retryable=%s attempt=%s fallback=%s",
+        "Agent 2 provider failure : thread=%s step=structured_analysis provider=%s model=%s error_type=%s status_code=%s provider_status=%s retry_after_seconds=%s retryable=%s attempt=%s fallback=%s",
         thread_id or "unknown",
-        settings.AGENT2_MODEL,
+        provider,
+        model_name,
         details["error_type"],
         details["status_code"] or "unknown",
         details["provider_status"],
@@ -381,7 +327,7 @@ def _log_structured_output_failure(
     logger.error(
         "Agent 2 structured GitHub analysis failed : thread=%s model=%s response_chars=%s first_200=%r last_200=%r finish_reason=%s usage=%s validation=%s error_type=%s",
         thread_id or "unknown",
-        settings.AGENT2_MODEL,
+        llm_model_name("agent2"),
         len(text),
         text[:200],
         text[-200:] if text else "",
@@ -394,11 +340,10 @@ def _log_structured_output_failure(
 
 GITHUB_ANALYSIS_FAILED_MESSAGE = "We could not complete the GitHub analysis. Please try again."
 GITHUB_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE = "We could not complete the GitHub analysis. Please try again in a few minutes."
-GEMINI_RATE_LIMITED_MESSAGE = "Gemini is temporarily rate-limited. Please try again in a few minutes."
-GEMINI_OVERLOADED_MESSAGE = "Gemini is temporarily overloaded. Please try again in a few minutes."
 GITHUB_DATA_TEMPORARILY_UNAVAILABLE_MESSAGE = "GitHub data is temporarily unavailable. Please try again in a few minutes."
 GITHUB_PROFILE_ACCESS_FAILED_MESSAGE = "We could not access this GitHub profile. Please try again."
 EVALUATION_PREPARATION_FAILED_MESSAGE = "We could not prepare this evaluation. Please upload the CV again."
+GROQ_VALIDATION_FAILED_MESSAGE = "Groq returned an incomplete structured response. Please try again."
 
 
 @retry(
@@ -582,19 +527,16 @@ async def _analyse_with_gemini(
     cv_skills: list[str],
     thread_id: str | None = None,
 ) -> GitHubAnalysis:
-    llm = ChatGoogleGenerativeAI(
-        model=settings.AGENT2_MODEL,
-        google_api_key=settings.GEMINI_API_KEY,
+    model_name = llm_model_name("agent2")
+    llm = create_chat_llm(
+        "agent2",
         temperature=0.2,
         max_tokens=settings.AGENT2_MAX_OUTPUT_TOKENS,
-        request_timeout=settings.GEMINI_TIMEOUT_SECONDS,
         max_retries=0,
-        thinking_budget=0,
     )
     structured_llm = llm.with_structured_output(
         GitHubAnalysis,
-        method="json_schema",
-        include_raw=True,
+        **structured_output_kwargs(include_raw=True),
     )
 
     cv_skills_str = ", ".join(cv_skills) if cv_skills else "Not specified"
@@ -622,7 +564,7 @@ async def _analyse_with_gemini(
         log_llm_request(
             logger,
             "agent2",
-            settings.AGENT2_MODEL,
+            model_name,
             thread_id,
             estimated_input_tokens,
             settings.AGENT2_MAX_OUTPUT_TOKENS,
@@ -661,7 +603,7 @@ async def _analyse_with_gemini(
         ) from e
 
     raw_response = result.get("raw") if isinstance(result, dict) else None
-    log_llm_usage(logger, "agent2", settings.AGENT2_MODEL, thread_id, raw_response or result)
+    log_llm_usage(logger, "agent2", model_name, thread_id, raw_response or result)
     finish_reason = _response_finish_reason(raw_response)
     if "MAX_TOKENS" in finish_reason.upper():
         error = Agent2StructuredOutputError("Agent 2 structured GitHub analysis reached the output limit.")
@@ -910,7 +852,7 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
     )
 
     try:
-        logger.info("Agent 2: Sending GitHub data to Gemini Flash...")
+        logger.info("Agent 2: Sending GitHub data to LLM...")
         github_analysis = await _analyse_with_gemini(
             analysis_payload,
             cv_skills,
@@ -945,18 +887,25 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
             github_analysis.overall_score,
         )
     except GeminiRateLimitError as e:
+        provider = current_ai_provider()
         return {
-            "error": GEMINI_RATE_LIMITED_MESSAGE,
-            "error_code": "GEMINI_RATE_LIMITED",
+            "error": llm_rate_limit_message(provider),
+            "error_code": llm_rate_limit_code(provider),
             "retry_after_seconds": e.retry_after_seconds,
         }
     except Agent2StructuredOutputError as e:
         logger.error(f"Agent 2 Step D structured output error: {e}")
+        if current_ai_provider() == GROQ_PROVIDER:
+            return {
+                "error": GROQ_VALIDATION_FAILED_MESSAGE,
+                "error_code": "GROQ_VALIDATION_FAILED",
+            }
         return {
             "error": GITHUB_ANALYSIS_FAILED_MESSAGE,
             "error_code": "GITHUB_ANALYSIS_INVALID",
         }
     except GeminiTransientError as e:
+        provider = current_ai_provider()
         _log_gemini_provider_failure(
             {
                 "error_type": e.error_type,
@@ -969,11 +918,12 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
             2,
         )
         return {
-            "error": GEMINI_OVERLOADED_MESSAGE,
-            "error_code": "GEMINI_PROVIDER_UNAVAILABLE",
+            "error": llm_unavailable_message(provider, e.status_code),
+            "error_code": llm_unavailable_code(provider, e.status_code),
             "retry_after_seconds": e.retry_after_seconds,
         }
     except GeminiProviderError as e:
+        provider = current_ai_provider()
         _log_gemini_provider_failure(
             {
                 "error_type": e.error_type,
@@ -986,9 +936,15 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
             1,
         )
         return {
-            "error": GITHUB_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE,
-            "error_code": "GEMINI_PROVIDER_ERROR",
+            "error": llm_unavailable_message(provider, e.status_code),
+            "error_code": llm_unavailable_code(provider, e.status_code),
             "retry_after_seconds": e.retry_after_seconds,
+        }
+    except LLMProviderConfigurationError:
+        logger.error("Agent 2 provider configuration failed : thread=%s", thread_id)
+        return {
+            "error": GITHUB_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE,
+            "error_code": "LLM_PROVIDER_CONFIGURATION_ERROR",
         }
     except Exception as e:
         logger.error(

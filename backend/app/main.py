@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
         min_size=1,
         max_size=10,
         open=False,
+        check=AsyncConnectionPool.check_connection,
         kwargs={
             "autocommit": True,
             "prepare_threshold": 0,

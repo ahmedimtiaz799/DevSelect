@@ -12,6 +12,7 @@ STRICT RULES:
 8. Programming languages go in "languages". Frameworks and tools go in "frameworks".
 9. For "current_title", use the clear role/title shown under the candidate name, in the professional summary, or in the most recent work experience. Do not leave it null when a role/title is explicitly present.
 10. For "projects", extract concise project entries containing the project name and the strongest technologies or purpose explicitly stated in the CV.
+11. Each "projects" array item must be a single string. Do not return project objects.
 
 REQUIRED JSON STRUCTURE:
 {{
