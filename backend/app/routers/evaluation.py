@@ -118,6 +118,7 @@ MAX_CV_UPLOAD_BYTES = 10 * 1024 * 1024
 PDF_HEADER_READ_BYTES = 32
 CHAT_ACCESS_DENIED_MESSAGE = "You do not have access to this chat."
 EVALUATION_SESSION_UNAVAILABLE_MESSAGE = "This evaluation session is no longer available. Please start a new evaluation."
+EVALUATION_STATE_TEMPORARILY_UNAVAILABLE_MESSAGE = "Evaluation state is temporarily unavailable. Please try again."
 UPLOAD_SECURITY_MESSAGES = {
     "INVALID_FILE_TYPE": "Please upload a valid PDF CV under 10 MB.",
     "FILE_TOO_LARGE": "Please upload a valid PDF CV under 10 MB.",
@@ -734,11 +735,6 @@ async def _release_stream_thread(thread_id: str) -> None:
         ACTIVE_STREAM_THREADS.discard(thread_id)
 
 
-async def _is_stream_thread_active(thread_id: str) -> bool:
-    async with EVALUATION_GUARD_LOCK:
-        return thread_id in ACTIVE_STREAM_THREADS
-
-
 async def _set_graph_evaluation_status(graph, thread_id: str, status: str) -> None:
     update_state = getattr(graph, "aupdate_state", None)
     if update_state is None:
@@ -756,8 +752,16 @@ async def _set_graph_evaluation_status(graph, thread_id: str, status: str) -> No
 async def _graph_thread_has_state(graph, thread_id: str) -> bool:
     try:
         snapshot = await graph.aget_state({"configurable": {"thread_id": thread_id}})
-    except Exception:
-        return False
+    except Exception as e:
+        logger.exception(
+            "Checkpoint existence check failed : thread=%s error_type=%s",
+            thread_id,
+            type(e).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=EVALUATION_STATE_TEMPORARILY_UNAVAILABLE_MESSAGE,
+        ) from e
 
     return bool(snapshot and snapshot.values)
 
@@ -868,7 +872,7 @@ async def mock_evaluation_stream_generator(
     except asyncio.CancelledError:
         await _set_mock_run_status(thread_id, EVALUATION_STOPPED)
         logger.info(f"Mock SSE stream cancelled : thread={thread_id}")
-        raise
+        return
     except Exception:
         await _set_mock_run_status(thread_id, EVALUATION_FAILED)
         raise
@@ -1241,7 +1245,7 @@ async def evaluation_stream_generator(
     except asyncio.CancelledError:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
         logger.info(f"SSE stream cancelled : thread={thread_id}")
-        raise
+        return
     except Exception as e:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         logger.exception(f"SSE pipeline failed : thread={thread_id} error={e}")
@@ -1314,19 +1318,38 @@ async def stream_evaluation(
     graph = request.app.state.graph
     config = {"configurable": {"thread_id": thread_id}}
 
+    if not await _claim_stream_thread(thread_id):
+        logger.info("Duplicate SSE stream rejected : chat=%s thread=%s", chat_id, thread_id)
+        return _sse_response(
+            _single_error_stream(_thread_terminal_error_payload(EVALUATION_IN_PROGRESS))
+        )
+
     try:
         snapshot = await graph.aget_state(config)
     except Exception as e:
-        logger.error(f"Failed to read checkpoint — thread={thread_id} error={e}")
-        raise HTTPException(status_code=404, detail=EVALUATION_SESSION_UNAVAILABLE_MESSAGE)
+        await _release_stream_thread(thread_id)
+        logger.exception(
+            "Failed to read checkpoint : thread=%s error_type=%s",
+            thread_id,
+            type(e).__name__,
+        )
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": EVALUATION_STATE_TEMPORARILY_UNAVAILABLE_MESSAGE,
+                "code": "EVALUATION_STATE_TEMPORARILY_UNAVAILABLE",
+            },
+        )
 
     if snapshot is None or not snapshot.values:
+        await _release_stream_thread(thread_id)
         raise HTTPException(status_code=404, detail=EVALUATION_SESSION_UNAVAILABLE_MESSAGE)
 
     meta = _candidate_meta(snapshot.values, snapshot.tasks)
     evaluation_status = _evaluation_status(snapshot.values)
 
     if evaluation_status == EVALUATION_COMPLETED and snapshot.values.get("report"):
+        await _release_stream_thread(thread_id)
         return _sse_response(
             _cached_report_stream_generator(
                 request,
@@ -1342,18 +1365,9 @@ async def stream_evaluation(
         EVALUATION_STOPPED,
         EVALUATION_FAILED,
     }:
+        await _release_stream_thread(thread_id)
         return _sse_response(
             _single_error_stream(_thread_terminal_error_payload(evaluation_status))
-        )
-
-    if await _is_stream_thread_active(thread_id):
-        return _sse_response(
-            _single_error_stream(_thread_terminal_error_payload(EVALUATION_IN_PROGRESS))
-        )
-
-    if not await _claim_stream_thread(thread_id):
-        return _sse_response(
-            _single_error_stream(_thread_terminal_error_payload(EVALUATION_IN_PROGRESS))
         )
 
     return _sse_response(

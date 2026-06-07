@@ -4,6 +4,7 @@ import math
 import re
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -17,7 +18,7 @@ from tenacity import (
 
 from app.agents.state import DevSelectState
 from app.config import settings
-from app.models.candidate import GitHubAnalysis
+from app.models.candidate import GitHubAnalysis, GitHubAnalysisStatus, GitHubScenario
 from app.prompts.agent2_prompt import AGENT2_PROMPT
 from app.utils.llm_observability import (
     cap_text_for_llm,
@@ -102,19 +103,52 @@ query FetchDeveloperProfile($login: String!) {
 
 
 def _extract_username(github_url: str) -> str:
-    url = github_url.strip().rstrip("/")
-    username = url.split("/")[-1]
+    clean_url = github_url.strip().rstrip("/")
+    if not clean_url:
+        raise ValueError("Could not extract username from empty GitHub URL")
+
+    if not clean_url.startswith(("http://", "https://")):
+        clean_url = f"https://{clean_url}"
+
+    parsed = urlparse(clean_url)
+    host = parsed.netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+
+    if host != "github.com":
+        raise ValueError(f"Could not extract username from URL: {github_url}")
+
+    path_parts = [part for part in parsed.path.split("/") if part]
+    username = path_parts[0] if path_parts else ""
     if not username:
         raise ValueError(f"Could not extract username from URL: {github_url}")
     return username
 
 
 class GitHubRateLimitError(Exception):
-    pass
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None = None,
+        provider_status: str = "rate_limited",
+        retry_after_seconds: int | None = None,
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.provider_status = provider_status
+        self.retry_after_seconds = retry_after_seconds
 
 
 class GitHubTransientError(Exception):
-    pass
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None = None,
+        provider_status: str = "unavailable",
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.provider_status = provider_status
 
 
 class GeminiProviderError(Exception):
@@ -146,16 +180,31 @@ class Agent2StructuredOutputError(Exception):
     pass
 
 
-def _gemini_error_details(error: Exception) -> dict[str, Any]:
-    text = str(error)
-    lowered = text.lower()
-    status_code_match = re.search(r"\b(400|401|403|408|429|500|502|503|504)\b", text)
-    retry_match = re.search(
-        r"(?:retry(?:Delay|_delay| in)?[\"':=\s]*)(\d+(?:\.\d+)?)\s*s",
-        text,
-        re.IGNORECASE,
-    )
-    provider_status = next(
+def _error_status_code(error: Exception) -> int | None:
+    for attr in ("status_code", "code"):
+        value = getattr(error, attr, None)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+        enum_value = getattr(value, "value", None)
+        if isinstance(enum_value, int):
+            return enum_value
+
+    response = getattr(error, "response", None)
+    value = getattr(response, "status_code", None)
+    return value if isinstance(value, int) else None
+
+
+def _error_provider_status(error: Exception, lowered_text: str) -> str:
+    for attr in ("status", "reason"):
+        value = getattr(error, attr, None)
+        if value:
+            status = str(getattr(value, "name", value)).strip()
+            if status:
+                return status
+
+    return next(
         (
             status
             for status in (
@@ -165,11 +214,25 @@ def _gemini_error_details(error: Exception) -> dict[str, Any]:
                 "INVALID_ARGUMENT",
                 "INTERNAL",
             )
-            if status.lower() in lowered
+            if status.lower() in lowered_text
         ),
         "unknown",
     )
-    status_code = int(status_code_match.group(1)) if status_code_match else None
+
+
+def _gemini_error_details(error: Exception) -> dict[str, Any]:
+    text = str(error)
+    lowered = text.lower()
+    status_code_match = re.search(r"\b(400|401|403|408|429|500|502|503|504)\b", text)
+    retry_match = re.search(
+        r"(?:retry(?:Delay|_delay| in)?[\"':=\s]*)(\d+(?:\.\d+)?)\s*s",
+        text,
+        re.IGNORECASE,
+    )
+    provider_status = _error_provider_status(error, lowered)
+    status_code = _error_status_code(error)
+    if status_code is None and status_code_match:
+        status_code = int(status_code_match.group(1))
     retry_after_seconds = (
         math.ceil(float(retry_match.group(1)))
         if retry_match
@@ -332,6 +395,8 @@ def _log_structured_output_failure(
 GITHUB_ANALYSIS_FAILED_MESSAGE = "We could not complete the GitHub analysis. Please try again."
 GITHUB_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE = "We could not complete the GitHub analysis. Please try again in a few minutes."
 GEMINI_RATE_LIMITED_MESSAGE = "Gemini is temporarily rate-limited. Please try again in a few minutes."
+GEMINI_OVERLOADED_MESSAGE = "Gemini is temporarily overloaded. Please try again in a few minutes."
+GITHUB_DATA_TEMPORARILY_UNAVAILABLE_MESSAGE = "GitHub data is temporarily unavailable. Please try again in a few minutes."
 GITHUB_PROFILE_ACCESS_FAILED_MESSAGE = "We could not access this GitHub profile. Please try again."
 EVALUATION_PREPARATION_FAILED_MESSAGE = "We could not prepare this evaluation. Please upload the CV again."
 
@@ -360,32 +425,76 @@ async def _query_github_graphql(username: str) -> dict:
                 json=payload,
             )
 
+        logger.info(
+            "Agent 2 GitHub GraphQL response : username=%s status_code=%s rate_remaining=%s",
+            username,
+            response.status_code,
+            response.headers.get("X-RateLimit-Remaining", "unknown"),
+        )
+
         if response.status_code == 403:
             remaining = response.headers.get("X-RateLimit-Remaining", "unknown")
             if remaining == "0" or "rate limit" in response.text.lower():
                 raise GitHubRateLimitError(
-                    "GitHub is temporarily limiting requests. Please retry in 60 seconds."
+                    "GitHub is temporarily limiting requests. Please retry in 60 seconds.",
+                    status_code=response.status_code,
+                    retry_after_seconds=60,
                 )
             raise GitHubRateLimitError(
-                GITHUB_PROFILE_ACCESS_FAILED_MESSAGE
+                GITHUB_PROFILE_ACCESS_FAILED_MESSAGE,
+                status_code=response.status_code,
+                provider_status="forbidden",
             )
 
         if response.status_code >= 500:
             raise GitHubTransientError(
-                f"GitHub API server error: {response.status_code}"
+                "GitHub API server error",
+                status_code=response.status_code,
+                provider_status="server_error",
             )
 
         response.raise_for_status()
-        return response.json()
+        payload = response.json()
+        errors = payload.get("errors") if isinstance(payload, dict) else None
+        if errors:
+            first_error = errors[0] if isinstance(errors, list) and errors else {}
+            error_type = str(first_error.get("type") or "graphql_error")
+            message = str(first_error.get("message") or "")
+            lowered = message.lower()
+            logger.warning(
+                "Agent 2 GitHub GraphQL errors : username=%s error_type=%s",
+                username,
+                error_type,
+            )
+            if "rate limit" in lowered or "rate_limit" in error_type.lower():
+                raise GitHubRateLimitError(
+                    "GitHub is temporarily limiting requests. Please retry in 60 seconds.",
+                    status_code=response.status_code,
+                    provider_status=error_type,
+                    retry_after_seconds=60,
+                )
+            raise GitHubTransientError(
+                "GitHub GraphQL returned errors",
+                status_code=response.status_code,
+                provider_status=error_type,
+            )
+
+        return payload
 
     except httpx.TimeoutException as e:
-        raise GitHubTransientError(f"GitHub API timeout: {e}")
+        raise GitHubTransientError("GitHub API timeout", provider_status="timeout") from e
     except httpx.NetworkError as e:
-        raise GitHubTransientError(f"GitHub API network error: {e}")
+        raise GitHubTransientError("GitHub API network error", provider_status="network_error") from e
+    except httpx.HTTPStatusError as e:
+        raise GitHubTransientError(
+            "GitHub API returned an unexpected HTTP status",
+            status_code=e.response.status_code,
+            provider_status="http_error",
+        ) from e
     except (GitHubRateLimitError, GitHubTransientError):
         raise
     except Exception as e:
-        raise GitHubTransientError(f"Unexpected GitHub API error: {e}")
+        raise GitHubTransientError("Unexpected GitHub API error") from e
 
 
 def _pre_score_profile(raw_data: dict) -> dict:
@@ -650,15 +759,41 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
         raw_data = await _query_github_graphql(username)
         logger.info("Agent 2: GitHub GraphQL responded")
     except GitHubRateLimitError as e:
-        logger.error(f"Agent 2 rate limit: {e}")
-        return {"error": str(e)}
-    except Exception as e:
-        logger.error(f"Agent 2 Step A failed after retries: {e}")
+        logger.warning(
+            "Agent 2 GitHub rate limit : thread=%s username=%s status_code=%s provider_status=%s retry_after_seconds=%s",
+            thread_id,
+            username,
+            e.status_code or "unknown",
+            e.provider_status,
+            e.retry_after_seconds or "unknown",
+        )
         return {
-            "error": (
-                "GitHub profile could not be fetched after 3 attempts. "
-                "Please check the URL and try again."
-            )
+            "error": GITHUB_DATA_TEMPORARILY_UNAVAILABLE_MESSAGE,
+            "error_code": "GITHUB_RATE_LIMITED",
+            "retry_after_seconds": e.retry_after_seconds,
+        }
+    except GitHubTransientError as e:
+        logger.warning(
+            "Agent 2 GitHub unavailable : thread=%s username=%s status_code=%s provider_status=%s",
+            thread_id,
+            username,
+            e.status_code or "unknown",
+            e.provider_status,
+        )
+        return {
+            "error": GITHUB_DATA_TEMPORARILY_UNAVAILABLE_MESSAGE,
+            "error_code": "GITHUB_DATA_UNAVAILABLE",
+        }
+    except Exception as e:
+        logger.error(
+            "Agent 2 Step A failed : thread=%s username=%s error_type=%s",
+            thread_id,
+            username,
+            type(e).__name__,
+        )
+        return {
+            "error": GITHUB_DATA_TEMPORARILY_UNAVAILABLE_MESSAGE,
+            "error_code": "GITHUB_DATA_UNAVAILABLE",
         }
 
     user_data = raw_data.get("data", {}).get("user")
@@ -783,8 +918,8 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
         )
         github_analysis = github_analysis.model_copy(
             update={
-                "scenario": "ACCESSIBLE",
-                "analysis_status": "VERIFIED",
+                "scenario": GitHubScenario.ACCESSIBLE,
+                "analysis_status": GitHubAnalysisStatus.VERIFIED,
                 "original_repo_count": pre_scores.get("repo_count", 0),
                 "repos_with_readme": pre_scores.get("repos_with_readme", 0),
                 "total_commits": pre_scores.get("total_commits", 0),
@@ -834,8 +969,25 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
             2,
         )
         return {
-            "error": GITHUB_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE,
+            "error": GEMINI_OVERLOADED_MESSAGE,
             "error_code": "GEMINI_PROVIDER_UNAVAILABLE",
+            "retry_after_seconds": e.retry_after_seconds,
+        }
+    except GeminiProviderError as e:
+        _log_gemini_provider_failure(
+            {
+                "error_type": e.error_type,
+                "status_code": e.status_code,
+                "provider_status": e.provider_status,
+                "retry_after_seconds": e.retry_after_seconds,
+            },
+            thread_id,
+            False,
+            1,
+        )
+        return {
+            "error": GITHUB_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE,
+            "error_code": "GEMINI_PROVIDER_ERROR",
             "retry_after_seconds": e.retry_after_seconds,
         }
     except Exception as e:

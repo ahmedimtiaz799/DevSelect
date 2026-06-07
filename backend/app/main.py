@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
 
 from app.config import settings
 from app.routers import health
@@ -20,7 +22,18 @@ if sys.platform == "win32":
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with AsyncPostgresSaver.from_conn_string(settings.DATABASE_URL) as checkpointer:
+    async with AsyncConnectionPool(
+        conninfo=settings.DATABASE_URL,
+        min_size=1,
+        max_size=10,
+        open=False,
+        kwargs={
+            "autocommit": True,
+            "prepare_threshold": 0,
+            "row_factory": dict_row,
+        },
+    ) as checkpoint_pool:
+        checkpointer = AsyncPostgresSaver(checkpoint_pool)
         await checkpointer.setup()
         app.state.graph = build_graph(checkpointer)
         yield

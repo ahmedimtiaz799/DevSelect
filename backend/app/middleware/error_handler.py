@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sentry_sdk
 from fastapi import FastAPI, Request, HTTPException
@@ -20,7 +21,7 @@ def init_sentry() -> None:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         traces_sample_rate=0.1,
-        ignore_errors=[GeneratorExit],
+        ignore_errors=[GeneratorExit, asyncio.CancelledError],
         integrations=[
             StarletteIntegration(),
             FastApiIntegration(),
