@@ -32,9 +32,9 @@ export function About() {
 
           <p>
             This is an independent portfolio project built to demonstrate
-            production-style AI engineering, including CV parsing, GitHub
-            analysis, multi-agent workflows, authentication, streaming
-            responses, and saved chat history.
+            real-world AI engineering, including CV review, GitHub activity
+            analysis, AI workflow design, secure sign-in, live report streaming,
+            and saved chat history.
           </p>
         </div>
 
