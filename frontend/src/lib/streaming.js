@@ -182,3 +182,77 @@ export function streamChatResponse(
 
   return abortStream;
 }
+
+export function streamFollowUpResponse(chatId, question, token, handlers) {
+  const { onToken, onDone, onError } = handlers;
+
+  const controller = new AbortController();
+  let intentionalAbort = false;
+  let settled = false;
+
+  function abortStream() {
+    intentionalAbort = true;
+    controller.abort();
+  }
+
+  fetchEventSource(`${BASE_URL}/api/chat/${chatId}/follow-up/stream`, {
+    method: 'POST',
+    signal: controller.signal,
+    openWhenHidden: true,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ question }),
+    async onopen(response) {
+      if (response.ok) return;
+
+      settled = true;
+      onError(await parseStreamStartupError(response));
+      abortStream();
+    },
+    onmessage(event) {
+      if (event.event === 'token') {
+        onToken(JSON.parse(event.data).text);
+        return;
+      }
+      if (event.event === 'done') {
+        settled = true;
+        onDone();
+        abortStream();
+        return;
+      }
+      if (event.event === 'error') {
+        settled = true;
+        onError(parseEventData(event.data));
+        abortStream();
+        return;
+      }
+      console.warn('Unknown follow-up SSE event type:', event.event);
+    },
+    onerror(err) {
+      if (intentionalAbort || controller.signal.aborted || isAbortError(err)) {
+        return;
+      }
+      throw err;
+    },
+    onclose() {
+      if (settled || intentionalAbort || controller.signal.aborted) {
+        return;
+      }
+      settled = true;
+      onError({
+        error: 'Follow-up answer failed. Please try again.',
+        code: 'UNEXPECTED_STREAM_END',
+      });
+    },
+  }).catch((err) => {
+    if (intentionalAbort || controller.signal.aborted || isAbortError(err)) {
+      return;
+    }
+    settled = true;
+    onError({ error: err?.message ?? 'Follow-up answer failed. Please try again.' });
+  });
+
+  return abortStream;
+}

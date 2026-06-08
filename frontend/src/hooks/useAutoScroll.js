@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-export function useAutoScroll(messages) {
+export function useAutoScroll(messages, layoutKey = '') {
   const containerRef = useRef(null)
   const shouldAutoScrollRef = useRef(true)
   const frameRef = useRef(null)
@@ -44,7 +44,7 @@ export function useAutoScroll(messages) {
     frameRef.current = requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight
     })
-  }, [messages])
+  }, [messages, layoutKey])
 
   return containerRef
 }

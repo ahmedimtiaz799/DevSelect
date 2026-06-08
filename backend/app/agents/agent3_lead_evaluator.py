@@ -5,6 +5,13 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from app.agents.state import DevSelectState
 from app.config import settings
 from app.prompts.agent3_prompt import AGENT3_SYSTEM_PROMPT
+from app.utils.candidate_domain import (
+    NON_TECHNICAL,
+    SEMI_TECHNICAL,
+    SKIP_NON_TECHNICAL,
+    SKIP_UNCLEAR,
+    UNCLEAR,
+)
 from app.utils.llm_observability import (
     cap_text_for_llm,
     estimate_tokens_from_messages,
@@ -34,11 +41,31 @@ ROLE_KEYWORDS = (
     "developer",
     "architect",
     "designer",
+    "executive",
+    "officer",
+    "accountant",
     "manager",
     "analyst",
     "scientist",
     "specialist",
     "consultant",
+    "teacher",
+    "lecturer",
+    "instructor",
+    "doctor",
+    "physician",
+    "nurse",
+    "lawyer",
+    "attorney",
+    "driver",
+    "chef",
+    "guard",
+    "electrician",
+    "mechanic",
+    "supervisor",
+    "pharmacist",
+    "technician",
+    "support",
     "devops",
     "qa",
     "frontend",
@@ -53,6 +80,15 @@ ROLE_KEYWORDS = (
     "data",
     "product",
     "scrum",
+    "marketing",
+    "sales",
+    "operations",
+    "finance",
+    "warehouse",
+    "retail",
+    "legal",
+    "clinical",
+    "lab",
 )
 ROLE_STOP_LINES = {
     "professional summary",
@@ -69,7 +105,7 @@ ROLE_STOP_LINES = {
 
 class GeminiQuotaExceededError(Exception):
     code = "GEMINI_QUOTA_EXCEEDED"
-    user_message = "Gemini quota reached. Please wait and try again."
+    user_message = "The AI provider is temporarily rate-limited. Please try again in a few minutes."
     retry_after_seconds = GEMINI_QUOTA_RETRY_AFTER_SECONDS
 
     def __init__(
@@ -326,6 +362,141 @@ def _unique_text_values(*groups) -> list[str]:
     return values
 
 
+def _github_review_guidance(
+    candidate_domain: str | None,
+    github_review_policy: str | None,
+    detected_role: str | None,
+) -> str:
+    role_label = detected_role or "the detected role"
+
+    if github_review_policy == SKIP_NON_TECHNICAL or candidate_domain == NON_TECHNICAL:
+        return (
+            f"- Candidate domain is NON_TECHNICAL for {role_label}. GitHub review was intentionally skipped because this appears to be a non-technical or business-oriented role.\n"
+            "- Base the evaluation on CV evidence only.\n"
+            "- Do not treat missing GitHub evidence as a red flag, weakness, or score penalty.\n"
+            "- Do not include a GitHub Profile Review or Skill Match Assessment section in the final report.\n"
+            "- If useful, add one short neutral Evaluation Scope line explaining that GitHub/code analysis was not applicable for this role."
+        )
+
+    if github_review_policy == SKIP_UNCLEAR or candidate_domain == UNCLEAR:
+        return (
+            f"- Candidate domain is UNCLEAR for {role_label}. GitHub review was skipped because the role evidence is not clear enough to justify code-based evaluation.\n"
+            "- Proceed with a cautious CV-only evaluation.\n"
+            "- Do not invent GitHub weaknesses or treat the skipped review as a negative.\n"
+            "- Keep the report CV-only and explain the limited evaluation scope briefly without inventing a GitHub section."
+        )
+
+    if candidate_domain == SEMI_TECHNICAL:
+        return (
+            f"- Candidate domain is SEMI_TECHNICAL for {role_label}.\n"
+            "- Use GitHub only as supporting evidence when it is available and relevant.\n"
+            "- Do not let weak or missing GitHub outweigh strong CV evidence unless the role clearly requires hands-on coding."
+        )
+
+    return (
+        f"- Candidate domain is TECHNICAL for {role_label}.\n"
+        "- Use the normal technical evaluation flow."
+    )
+
+
+def _non_technical_interview_track(detected_role: str | None) -> str:
+    role_text = (detected_role or "").lower()
+
+    if any(keyword in role_text for keyword in ("teacher", "lecturer", "instructor", "education")):
+        return "teaching/classroom interview"
+    if any(keyword in role_text for keyword in ("doctor", "physician", "nurse", "pharmacist", "lab technician", "laboratory technician", "clinical", "medical")):
+        return "healthcare/clinical interview"
+    if any(keyword in role_text for keyword in ("lawyer", "attorney", "legal", "paralegal")):
+        return "legal interview"
+    if any(keyword in role_text for keyword in ("driver", "transport", "logistics", "delivery")):
+        return "driving/logistics interview"
+    if any(keyword in role_text for keyword in ("chef", "cook", "kitchen", "hospitality", "restaurant")):
+        return "kitchen/hospitality interview"
+    if any(keyword in role_text for keyword in ("security guard", "security officer", "security")):
+        return "security/safety interview"
+    if any(keyword in role_text for keyword in ("electrician", "mechanic", "plumber", "welder", "trade", "maintenance")):
+        return "trade/skills interview"
+    if any(keyword in role_text for keyword in ("ui/ux", "ux designer", "ui designer", "graphic designer", "product designer", "designer")):
+        return "design/portfolio interview"
+    if any(keyword in role_text for keyword in ("warehouse", "store manager", "retail", "merchand", "inventory")):
+        return "operations/retail interview"
+    if any(keyword in role_text for keyword in ("account", "finance", "accounts", "bookkeep", "sap", "treasury", "receivable", "payable")):
+        return "accounts/finance interview"
+    if any(keyword in role_text for keyword in ("sales", "account executive", "business development", "client", "relationship", "marketing", "brand", "content", "social media")):
+        return "sales/marketing interview"
+    if any(keyword in role_text for keyword in ("hr", "human resources", "recruit", "talent")):
+        return "HR/people-operations interview"
+    if any(keyword in role_text for keyword in ("admin", "operations", "office", "coordinator")):
+        return "operations/admin interview"
+    if any(keyword in role_text for keyword in ("customer support", "customer service", "support")):
+        return "customer support interview"
+
+    return "role-specific interview"
+
+
+def _regulated_role_caution(detected_role: str | None) -> str:
+    role_text = (detected_role or "").lower()
+    if any(
+        keyword in role_text
+        for keyword in (
+            "doctor",
+            "physician",
+            "nurse",
+            "pharmacist",
+            "lab technician",
+            "laboratory technician",
+            "lawyer",
+            "attorney",
+            "legal",
+            "security guard",
+            "security officer",
+            "driver",
+            "electrician",
+            "mechanic",
+        )
+    ):
+        return (
+            "- Include one concise caution that licenses, certifications, and legal eligibility must be verified by a qualified human recruiter or employer.\n"
+        )
+
+    return ""
+
+
+def _report_structure_guidance(
+    candidate_domain: str | None,
+    github_review_policy: str | None,
+    detected_role: str | None,
+) -> str:
+    if github_review_policy == SKIP_NON_TECHNICAL or candidate_domain == NON_TECHNICAL:
+        interview_track = _non_technical_interview_track(detected_role)
+        regulated_caution = _regulated_role_caution(detected_role)
+        return (
+            "- Use the non-technical report structure only: Candidate Overview, CV & Experience Review, Role Fit, Strengths, Risks / Gaps, Hiring Recommendation, Suggested Interview Focus, Suggested Next Steps.\n"
+            "- Do not include GitHub Profile Review, Skill Match Assessment, or software-engineering technical interview wording.\n"
+            "- Do not mention missing GitHub as a weakness.\n"
+            "- Do not say the role is unclear when a clear non-technical or business role is detected.\n"
+            "- Format Strengths, Risks / Gaps, Why, and Suggested Next Steps as markdown bullet lists.\n"
+            "- In Hiring Recommendation, use screening-style wording. For a positive CV-only screen, use **Recommendation:** Proceed to Interview instead of Hire.\n"
+            f"{regulated_caution}"
+            f"- In Hiring Recommendation and Suggested Next Steps, describe the next interview as a {interview_track} focused on role-relevant verification areas from the CV."
+        )
+
+    if github_review_policy == SKIP_UNCLEAR or candidate_domain == UNCLEAR:
+        return (
+            "- Keep the report CV-only when GitHub review was skipped because the role is unclear.\n"
+            "- Use cautious wording and explain the limited evaluation scope briefly.\n"
+            "- Only use unclear-role wording when the detected role is genuinely missing or too vague to classify confidently."
+        )
+
+    if candidate_domain == SEMI_TECHNICAL:
+        return (
+            "- Keep the standard technical report structure.\n"
+            "- Use GitHub as supporting evidence rather than the dominant scoring axis unless the role clearly requires hands-on coding."
+        )
+
+    return "- Keep the standard technical report structure."
+
+
 async def _stream_with_fallback(messages: list, thread_id: str | None = None) -> str:
     estimated_input_tokens = estimate_tokens_from_messages(messages)
     provider = current_ai_provider()
@@ -453,6 +624,9 @@ async def agent3_lead_evaluator(state: DevSelectState) -> dict:
     evaluation_datetime_iso = state.get("evaluation_datetime_iso")
     evaluation_timezone_source = state.get("evaluation_timezone_source")
     error = state.get("error")
+    candidate_domain = state.get("candidate_domain")
+    candidate_domain_source = state.get("candidate_domain_source")
+    github_review_policy = state.get("github_review_policy")
 
     logger.info(f"Agent 3 generating report for thread {thread_id}")
     logger.info(
@@ -470,16 +644,29 @@ async def agent3_lead_evaluator(state: DevSelectState) -> dict:
 
     detected_role, role_source = _detect_candidate_role(candidate, state.get("raw_cv_text"))
     logger.info(
-        "Agent 3 candidate role context : thread=%s keys=%s candidate_name=%s role=%s role_source=%s",
+        "Agent 3 candidate role context : thread=%s keys=%s candidate_name=%s role=%s role_source=%s candidate_domain=%s candidate_domain_source=%s github_review_policy=%s",
         thread_id,
         _candidate_keys(candidate),
         _field(candidate, "full_name") or "not_found",
         detected_role or "not_detected",
         role_source,
+        candidate_domain or "unknown",
+        candidate_domain_source or "unknown",
+        github_review_policy or "standard",
     )
 
     candidate_section = _format_candidate(candidate, detected_role)
-    github_section = _format_github(github)
+    github_section = _format_github(github, candidate_domain, github_review_policy)
+    github_guidance = _github_review_guidance(
+        candidate_domain,
+        github_review_policy,
+        detected_role,
+    )
+    report_structure_guidance = _report_structure_guidance(
+        candidate_domain,
+        github_review_policy,
+        detected_role,
+    )
     candidate_skills = _unique_text_values(
         _field(candidate, "skills", []),
         _field(candidate, "languages", []),
@@ -558,6 +745,10 @@ Evidence handling rules:
 - Treat listed CV skills, technologies, projects, experience, education, and certifications as available CV evidence. Do not describe the CV as sparse or claim it contains no skills when these fields contain values.
 - Claim zero GitHub activity, zero original repositories, or absent README documentation only when GitHub Analysis Status is VERIFIED and the corresponding verified count is zero.
 - When GitHub Analysis Status is not VERIFIED, state that GitHub data is unavailable and do not infer zero activity.
+- Domain-specific evaluation rules:
+{github_guidance}
+- Domain-specific report structure rules:
+{report_structure_guidance}
 - Complete the report through the ## Suggested Next Steps section. Keep each section concise enough to finish the full report.
 
 --- CANDIDATE DATA (from CV) ---
@@ -702,7 +893,20 @@ Instruction handling rules:
 """.rstrip()
 
 
-def _format_github(github) -> str:
+def _format_github(github, candidate_domain: str | None = None, github_review_policy: str | None = None) -> str:
+    if github_review_policy == SKIP_NON_TECHNICAL or candidate_domain == NON_TECHNICAL:
+        return (
+            "GitHub review was intentionally skipped because this candidate appears to be in a "
+            "non-technical or business-oriented role. Proceed with CV-only evaluation and apply "
+            "no GitHub weakness penalty."
+        )
+
+    if github_review_policy == SKIP_UNCLEAR or candidate_domain == UNCLEAR:
+        return (
+            "GitHub review was skipped because the candidate role is unclear from the CV. "
+            "Proceed with a cautious CV-only evaluation and do not infer GitHub weaknesses."
+        )
+
     if not github:
         return "GitHub data was partially available, so this section should be treated with caution. Verified GitHub activity data is unavailable."
 

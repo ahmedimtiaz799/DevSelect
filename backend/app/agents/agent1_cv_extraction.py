@@ -26,6 +26,11 @@ from app.utils.llm_observability import (
     log_llm_usage,
 )
 from app.utils.cv_likeness import assess_cv_likeness
+from app.utils.candidate_domain import (
+    SKIP_NON_TECHNICAL,
+    classify_candidate_domain,
+    github_review_policy,
+)
 from app.utils.llm_provider import (
     GROQ_PROVIDER,
     LLMProviderConfigurationError,
@@ -44,6 +49,14 @@ CV_EXTRACTION_INVALID_MESSAGE = "This PDF could not be read as a candidate CV. P
 CV_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE = "CV analysis is temporarily unavailable. Please try again in a few minutes."
 EVALUATION_PREPARATION_FAILED_MESSAGE = "We could not prepare this evaluation. Please upload the CV again."
 GROQ_VALIDATION_FAILED_MESSAGE = "Groq returned an incomplete structured response. Please try again."
+NON_TECHNICAL_GITHUB_SKIP_MESSAGE = (
+    "This CV appears to be for a non-technical or business-oriented role. "
+    "GitHub review will be skipped and the evaluation will proceed using CV evidence only."
+)
+UNCLEAR_ROLE_GITHUB_SKIP_MESSAGE = (
+    "The candidate role is unclear from the CV, so GitHub review will be skipped and "
+    "the evaluation will proceed cautiously using CV evidence only."
+)
 
 
 class LlamaParseTransientError(Exception):
@@ -737,6 +750,8 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         }
 
     candidate, role_source = _ensure_candidate_role(candidate, raw_cv_text)
+    candidate_domain, candidate_domain_source = classify_candidate_domain(candidate, raw_cv_text)
+    review_policy = github_review_policy(candidate_domain)
     candidate_log_state = candidate.model_dump(mode="json")
     candidate_state_text = str(candidate_log_state).lower()
     raw_section_count = sum(
@@ -756,12 +771,15 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         )
     )
     logger.info(
-        "Agent 1: Extracted candidate thread=%s keys=%s candidate_name=%s role=%s role_source=%s skills=%s languages=%s frameworks=%s projects=%s experience=%s education_present=%s certifications=%s has_devselect=%s has_casex=%s candidate_state_chars=%s parsed_cv_chars=%s",
+        "Agent 1: Extracted candidate thread=%s keys=%s candidate_name=%s role=%s role_source=%s candidate_domain=%s candidate_domain_source=%s github_review_policy=%s skills=%s languages=%s frameworks=%s projects=%s experience=%s education_present=%s certifications=%s has_devselect=%s has_casex=%s candidate_state_chars=%s parsed_cv_chars=%s",
         state["thread_id"],
         ",".join(candidate_log_state.keys()),
         candidate.full_name or "not_found",
         candidate.current_title or "not_detected",
         role_source,
+        candidate_domain,
+        candidate_domain_source,
+        review_policy or "standard",
         len(candidate.skills or []),
         len(candidate.languages or []),
         len(candidate.frameworks or []),
@@ -796,6 +814,35 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         }
 
     logger.info("Agent 1: Analysing GitHub URLs and calling interrupt()...")
+
+    if review_policy:
+        logger.info(
+            "Agent 1: Skipping GitHub review thread=%s candidate_domain=%s policy=%s",
+            state["thread_id"],
+            candidate_domain,
+            review_policy,
+        )
+        interrupt({
+            "github_url": None,
+            "scenario": "SKIPPED",
+            "candidate_name": candidate.full_name,
+            "candidate_role": candidate.current_title,
+            "candidate_domain": candidate_domain,
+            "message": (
+                NON_TECHNICAL_GITHUB_SKIP_MESSAGE
+                if review_policy == SKIP_NON_TECHNICAL
+                else UNCLEAR_ROLE_GITHUB_SKIP_MESSAGE
+            ),
+        })
+        return {
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
+            "raw_cv_text": raw_cv_text,
+            "candidate": candidate.model_dump(mode="json"),
+            "candidate_domain": candidate_domain,
+            "candidate_domain_source": candidate_domain_source,
+            "github_review_policy": review_policy,
+        }
 
     github_urls: list[str] = candidate.github_urls or []
     github_urls = _extract_github_profile_urls("\n".join(github_urls + [raw_cv_text]))
@@ -872,4 +919,7 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         "pdf_temp_path": None,
         "raw_cv_text": raw_cv_text,
         "candidate": candidate.model_dump(mode="json"),
+        "candidate_domain": candidate_domain,
+        "candidate_domain_source": candidate_domain_source,
+        "github_review_policy": None,
     }

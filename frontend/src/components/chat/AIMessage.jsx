@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   FOLLOW_UP_ANSWER_MESSAGE_TYPE,
   isEvaluationReportMessage,
+  isStoppedResponseMessage,
 } from '../../lib/messagePersistence';
 import { markdownToPlainText } from '../../lib/markdownToPlainText';
 
@@ -44,22 +45,22 @@ function MarkdownLink({ children, href }) {
 
 const reportMarkdownComponents = {
   h2: ({ children }) => (
-    <h2 className="text-brand-dark font-bold text-lg mb-2 mt-4 break-words [overflow-wrap:anywhere]">{children}</h2>
+    <h2 className="text-brand-dark font-bold text-lg mb-3 mt-5 break-words [overflow-wrap:anywhere]">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-brand-dark font-semibold text-base mb-1 mt-3 break-words [overflow-wrap:anywhere]">{children}</h3>
+    <h3 className="text-brand-dark font-semibold text-base mb-2 mt-4 break-words [overflow-wrap:anywhere]">{children}</h3>
   ),
   ul: ({ children }) => (
-    <ul className="list-disc list-inside text-brand-body text-msg mb-2 break-words [overflow-wrap:anywhere]">{children}</ul>
+    <ul className="list-disc list-outside pl-5 text-brand-body text-msg mb-3 space-y-2 break-words [overflow-wrap:anywhere]">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="list-decimal list-inside text-brand-body text-msg mb-2 break-words [overflow-wrap:anywhere]">{children}</ol>
+    <ol className="list-decimal list-outside pl-5 text-brand-body text-msg mb-3 space-y-3 break-words [overflow-wrap:anywhere]">{children}</ol>
   ),
   li: ({ children }) => (
-    <li className="mb-1 break-words [overflow-wrap:anywhere]">{children}</li>
+    <li className="pl-1 break-words [overflow-wrap:anywhere]">{children}</li>
   ),
   p: ({ children }) => (
-    <p className="text-brand-body text-msg mb-2 whitespace-pre-line break-words [overflow-wrap:anywhere]">{children}</p>
+    <p className="text-brand-body text-msg mb-3 whitespace-pre-line break-words [overflow-wrap:anywhere]">{children}</p>
   ),
   strong: ({ children }) => (
     <strong className="text-brand-dark font-semibold">{children}</strong>
@@ -70,25 +71,25 @@ const reportMarkdownComponents = {
 
 const followUpMarkdownComponents = {
   h2: ({ children }) => (
-    <h2 className="text-brand-dark font-semibold text-base mb-2 mt-3 break-words [overflow-wrap:anywhere]">{children}</h2>
+    <h2 className="text-brand-dark font-bold text-lg mb-3 mt-4 break-words [overflow-wrap:anywhere]">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-brand-dark/90 font-medium text-sm mb-1 mt-2 break-words [overflow-wrap:anywhere]">{children}</h3>
+    <h3 className="text-brand-dark/90 font-medium text-sm mb-2 mt-3 break-words [overflow-wrap:anywhere]">{children}</h3>
   ),
   ul: ({ children }) => (
-    <ul className="list-disc list-inside text-brand-body text-msg mb-2 break-words [overflow-wrap:anywhere]">{children}</ul>
+    <ul className="list-disc list-outside pl-5 text-brand-body text-msg mb-3 space-y-2 break-words [overflow-wrap:anywhere]">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="list-decimal list-inside text-brand-body text-msg mb-2 break-words [overflow-wrap:anywhere]">{children}</ol>
+    <ol className="list-decimal list-outside pl-5 text-brand-body text-msg mb-4 space-y-4 break-words [overflow-wrap:anywhere]">{children}</ol>
   ),
   li: ({ children }) => (
-    <li className="mb-1 break-words [overflow-wrap:anywhere]">{children}</li>
+    <li className="pl-1 break-words [overflow-wrap:anywhere]">{children}</li>
   ),
   p: ({ children }) => (
-    <p className="text-brand-body text-msg mb-2 whitespace-pre-line break-words [overflow-wrap:anywhere]">{children}</p>
+    <p className="text-brand-body text-msg mb-3 whitespace-pre-line break-words [overflow-wrap:anywhere]">{children}</p>
   ),
   strong: ({ children }) => (
-    <strong className="text-brand-dark font-medium">{children}</strong>
+    <strong className="text-brand-dark font-semibold">{children}</strong>
   ),
   a: MarkdownLink,
   hr: () => null,
@@ -96,7 +97,7 @@ const followUpMarkdownComponents = {
 
 function getAssistantMessageRenderMode(message) {
   if (message.role === 'status') return 'status';
-  if (message.role === 'system') return 'stopped';
+  if (message.role === 'system' || isStoppedResponseMessage(message)) return 'stopped';
 
   const messageType = message.message_type || message.kind || '';
   if (messageType === FOLLOW_UP_ANSWER_MESSAGE_TYPE) return 'follow_up';

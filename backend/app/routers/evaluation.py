@@ -15,7 +15,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from langgraph.types import Command
 from psycopg import InterfaceError, OperationalError
 
-from app.agents.follow_up import answer_follow_up_question, mock_follow_up_answer
+from app.agents.follow_up import (
+    FollowUpAnswerIncompleteError,
+    answer_follow_up_question,
+    mock_follow_up_answer,
+)
 from app.agents.agent3_lead_evaluator import GeminiQuotaExceededError
 from app.config import settings
 from app.db.supabase_client import get_supabase
@@ -64,9 +68,9 @@ MOCK_RESUME_PAYLOAD = {
     "github_url": None,
 }
 MOCK_STATUSES = [
-    "Analyzing CV",
-    "Checking GitHub profile",
-    "Generating Recommendation",
+    "Analyzing CV...",
+    "Checking GitHub Repository...",
+    "Generating Recommendation...",
 ]
 MOCK_REPORT = """
 ## Candidate Overview
@@ -493,6 +497,9 @@ def _is_completed_report_content(content: str | None) -> bool:
         "Evaluation failed. Please try again.",
         "Evaluation stopped unexpectedly. Please try again.",
         "Gemini quota reached. Please wait and try again.",
+        "Gemini is temporarily rate-limited. Please try again in a few minutes.",
+        "Groq is temporarily rate-limited. Please try again in a few minutes.",
+        "The AI provider is temporarily rate-limited. Please try again in a few minutes.",
     }:
         return False
 
@@ -1074,6 +1081,9 @@ async def upload_cv(
         "evaluation_datetime_iso": evaluation_context["evaluation_datetime_iso"],
         "evaluation_timezone_source": evaluation_context["evaluation_timezone_source"],
         "candidate": None,
+        "candidate_domain": None,
+        "candidate_domain_source": None,
+        "github_review_policy": None,
         "github_analysis": None,
         "report": None,
         "error": None,
@@ -1193,10 +1203,7 @@ async def follow_up_question(
     )
 
     try:
-        if settings.DEV_MOCK_EVALUATION:
-            answer = mock_follow_up_answer(question)
-        else:
-            answer = await answer_follow_up_question(report_context, question, chat_id=chat_id)
+        answer = await _generate_follow_up_answer(chat_id, question, report_context)
     except GeminiQuotaExceededError as e:
         logger.warning(f"Follow-up quota failure : chat={chat_id} error={e}", exc_info=True)
         return JSONResponse(
@@ -1225,6 +1232,15 @@ async def follow_up_question(
                 "retry_after_seconds": e.retry_after_seconds,
             },
         )
+    except FollowUpAnswerIncompleteError as e:
+        logger.warning("Follow-up answer incomplete : chat=%s", chat_id)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": e.user_message,
+                "code": "FOLLOW_UP_INCOMPLETE",
+            },
+        )
     except Exception as e:
         logger.exception(f"Follow-up failed : chat={chat_id} error={e}")
         return JSONResponse(
@@ -1238,6 +1254,126 @@ async def follow_up_question(
     return JSONResponse(
         status_code=200,
         content={"answer": answer},
+    )
+
+
+async def _generate_follow_up_answer(
+    chat_id: str,
+    question: str,
+    report_context: str,
+) -> str:
+    if settings.DEV_MOCK_EVALUATION:
+        return mock_follow_up_answer(question)
+
+    return await answer_follow_up_question(report_context, question, chat_id=chat_id)
+
+
+async def follow_up_stream_generator(
+    request: Request,
+    chat_id: str,
+    question: str,
+    report_context: str,
+) -> AsyncGenerator[str, None]:
+    if await request.is_disconnected():
+        logger.info("Follow-up SSE client disconnected before stream start : chat=%s", chat_id)
+        return
+
+    try:
+        answer = await _generate_follow_up_answer(chat_id, question, report_context)
+
+        if await request.is_disconnected():
+            logger.info("Follow-up SSE client disconnected before token stream : chat=%s", chat_id)
+            return
+
+        logger.info("Follow-up SSE stream started : chat=%s response_chars=%s", chat_id, len(answer))
+
+        for chunk in _mock_token_chunks(answer):
+            if await request.is_disconnected():
+                logger.info("Follow-up SSE client disconnected during token stream : chat=%s", chat_id)
+                return
+
+            yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
+            await asyncio.sleep(0.02)
+
+        if await request.is_disconnected():
+            logger.info("Follow-up SSE client disconnected before done : chat=%s", chat_id)
+            return
+
+        yield f"event: done\ndata: {json.dumps({})}\n\n"
+        logger.info("Follow-up SSE stream completed : chat=%s", chat_id)
+    except GeminiQuotaExceededError as e:
+        logger.warning("Follow-up SSE quota failure : chat=%s error=%s", chat_id, e, exc_info=True)
+        payload = {
+            "error": e.user_message,
+            "code": e.code,
+            "retry_after_seconds": e.retry_after_seconds,
+        }
+        yield f"event: error\ndata: {json.dumps(payload)}\n\n"
+    except LLMProviderUnavailableError as e:
+        logger.warning(
+            "Follow-up SSE provider unavailable : chat=%s provider=%s model=%s status_code=%s provider_status=%s",
+            chat_id,
+            e.provider,
+            e.model,
+            e.status_code or "unknown",
+            e.provider_status,
+            exc_info=True,
+        )
+        payload = {
+            "error": e.user_message,
+            "code": e.error_code,
+        }
+        if e.retry_after_seconds:
+            payload["retry_after_seconds"] = e.retry_after_seconds
+        yield f"event: error\ndata: {json.dumps(payload)}\n\n"
+    except FollowUpAnswerIncompleteError as e:
+        logger.warning("Follow-up SSE answer incomplete : chat=%s", chat_id)
+        yield f"event: error\ndata: {json.dumps({'error': e.user_message, 'code': 'FOLLOW_UP_INCOMPLETE'})}\n\n"
+    except asyncio.CancelledError:
+        logger.info("Follow-up SSE stream cancelled : chat=%s", chat_id)
+        return
+    except Exception as e:
+        logger.exception("Follow-up SSE failed : chat=%s error=%s", chat_id, e)
+        yield f"event: error\ndata: {json.dumps({'error': 'Follow-up answer failed. Please try again.', 'code': 'FOLLOW_UP_FAILED'})}\n\n"
+
+
+@router.post("/{chat_id}/follow-up/stream")
+async def stream_follow_up(
+    chat_id: str,
+    body: FollowUpRequest,
+    request: Request,
+    user_id: str = Depends(verify_token),
+):
+    question = _clean_text(body.question)
+    if not question:
+        raise HTTPException(status_code=400, detail="Follow-up question is required.")
+
+    report_context = await _load_completed_report_for_chat(chat_id, user_id)
+    if not report_context:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": FOLLOW_UP_REQUIRES_REPORT_MESSAGE,
+                "code": "FOLLOW_UP_REQUIRES_COMPLETED_REPORT",
+            },
+        )
+
+    logger.info(
+        "Follow-up SSE request accepted : chat=%s user=%s question_chars=%s report_context_chars=%s mock=%s",
+        chat_id,
+        user_id,
+        len(question),
+        len(report_context),
+        settings.DEV_MOCK_EVALUATION,
+    )
+
+    return _sse_response(
+        follow_up_stream_generator(
+            request,
+            chat_id,
+            question,
+            report_context,
+        )
     )
 
 
@@ -1296,7 +1432,7 @@ async def evaluation_stream_generator(
                 return
 
             if not agent_2_status_sent and state_snapshot.get("github_analysis") is not None:
-                yield f"event: status\ndata: {json.dumps({'text': 'Checking GitHub profile...'})}\n\n"
+                yield f"event: status\ndata: {json.dumps({'text': 'Checking GitHub Repository...'})}\n\n"
                 agent_2_status_sent = True
                 logger.info(f"Agent 2 completed : thread={thread_id}")
 

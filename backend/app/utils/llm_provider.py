@@ -125,7 +125,7 @@ def create_chat_llm(
         "request_timeout": settings.GEMINI_TIMEOUT_SECONDS,
         "max_retries": max_retries,
     }
-    if agent in {"agent1", "agent2"} or (
+    if agent in {"agent1", "agent2", "follow_up"} or (
         agent == "agent3" and "flash" in selected_model.lower()
     ):
         gemini_kwargs["thinking_budget"] = 0

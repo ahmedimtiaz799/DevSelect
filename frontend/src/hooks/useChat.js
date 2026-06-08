@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { useChatStore } from '../store/chatStore';
 import { useChatHistory } from './useChatHistory';
-import { streamChatResponse } from '../lib/streaming';
-import { followUpQuestion, uploadCV, resumePipeline } from '../lib/api';
+import { streamChatResponse, streamFollowUpResponse } from '../lib/streaming';
+import { uploadCV, resumePipeline } from '../lib/api';
 import { generateTempId, extractGitHubUsername, normalizeChatTitle } from '../lib/chatUtils';
 import {
   EVALUATION_REPORT_MESSAGE_TYPE,
   FINAL_ERROR_MESSAGE_TYPE,
   FOLLOW_UP_ANSWER_MESSAGE_TYPE,
+  STOPPED_RESPONSE_MESSAGE_TYPE,
   isEvaluationReportMessage,
+  isStoppedResponseMessage,
   serializeAssistantMessage,
   serializeUploadMessage,
 } from '../lib/messagePersistence';
@@ -32,6 +34,7 @@ const DEBUG_STREAM_LOGS = import.meta.env.DEV;
 const ACTIVITY_MODE_EVALUATION = 'evaluation';
 const ACTIVITY_MODE_FOLLOW_UP = 'follow_up';
 const FOLLOW_UP_STATUS_MESSAGE = 'Thinking...';
+const ANALYZING_CV_STATUS_MESSAGE = 'Analyzing CV...';
 const BUDGET_LIMIT_MESSAGES = {
   DAILY_EVALUATION_LIMIT_REACHED: 'Daily evaluation limit reached. Please try again tomorrow.',
   DAILY_USER_TOKEN_LIMIT_REACHED: 'Daily AI usage limit reached. Please try again tomorrow.',
@@ -311,6 +314,13 @@ export function useChat(chatId) {
     return error?.message || 'Evaluation failed. Please try again.';
   }
 
+  function getFollowUpStreamErrorMessage(errorPayload) {
+    const safeError = getSafeBackendMessage(errorPayload?.error);
+    if (safeError) return safeError;
+
+    return 'Follow-up answer failed. Please try again.';
+  }
+
   function getBudgetLimitMessage(response) {
     const code = response?.data?.code;
 
@@ -456,15 +466,34 @@ export function useChat(chatId) {
     });
   }
 
-  function addStoppedMessage(targetId) {
-    if (!targetId) return;
+  function hasStoppedTailMessage(targetId) {
+    if (!targetId) return false;
 
-    addMessage(targetId, {
+    const chatMessages = useChatStore.getState().messages[targetId] ?? [];
+    const lastMessage = chatMessages[chatMessages.length - 1];
+
+    if (!lastMessage) return false;
+
+    if (lastMessage.role === 'system' && lastMessage.content === 'Response stopped.') {
+      return true;
+    }
+
+    return isStoppedResponseMessage(lastMessage);
+  }
+
+  async function addAndPersistStoppedMessage(targetId) {
+    if (!targetId || hasStoppedTailMessage(targetId)) return;
+
+    const stoppedMessage = {
       id: generateTempId(),
-      role: 'system',
+      role: 'assistant',
       content: 'Response stopped.',
+      message_type: STOPPED_RESPONSE_MESSAGE_TYPE,
       chat_id: targetId,
-    });
+    };
+
+    addMessage(targetId, stoppedMessage);
+    await persistPlainMessages(targetId, [stoppedMessage]);
   }
 
   function stopProcessing() {
@@ -496,7 +525,7 @@ export function useChat(chatId) {
     }
 
     if (run || isLoading || isStreaming) {
-      addStoppedMessage(targetId);
+      void addAndPersistStoppedMessage(targetId);
     }
 
     activeRunRef.current = null;
@@ -524,6 +553,7 @@ export function useChat(chatId) {
     });
     setIsLoading(true);
     clearStatusMessages(targetId);
+    addStatusMessage(targetId, ANALYZING_CV_STATUS_MESSAGE);
 
     const tempId = generateTempId();
     const userMessagePayload = getUserMessagePayload(file, userText);
@@ -606,6 +636,7 @@ export function useChat(chatId) {
           (username) => `https://github.com/${username}`
         );
         setIsLoading(false);
+        clearStatusMessages(targetId);
         finishRun(run);
         setPendingProfiles(targetId, cleanProfiles);
         return;
@@ -660,39 +691,134 @@ export function useChat(chatId) {
 
     try {
       await touchChatActivity(targetId);
-      const response = await followUpQuestion(targetId, text);
+      await persistPlainMessages(targetId, [userMessage]);
       if (!isRunActive(run)) return;
 
-      if (response.status !== 200 || !response.data?.answer) {
-        throw new Error(response.data?.error || 'Follow-up answer failed. Please try again.');
+      const { data } = await supabase.auth.getSession();
+      const token = data.session.access_token;
+      if (!isRunActive(run)) return;
+
+      if (!token) {
+        throw new Error('Follow-up answer failed. Please try again.');
       }
 
-      const assistantMessage = {
-        id: generateTempId(),
-        role: 'assistant',
-        content: response.data.answer,
-        message_type: FOLLOW_UP_ANSWER_MESSAGE_TYPE,
-        chat_id: targetId,
-      };
-      addMessage(targetId, assistantMessage);
-      await persistPlainMessages(targetId, [userMessage, assistantMessage]);
-      setIsLoading(false);
-      clearStatusMessages(targetId);
-      finishRun(run);
+      cleanupRef.current = streamFollowUpResponse(targetId, text, token, {
+        onToken(chunk) {
+          if (!isRunActive(run)) return;
+
+          if (!run.hasReceivedToken) {
+            run.hasReceivedToken = true;
+            setIsLoading(false);
+            setIsStreaming(true);
+            clearStatusMessages(targetId);
+
+            const assistantTempId = generateTempId();
+            run.assistantTempId = assistantTempId;
+            addMessage(targetId, {
+              id: assistantTempId,
+              role: 'assistant',
+              content: '',
+              message_type: FOLLOW_UP_ANSWER_MESSAGE_TYPE,
+              isStreaming: true,
+              chat_id: targetId,
+            });
+          }
+
+          appendAssistantContent(targetId, run.assistantTempId, chunk, run);
+        },
+        async onDone() {
+          if (!isRunActive(run)) return;
+
+          setIsStreaming(false);
+          setIsLoading(false);
+          clearStatusMessages(targetId);
+          cleanupRef.current = null;
+          finishRun(run);
+
+          const chatMessages = useChatStore.getState().messages[targetId] ?? [];
+          const assistantMessage = chatMessages.find(
+            (message) => message.id === run.assistantTempId && message.role === 'assistant'
+          );
+
+          if (!assistantMessage?.content) {
+            removeAssistantMessage(targetId, run.assistantTempId);
+            const errorMessage = {
+              id: generateTempId(),
+              role: 'assistant',
+              content: 'Follow-up answer failed. Please try again.',
+              chat_id: targetId,
+            };
+            addMessage(targetId, errorMessage);
+            await persistPlainMessages(targetId, [errorMessage]);
+            return;
+          }
+
+          useChatStore.setState((state) => {
+            const followUpMessages = state.messages[targetId] ?? [];
+
+            return {
+              messages: {
+                ...state.messages,
+                [targetId]: followUpMessages.map((message) =>
+                  message.id === run.assistantTempId
+                    ? {
+                        ...message,
+                        message_type: FOLLOW_UP_ANSWER_MESSAGE_TYPE,
+                        isStreaming: false,
+                      }
+                    : message
+                ),
+              },
+            };
+          });
+
+          await persistPlainMessages(targetId, [
+            {
+              ...assistantMessage,
+              message_type: FOLLOW_UP_ANSWER_MESSAGE_TYPE,
+              isStreaming: false,
+            },
+          ]);
+        },
+        async onError(errorPayload) {
+          if (!isRunActive(run)) return;
+
+          setIsStreaming(false);
+          setIsLoading(false);
+          clearStatusMessages(targetId);
+          cleanupRef.current = null;
+          finishRun(run);
+
+          if (run.assistantTempId) {
+            removeAssistantMessage(targetId, run.assistantTempId);
+          }
+
+          const assistantMessage = {
+            id: generateTempId(),
+            role: 'assistant',
+            content: getFollowUpStreamErrorMessage(errorPayload),
+            chat_id: targetId,
+          };
+          addMessage(targetId, assistantMessage);
+          await persistPlainMessages(targetId, [assistantMessage]);
+        },
+      });
     } catch (error) {
       if (!isRunActive(run)) return;
 
+      cleanupRef.current = null;
+      setIsStreaming(false);
       setIsLoading(false);
       clearStatusMessages(targetId);
       finishRun(run);
       const assistantMessage = {
         id: generateTempId(),
         role: 'assistant',
-        content: getRequestErrorMessage(error),
+        content: getFollowUpStreamErrorMessage({ error: getRequestErrorMessage(error) }),
         chat_id: targetId,
       };
       addMessage(targetId, assistantMessage);
-      await persistPlainMessages(targetId, [userMessage, assistantMessage]);
+      await persistPlainMessages(targetId, [assistantMessage]);
     }
   }
 
@@ -740,7 +866,7 @@ export function useChat(chatId) {
     setIsStreaming(true);
     setIsLoading(false);
     clearStatusMessages(targetId);
-    addStatusMessage(targetId, 'Checking GitHub profile...');
+    addStatusMessage(targetId, ANALYZING_CV_STATUS_MESSAGE);
     logRunEvent('stream:start', {
       chatId: targetId,
       threadId,

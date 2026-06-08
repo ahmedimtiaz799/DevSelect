@@ -13,6 +13,8 @@ def _candidate_field(candidate, name: str):
 def route_after_agent1(state: DevSelectState) -> str:
     if state.get("error"):
         return END
+    if state.get("github_review_policy"):
+        return "agent_3"
     candidate = state.get("candidate")
     if candidate and _candidate_field(candidate, "github_url"):
         return "agent_2"

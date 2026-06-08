@@ -220,18 +220,18 @@ export function Chat() {
   async function handleStartSecondEvaluation() {
     if (!secondEvaluationDraft || isStartingNewEvaluation) return
 
+    const draft = secondEvaluationDraft
+    setSecondEvaluationDraft(null)
     setIsStartingNewEvaluation(true)
     stopRequestedRef.current = false
 
     try {
       const targetChatId = await startEvaluationInNewChat(
-        secondEvaluationDraft.text,
-        secondEvaluationDraft.file
+        draft.text,
+        draft.file
       )
 
-      if (targetChatId) {
-        setSecondEvaluationDraft(null)
-      }
+      if (!targetChatId) return
     } finally {
       setIsStartingNewEvaluation(false)
     }

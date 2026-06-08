@@ -50,6 +50,9 @@ export function MessageList({
   onProfileSelect,
 }) {
   const messages = useChatStore((s) => s.messages)
+  const activeChatTitle = useChatStore((s) =>
+    chatId ? s.chats.find((chat) => chat.id === chatId)?.title ?? '' : ''
+  )
   const activeMessages = chatId
     ? (messages[chatId] ?? []).filter((message) =>
         message.role === 'user' ||
@@ -63,7 +66,14 @@ export function MessageList({
     activityMode === ACTIVITY_MODE_EVALUATION &&
     (isLoading || (isStreaming && statuses.length > 0))
   const isFollowUpLoading = activityMode === ACTIVITY_MODE_FOLLOW_UP && isLoading
-  const containerRef = useAutoScroll(activeMessages)
+  const autoScrollLayoutKey = [
+    activeChatTitle,
+    statuses.join('\u0001'),
+    isLoading ? 'loading' : 'idle',
+    isStreaming ? 'streaming' : 'static',
+    hasProfileSelector ? 'profiles' : 'messages',
+  ].join('\u0002')
+  const containerRef = useAutoScroll(activeMessages, autoScrollLayoutKey)
   const hasMessages = activeMessages.length > 0 || hasProfileSelector
   const hasLoadError = Boolean(messageLoadError)
   const isHydratingData = isChatHistoryLoading || isMessagesLoading

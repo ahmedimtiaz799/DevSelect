@@ -10,6 +10,7 @@ const REPORT_CONTEXT_HINTS = [
 export const EVALUATION_REPORT_MESSAGE_TYPE = 'evaluation_report'
 export const FOLLOW_UP_ANSWER_MESSAGE_TYPE = 'follow_up_answer'
 export const FINAL_ERROR_MESSAGE_TYPE = 'final_error'
+export const STOPPED_RESPONSE_MESSAGE_TYPE = 'stopped_response'
 
 export function serializeUploadMessage(message) {
   return `${CV_UPLOAD_PREFIX}${JSON.stringify({
@@ -42,6 +43,13 @@ export function isEvaluationReportMessage(message) {
     : ''
 
   return REPORT_CONTEXT_HINTS.some((hint) => content.includes(hint))
+}
+
+export function isStoppedResponseMessage(message) {
+  if (!message) return false
+
+  const messageType = message.message_type || message.kind || ''
+  return messageType === STOPPED_RESPONSE_MESSAGE_TYPE
 }
 
 export function normalizePersistedMessage(message) {
