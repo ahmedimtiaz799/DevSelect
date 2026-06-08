@@ -6,6 +6,9 @@ import { EmptyState } from './EmptyState'
 import { LoadingStates } from './LoadingStates'
 import { GitHubProfileSelector } from './GitHubProfileSelector'
 
+const ACTIVITY_MODE_EVALUATION = 'evaluation'
+const ACTIVITY_MODE_FOLLOW_UP = 'follow_up'
+
 function MessageHistorySkeleton() {
   return (
     <div aria-hidden="true" className="flex flex-col gap-6 animate-pulse">
@@ -24,10 +27,21 @@ function MessageHistorySkeleton() {
   )
 }
 
+function FollowUpLoadingState() {
+  return (
+    <div className="w-full max-w-ai-msg py-1" aria-live="polite">
+      <p className="text-brand-muted text-msg italic">
+        Thinking...
+      </p>
+    </div>
+  )
+}
+
 export function MessageList({
   chatId = null,
   isLoading = false,
   isStreaming = false,
+  activityMode = null,
   isChatHistoryLoading = false,
   isMessagesLoading = false,
   messageLoadError = '',
@@ -45,7 +59,10 @@ export function MessageList({
     : []
   const hasProfileSelector = profiles.length > 0 && !!onProfileSelect
   const hasActivity = isLoading || isStreaming
-  const showLoadingStates = isLoading || (isStreaming && statuses.length > 0)
+  const isEvaluationLoading =
+    activityMode === ACTIVITY_MODE_EVALUATION &&
+    (isLoading || (isStreaming && statuses.length > 0))
+  const isFollowUpLoading = activityMode === ACTIVITY_MODE_FOLLOW_UP && isLoading
   const containerRef = useAutoScroll(activeMessages)
   const hasMessages = activeMessages.length > 0 || hasProfileSelector
   const hasLoadError = Boolean(messageLoadError)
@@ -83,10 +100,14 @@ export function MessageList({
         {activeMessages.length === 0
           ? hasActivity
             ? (
-              <LoadingStates
-                isLoading={showLoadingStates}
-                statuses={statuses}
-              />
+              isFollowUpLoading
+                ? <FollowUpLoadingState />
+                : (
+                  <LoadingStates
+                    isLoading={isEvaluationLoading}
+                    statuses={statuses}
+                  />
+                )
             )
             : showMessageSkeleton
               ? <MessageHistorySkeleton />
@@ -118,9 +139,10 @@ export function MessageList({
                 />
               )}
               <LoadingStates
-                isLoading={showLoadingStates}
+                isLoading={isEvaluationLoading}
                 statuses={statuses}
               />
+              {isFollowUpLoading && <FollowUpLoadingState />}
             </>
           )
         }

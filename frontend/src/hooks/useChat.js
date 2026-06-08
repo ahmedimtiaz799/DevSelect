@@ -28,6 +28,10 @@ const PLACEHOLDER_ROLE_LABELS = new Set([
 const PRE_CV_GUIDANCE_MESSAGE = 'Please upload a candidate CV to begin an evaluation.';
 const MESSAGE_SAVE_FAILED_MESSAGE = 'Message could not be saved. Please check your connection and try again.';
 const GENERATING_STATUS_MIN_DISPLAY_MS = 400;
+const DEBUG_STREAM_LOGS = import.meta.env.DEV;
+const ACTIVITY_MODE_EVALUATION = 'evaluation';
+const ACTIVITY_MODE_FOLLOW_UP = 'follow_up';
+const FOLLOW_UP_STATUS_MESSAGE = 'Thinking...';
 const BUDGET_LIMIT_MESSAGES = {
   DAILY_EVALUATION_LIMIT_REACHED: 'Daily evaluation limit reached. Please try again tomorrow.',
   DAILY_USER_TOKEN_LIMIT_REACHED: 'Daily AI usage limit reached. Please try again tomorrow.',
@@ -54,10 +58,16 @@ function isGeneratingRecommendationStatus(text) {
   return cleanMetaText(text).toLowerCase().startsWith('generating recommendation');
 }
 
+function logRunEvent(event, details) {
+  if (!DEBUG_STREAM_LOGS) return;
+  console.info(`[DevSelect] ${event}`, details);
+}
+
 export function useChat(chatId) {
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [statusMessagesByChat, setStatusMessagesByChat] = useState({});
+  const [activityModeByChat, setActivityModeByChat] = useState({});
 
   const cleanupRef = useRef(null);
   const activeRunRef = useRef(null);
@@ -213,6 +223,27 @@ export function useChat(chatId) {
     });
   }
 
+  function setActivityMode(chatId, mode) {
+    if (!chatId) return;
+
+    setActivityModeByChat((current) => ({
+      ...current,
+      [chatId]: mode,
+    }));
+  }
+
+  function clearActivityMode(chatId) {
+    if (!chatId) return;
+
+    setActivityModeByChat((current) => {
+      if (!current[chatId]) return current;
+
+      const next = { ...current };
+      delete next[chatId];
+      return next;
+    });
+  }
+
   function getSafeBackendMessage(message) {
     if (typeof message !== 'string') return '';
 
@@ -312,10 +343,11 @@ export function useChat(chatId) {
     }
   }
 
-  function startRun(targetId) {
+  function startRun(targetId, mode = ACTIVITY_MODE_EVALUATION) {
     const run = {
       id: runIdRef.current + 1,
       chatId: targetId,
+      mode,
       stopped: false,
       assistantTempId: null,
       hasReceivedToken: false,
@@ -329,6 +361,7 @@ export function useChat(chatId) {
 
     runIdRef.current = run.id;
     activeRunRef.current = run;
+    setActivityMode(targetId, mode);
     return run;
   }
 
@@ -349,6 +382,8 @@ export function useChat(chatId) {
     if (activeRunRef.current?.id === run?.id) {
       activeRunRef.current = null;
     }
+
+    clearActivityMode(run?.chatId);
   }
 
   function appendAssistantContent(targetId, assistantTempId, content, run) {
@@ -452,6 +487,7 @@ export function useChat(chatId) {
 
     if (targetId) {
       clearStatusMessages(targetId);
+      clearActivityMode(targetId);
       setThreadId(targetId, null);
     }
 
@@ -471,7 +507,7 @@ export function useChat(chatId) {
 
     if (!file) {
       if (hasCompletedReport(targetId)) {
-        const run = startRun(targetId);
+        const run = startRun(targetId, ACTIVITY_MODE_FOLLOW_UP);
         await sendFollowUpMessage(userText, targetId, run);
         return;
       }
@@ -481,6 +517,11 @@ export function useChat(chatId) {
     }
 
     const run = startRun(targetId);
+    logRunEvent('upload:start', {
+      chatId: targetId,
+      runId: run.id,
+      existingThread: Boolean(threadIds[targetId]),
+    });
     setIsLoading(true);
     clearStatusMessages(targetId);
 
@@ -504,6 +545,12 @@ export function useChat(chatId) {
         threadIds[targetId],
         userMessagePayload.content
       );
+      logRunEvent('upload:response', {
+        chatId: targetId,
+        runId: run.id,
+        status: response.status,
+        threadId: response.data?.thread_id ?? null,
+      });
 
       if (!isRunActive(run)) return;
 
@@ -601,6 +648,7 @@ export function useChat(chatId) {
 
     setIsLoading(true);
     clearStatusMessages(targetId);
+    addStatusMessage(targetId, FOLLOW_UP_STATUS_MESSAGE);
 
     const userMessage = {
       id: generateTempId(),
@@ -693,6 +741,11 @@ export function useChat(chatId) {
     setIsLoading(false);
     clearStatusMessages(targetId);
     addStatusMessage(targetId, 'Checking GitHub profile...');
+    logRunEvent('stream:start', {
+      chatId: targetId,
+      threadId,
+      runId: run.id,
+    });
 
     const assistantTempId = generateTempId();
     run.assistantTempId = assistantTempId;
@@ -779,6 +832,11 @@ export function useChat(chatId) {
         clearStatusMessages(targetId);
         cleanupRef.current = null;
         finishRun(run);
+        logRunEvent('stream:done', {
+          chatId: targetId,
+          threadId,
+          runId: run.id,
+        });
 
         const chatMessages =
           useChatStore.getState().messages[targetId] ?? [];
@@ -840,6 +898,12 @@ export function useChat(chatId) {
         clearStatusMessages(targetId);
         cleanupRef.current = null;
         finishRun(run);
+        logRunEvent('stream:error', {
+          chatId: targetId,
+          threadId,
+          runId: run.id,
+          code: errorPayload?.code ?? null,
+        });
 
         useChatStore.setState((state) => {
           const chatMessages = state.messages[targetId] ?? [];
@@ -877,6 +941,7 @@ export function useChat(chatId) {
     stopProcessing,
     isLoading,
     isStreaming,
+    activityMode: chatId ? (activityModeByChat[chatId] ?? null) : null,
     statusMessages: chatId ? (statusMessagesByChat[chatId] ?? []) : [],
     hasThread,
   };

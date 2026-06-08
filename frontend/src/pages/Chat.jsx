@@ -52,6 +52,7 @@ export function Chat() {
     handleProfileSelect,
     isLoading,
     isStreaming,
+    activityMode,
     statusMessages,
     stopProcessing,
     hasThread,
@@ -266,6 +267,7 @@ export function Chat() {
           chatId={chatId ?? null}
           isLoading={isLoading}
           isStreaming={isStreaming}
+          activityMode={activityMode}
           isChatHistoryLoading={Boolean(chatId) && isChatListLoading}
           isMessagesLoading={isHydratingMessages}
           messageLoadError={chatId ? messageLoadErrorsByChat[chatId] : ''}
