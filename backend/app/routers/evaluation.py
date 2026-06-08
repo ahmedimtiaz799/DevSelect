@@ -725,18 +725,45 @@ async def _cached_report_stream_generator(
     logger.info(f"Cached SSE stream completed : thread={thread_id}")
 
 
-async def _claim_stream_thread(thread_id: str) -> bool:
+async def _claim_stream_thread(thread_id: str, chat_id: str | None = None) -> bool:
     async with EVALUATION_GUARD_LOCK:
         if thread_id in ACTIVE_STREAM_THREADS:
+            logger.info(
+                "Stream lock acquisition rejected : chat=%s thread=%s acquired=%s active_count=%s",
+                chat_id or "unknown",
+                thread_id,
+                False,
+                len(ACTIVE_STREAM_THREADS),
+            )
             return False
 
         ACTIVE_STREAM_THREADS.add(thread_id)
+        logger.info(
+            "Stream lock acquired : chat=%s thread=%s acquired=%s active_count=%s",
+            chat_id or "unknown",
+            thread_id,
+            True,
+            len(ACTIVE_STREAM_THREADS),
+        )
         return True
 
 
-async def _release_stream_thread(thread_id: str) -> None:
+async def _release_stream_thread(
+    thread_id: str,
+    reason: str = "unknown",
+    chat_id: str | None = None,
+) -> None:
     async with EVALUATION_GUARD_LOCK:
+        was_active = thread_id in ACTIVE_STREAM_THREADS
         ACTIVE_STREAM_THREADS.discard(thread_id)
+        logger.info(
+            "Stream lock released : chat=%s thread=%s was_active=%s reason=%s active_count=%s",
+            chat_id or "unknown",
+            thread_id,
+            was_active,
+            reason,
+            len(ACTIVE_STREAM_THREADS),
+        )
 
 
 async def _set_graph_evaluation_status(graph, thread_id: str, status: str) -> None:
@@ -896,6 +923,7 @@ async def mock_evaluation_stream_generator(
     if await request.is_disconnected():
         logger.info(f"Mock SSE client disconnected before stream start : thread={thread_id}")
         await _set_mock_run_status(thread_id, EVALUATION_STOPPED)
+        await _release_stream_thread(thread_id, reason="mock_prestart_disconnect")
         return
 
     try:
@@ -938,7 +966,7 @@ async def mock_evaluation_stream_generator(
         await _set_mock_run_status(thread_id, EVALUATION_FAILED)
         raise
     finally:
-        await _release_stream_thread(thread_id)
+        await _release_stream_thread(thread_id, reason="mock_stream_finally")
 
 
 @router.post("/{chat_id}/upload")
@@ -1224,7 +1252,7 @@ async def evaluation_stream_generator(
     if await request.is_disconnected():
         logger.info(f"SSE client disconnected before stream start : thread={thread_id}")
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
-        await _release_stream_thread(thread_id)
+        await _release_stream_thread(thread_id, reason="prestart_disconnect")
         return
 
     try:
@@ -1348,7 +1376,7 @@ async def evaluation_stream_generator(
         logger.exception(f"SSE pipeline failed : thread={thread_id} error={e}")
         yield f"event: error\ndata: {json.dumps({'error': 'Evaluation failed'})}\n\n"
     finally:
-        await _release_stream_thread(thread_id)
+        await _release_stream_thread(thread_id, reason="stream_generator_finally")
 
 
 @router.get("/{chat_id}/stream")
@@ -1405,7 +1433,7 @@ async def stream_evaluation(
         }:
             return _sse_response(_single_error_stream(_thread_terminal_error_payload(mock_status)))
 
-        if not await _claim_stream_thread(thread_id):
+        if not await _claim_stream_thread(thread_id, chat_id=chat_id):
             return _sse_response(
                 _single_error_stream(_thread_terminal_error_payload(EVALUATION_IN_PROGRESS))
             )
@@ -1414,7 +1442,7 @@ async def stream_evaluation(
 
     graph = request.app.state.graph
 
-    if not await _claim_stream_thread(thread_id):
+    if not await _claim_stream_thread(thread_id, chat_id=chat_id):
         logger.info("Duplicate SSE stream rejected : chat=%s thread=%s", chat_id, thread_id)
         return _sse_response(
             _single_error_stream(_thread_terminal_error_payload(EVALUATION_IN_PROGRESS))
@@ -1427,7 +1455,7 @@ async def stream_evaluation(
             "stream_checkpoint_read",
         )
     except Exception as e:
-        await _release_stream_thread(thread_id)
+        await _release_stream_thread(thread_id, reason="checkpoint_read_failed", chat_id=chat_id)
         logger.exception(
             "Failed to read checkpoint : thread=%s error_type=%s",
             thread_id,
@@ -1442,14 +1470,14 @@ async def stream_evaluation(
         )
 
     if snapshot is None or not snapshot.values:
-        await _release_stream_thread(thread_id)
+        await _release_stream_thread(thread_id, reason="checkpoint_missing", chat_id=chat_id)
         raise HTTPException(status_code=404, detail=EVALUATION_SESSION_UNAVAILABLE_MESSAGE)
 
     meta = _candidate_meta(snapshot.values, snapshot.tasks)
     evaluation_status = _evaluation_status(snapshot.values)
 
     if evaluation_status == EVALUATION_COMPLETED and snapshot.values.get("report"):
-        await _release_stream_thread(thread_id)
+        await _release_stream_thread(thread_id, reason="cached_report_stream", chat_id=chat_id)
         return _sse_response(
             _cached_report_stream_generator(
                 request,
@@ -1465,7 +1493,7 @@ async def stream_evaluation(
         EVALUATION_STOPPED,
         EVALUATION_FAILED,
     }:
-        await _release_stream_thread(thread_id)
+        await _release_stream_thread(thread_id, reason=f"terminal_status:{evaluation_status}", chat_id=chat_id)
         return _sse_response(
             _single_error_stream(_thread_terminal_error_payload(evaluation_status))
         )

@@ -118,6 +118,7 @@ export function streamChatResponse(
   fetchEventSource(url, {
     method: 'GET',
     signal: controller.signal,
+    openWhenHidden: true,
     headers: {
       Authorization: `Bearer ${token}`,
     },
