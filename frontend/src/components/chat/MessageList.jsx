@@ -37,6 +37,14 @@ function FollowUpLoadingState() {
   )
 }
 
+function isEmptyStreamingAssistant(message) {
+  return (
+    message.role === 'assistant' &&
+    message.isStreaming &&
+    !message.content?.trim()
+  )
+}
+
 export function MessageList({
   chatId = null,
   isLoading = false,
@@ -50,9 +58,6 @@ export function MessageList({
   onProfileSelect,
 }) {
   const messages = useChatStore((s) => s.messages)
-  const activeChatTitle = useChatStore((s) =>
-    chatId ? s.chats.find((chat) => chat.id === chatId)?.title ?? '' : ''
-  )
   const activeMessages = chatId
     ? (messages[chatId] ?? []).filter((message) =>
         message.role === 'user' ||
@@ -60,6 +65,9 @@ export function MessageList({
         message.role === 'system'
       )
     : []
+  const visibleMessages = activeMessages.filter(
+    (message) => !isEmptyStreamingAssistant(message)
+  )
   const hasProfileSelector = profiles.length > 0 && !!onProfileSelect
   const hasActivity = isLoading || isStreaming
   const isEvaluationLoading =
@@ -67,14 +75,13 @@ export function MessageList({
     (isLoading || (isStreaming && statuses.length > 0))
   const isFollowUpLoading = activityMode === ACTIVITY_MODE_FOLLOW_UP && isLoading
   const autoScrollLayoutKey = [
-    activeChatTitle,
     statuses.join('\u0001'),
     isLoading ? 'loading' : 'idle',
     isStreaming ? 'streaming' : 'static',
     hasProfileSelector ? 'profiles' : 'messages',
   ].join('\u0002')
-  const containerRef = useAutoScroll(activeMessages, autoScrollLayoutKey)
-  const hasMessages = activeMessages.length > 0 || hasProfileSelector
+  const containerRef = useAutoScroll(visibleMessages, autoScrollLayoutKey)
+  const hasMessages = visibleMessages.length > 0 || hasProfileSelector
   const hasLoadError = Boolean(messageLoadError)
   const isHydratingData = isChatHistoryLoading || isMessagesLoading
   const showMessageSkeleton =
@@ -130,7 +137,7 @@ export function MessageList({
                 : <EmptyState />
           : (
             <>
-              {activeMessages.map((msg) =>
+              {visibleMessages.map((msg) =>
                 msg.role === 'user'
                   ? (
                     <MessageBubble
