@@ -55,7 +55,6 @@ export function Chat() {
     activityMode,
     statusMessages,
     stopProcessing,
-    hasThread,
   } = useChat(chatId)
 
   const {
@@ -288,7 +287,6 @@ export function Chat() {
             isLoading={isLoading}
             isStreaming={isStreaming}
             file={file}
-            threadExists={hasThread(chatId)}
             hasCompletedReport={hasCompletedEvaluationReport}
             fileError={error}
           />

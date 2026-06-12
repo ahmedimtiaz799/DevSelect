@@ -63,7 +63,6 @@ export function InputBar({
   isLoading,
   isStreaming,
   file,
-  threadExists,
   hasCompletedReport,
   fileError,
 }) {
@@ -171,9 +170,7 @@ export function InputBar({
 
   const placeholder = hasCompletedReport
     ? 'Ask a follow-up about this candidate...'
-    : threadExists
-      ? 'Ask a follow-up question'
-      : 'Upload a CV to evaluate a candidate'
+    : 'Upload a CV to evaluate a candidate'
 
   return (
     <div className="mx-4 md:mx-12 mt-2">

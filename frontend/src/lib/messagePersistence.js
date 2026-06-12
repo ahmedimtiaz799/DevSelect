@@ -33,6 +33,7 @@ export function serializeAssistantMessage(message, messageType) {
 
 export function isEvaluationReportMessage(message) {
   if (message?.role !== 'assistant') return false
+  if (message.isStreaming) return false
 
   const messageType = message.message_type || message.kind || ''
   if (messageType === EVALUATION_REPORT_MESSAGE_TYPE) return true
