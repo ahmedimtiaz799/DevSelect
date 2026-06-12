@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Search, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, X, Plus } from 'lucide-react'
 import { useChatHistory } from '../../hooks/useChatHistory'
 import { SidebarItem } from './SidebarItem'
 import { UserMenu } from './UserMenu'
@@ -178,22 +178,22 @@ export function Sidebar({
             <button
               onClick={handleNewChatClick}
               aria-label="New chat"
-              className={`flex items-center justify-center rounded-pill border border-[#e8e4dc]/80 bg-[#f4f1ea] py-2 text-btn-sm font-semibold text-brand-dark shadow-sm shadow-black/5 transition-[background-color,border-color,box-shadow] duration-150 hover:border-[#ded8cf] hover:bg-[#ebe6dc] hover:shadow-sm hover:shadow-black/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-brand-dark
+              className={`inline-flex items-center justify-center rounded-pill border border-[#e8e4dc]/80 bg-[#f4f1ea] py-2 text-btn-sm font-semibold text-brand-dark shadow-sm shadow-black/5 transition-[background-color,border-color,box-shadow] duration-150 hover:border-[#ded8cf] hover:bg-[#ebe6dc] hover:shadow-sm hover:shadow-black/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-brand-dark
                 ${
                   isCollapsed
-                    ? 'w-10 h-10 p-0 text-lg'
+                    ? 'w-10 h-10 p-0'
                     : 'w-full px-3'
                 }`}
             >
               {isCollapsed ? (
-                '+'
+                <Plus className="h-4 w-4 shrink-0" strokeWidth={2.25} />
               ) : (
                 <span
-                  className={`inline-flex items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap transition-opacity duration-150 ${
+                  className={`inline-flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap transition-opacity duration-150 ${
                     expandedLabelsVisible ? 'opacity-100' : 'opacity-0'
                   }`}
                 >
-                  <span aria-hidden="true" className="text-[15px] leading-none">+</span>
+                  <Plus className="h-4 w-4 shrink-0" strokeWidth={2.25} />
                   <span>New Chat</span>
                 </span>
               )}
