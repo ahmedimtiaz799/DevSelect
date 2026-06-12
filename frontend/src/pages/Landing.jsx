@@ -91,7 +91,7 @@ export function Landing() {
                   <div className="h-9 w-9 rounded-lg bg-white text-brand-dark text-lg font-semibold flex items-center justify-center">
                     +
                   </div>
-                  <div className="mt-auto h-9 w-9 rounded-full bg-white/95 text-brand-dark text-sm font-extrabold flex items-center justify-center">
+                  <div className="mt-auto h-9 w-9 rounded-full bg-[#F4511E] text-white text-sm font-extrabold flex items-center justify-center">
                     A
                   </div>
                 </div>
