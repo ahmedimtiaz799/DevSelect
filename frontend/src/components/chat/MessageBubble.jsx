@@ -21,22 +21,22 @@ export function MessageBubble({ content = '', fileName }) {
   return (
     <div className="group flex min-w-0 max-w-full justify-end">
       <div
-        className={`relative min-w-0 max-w-[85%] overflow-hidden bg-brand-userBubble text-brand-body rounded-bubble text-msg ${
+        className={`relative min-w-0 max-w-[85%] overflow-hidden bg-ds-user-bubble text-ds-text rounded-bubble text-msg ${
           isFileOnly ? 'md:max-w-xs px-2 py-2' : 'md:max-w-bubble px-3.5 py-3'
         }`}
       >
         <div className={hasFile && hasText ? 'flex flex-col gap-2.5' : 'min-w-0'}>
           {fileName && (
-            <div className="flex items-center gap-2 min-w-0 rounded-lg border border-brand-dark/10 bg-white/70 px-2.5 py-2">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-dark/10 text-brand-dark">
+            <div className="flex items-center gap-2 min-w-0 rounded-lg border border-dsAlpha-accent/10 bg-dsAlpha-surface/70 px-2.5 py-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-dsAlpha-accent/10 text-ds-text-strong">
                 <FileText size={15} />
               </span>
 
               <span className="min-w-0">
-                <span className="block truncate text-sm font-medium leading-5 text-brand-body">
+                <span className="block truncate text-sm font-medium leading-5 text-ds-text">
                   {fileName}
                 </span>
-                <span className="block text-xs leading-4 text-brand-muted">
+                <span className="block text-xs leading-4 text-ds-text-muted">
                   CV uploaded
                 </span>
               </span>
@@ -54,11 +54,11 @@ export function MessageBubble({ content = '', fileName }) {
           <button
             onClick={handleCopy}
             aria-label="Copy message"
-            className="absolute -bottom-5 right-0 rounded-md opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70"
+            className="absolute -bottom-5 right-0 rounded-md opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70"
           >
             {copied
-              ? <Check size={14} className="text-brand-systemText" />
-              : <Copy size={14} className="text-brand-iconGray" />
+              ? <Check size={14} className="text-ds-text-subtle" />
+              : <Copy size={14} className="text-ds-icon-muted" />
             }
           </button>
         )}

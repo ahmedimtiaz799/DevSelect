@@ -13,15 +13,15 @@ function MessageHistorySkeleton() {
   return (
     <div aria-hidden="true" className="flex flex-col gap-6 animate-pulse">
       <div className="flex justify-end">
-        <div className="h-14 w-56 max-w-[75%] rounded-2xl bg-gray-100" />
+        <div className="h-14 w-56 max-w-[75%] rounded-2xl bg-ds-border-subtle" />
       </div>
 
       <div className="w-full max-w-2xl space-y-3">
-        <div className="h-4 w-36 rounded-full bg-gray-200" />
-        <div className="h-3 w-full rounded-full bg-gray-100" />
-        <div className="h-3 w-11/12 rounded-full bg-gray-100" />
-        <div className="h-3 w-4/5 rounded-full bg-gray-100" />
-        <div className="h-3 w-2/3 rounded-full bg-gray-100" />
+        <div className="h-4 w-36 rounded-full bg-ds-border" />
+        <div className="h-3 w-full rounded-full bg-ds-border-subtle" />
+        <div className="h-3 w-11/12 rounded-full bg-ds-border-subtle" />
+        <div className="h-3 w-4/5 rounded-full bg-ds-border-subtle" />
+        <div className="h-3 w-2/3 rounded-full bg-ds-border-subtle" />
       </div>
     </div>
   )
@@ -30,7 +30,7 @@ function MessageHistorySkeleton() {
 function FollowUpLoadingState() {
   return (
     <div className="w-full max-w-ai-msg py-1" aria-live="polite">
-      <p className="text-brand-muted text-msg italic">
+      <p className="text-ds-text-muted text-msg italic">
         Thinking...
       </p>
     </div>
@@ -97,7 +97,7 @@ export function MessageList({
       ref={containerRef}
       role="log"
       aria-live="polite"
-      className={`flex-1 overflow-y-auto overflow-x-hidden bg-white px-4 md:px-8 ${
+      className={`flex-1 overflow-y-auto overflow-x-hidden bg-ds-surface px-4 md:px-8 ${
         isEmptyIdle ? '' : 'py-6 pb-[229px]'
       }`}
     >
@@ -108,7 +108,7 @@ export function MessageList({
       >
         {hasLoadError && (
           <div className="w-full py-1">
-            <p className="text-sm text-brand-systemText break-words [overflow-wrap:anywhere]">
+            <p className="text-sm text-ds-text-subtle break-words [overflow-wrap:anywhere]">
               {messageLoadError}
             </p>
           </div>
