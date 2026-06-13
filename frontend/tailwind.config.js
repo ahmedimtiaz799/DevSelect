@@ -35,6 +35,48 @@ export default {
           auth:    '#ffffff',
           chat:    '#f9f9f9',
         },
+        ds: {
+          bg: 'var(--ds-bg)',
+          surface: 'var(--ds-surface)',
+          'surface-subtle': 'var(--ds-surface-subtle)',
+          'surface-muted': 'var(--ds-surface-muted)',
+          'surface-elevated': 'var(--ds-surface-elevated)',
+
+          sidebar: 'var(--ds-sidebar)',
+
+          'text-strong': 'var(--ds-text-strong)',
+          text: 'var(--ds-text)',
+          'text-secondary': 'var(--ds-text-secondary)',
+          'text-muted': 'var(--ds-text-muted)',
+          'text-subtle': 'var(--ds-text-subtle)',
+          'text-inverse': 'var(--ds-text-inverse)',
+
+          border: 'var(--ds-border)',
+          'border-subtle': 'var(--ds-border-subtle)',
+          'border-strong': 'var(--ds-border-strong)',
+
+          accent: 'var(--ds-accent)',
+          'accent-hover': 'var(--ds-accent-hover)',
+          'accent-soft': 'var(--ds-accent-soft)',
+
+          input: 'var(--ds-input)',
+          'user-bubble': 'var(--ds-user-bubble)',
+
+          'icon-muted': 'var(--ds-icon-muted)',
+          'focus-ring': 'var(--ds-focus-ring)',
+
+          danger: 'var(--ds-danger)',
+          'danger-bg': 'var(--ds-danger-bg)',
+          warning: 'var(--ds-warning)',
+          'warning-bg': 'var(--ds-warning-bg)',
+          success: 'var(--ds-success)',
+          'success-bg': 'var(--ds-success-bg)',
+          info: 'var(--ds-info)',
+          'info-bg': 'var(--ds-info-bg)',
+
+          scrollbar: 'var(--ds-scrollbar)',
+          'scrollbar-hover': 'var(--ds-scrollbar-hover)',
+        },
       },
       fontSize: {
         'hero':     ['72px',  { lineHeight: '72px',   letterSpacing: '-3.6px', fontWeight: '800' }],

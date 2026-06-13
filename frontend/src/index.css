@@ -2,6 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --ds-bg: #ffffff;
+  --ds-surface: #ffffff;
+  --ds-surface-subtle: #f8fafc;
+  --ds-surface-muted: #f5f5f5;
+  --ds-surface-elevated: #ffffff;
+
+  --ds-sidebar: #2b2d42;
+
+  --ds-text-strong: #2b2d42;
+  --ds-text: #2d3435;
+  --ds-text-secondary: #475569;
+  --ds-text-muted: #5b5d74;
+  --ds-text-subtle: #6b7280;
+  --ds-text-inverse: #ffffff;
+
+  --ds-border: #e5e7eb;
+  --ds-border-subtle: #f3f4f6;
+  --ds-border-strong: #d1d5db;
+
+  --ds-accent: #2b2d42;
+  --ds-accent-hover: #24263a;
+  --ds-accent-soft: rgba(43, 45, 66, 0.1);
+
+  --ds-input: #f5f5f5;
+  --ds-user-bubble: #e8e9ef;
+
+  --ds-icon-muted: #596061;
+  --ds-focus-ring: #6d7c95;
+
+  --ds-danger: #b91c1c;
+  --ds-danger-bg: #fef2f2;
+  --ds-warning: #92400e;
+  --ds-warning-bg: #fffbeb;
+  --ds-success: #166534;
+  --ds-success-bg: #f0fdf4;
+  --ds-info: #334155;
+  --ds-info-bg: #f8fafc;
+
+  --ds-scrollbar: #c4c4ce;
+  --ds-scrollbar-hover: #a0a0b0;
+}
+
 html {
   scrollbar-gutter: stable;
 }
