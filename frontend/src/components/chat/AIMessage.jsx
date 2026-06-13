@@ -28,7 +28,7 @@ function MarkdownLink({ children, href }) {
   const trimmedHref = typeof href === 'string' ? href.trim() : '';
 
   if (!isSafeMarkdownUrl(trimmedHref)) {
-    return <span className="text-brand-dark underline underline-offset-2">{children}</span>;
+    return <span className="text-ds-text-strong underline underline-offset-2">{children}</span>;
   }
 
   return (
@@ -36,7 +36,7 @@ function MarkdownLink({ children, href }) {
       href={trimmedHref}
       target="_blank"
       rel="noopener noreferrer"
-      className="rounded-sm text-brand-dark underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70"
+      className="rounded-sm text-ds-text-strong underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70"
     >
       {children}
     </a>
@@ -45,25 +45,25 @@ function MarkdownLink({ children, href }) {
 
 const reportMarkdownComponents = {
   h2: ({ children }) => (
-    <h2 className="text-brand-dark font-bold text-lg mb-3 mt-5 break-words [overflow-wrap:anywhere]">{children}</h2>
+    <h2 className="text-ds-text-strong font-bold text-lg mb-3 mt-5 break-words [overflow-wrap:anywhere]">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-brand-dark font-semibold text-base mb-2 mt-4 break-words [overflow-wrap:anywhere]">{children}</h3>
+    <h3 className="text-ds-text-strong font-semibold text-base mb-2 mt-4 break-words [overflow-wrap:anywhere]">{children}</h3>
   ),
   ul: ({ children }) => (
-    <ul className="list-disc list-outside pl-5 text-brand-body text-msg mb-3 space-y-2 break-words [overflow-wrap:anywhere]">{children}</ul>
+    <ul className="list-disc list-outside pl-5 text-ds-text text-msg mb-3 space-y-2 break-words [overflow-wrap:anywhere]">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="list-decimal list-outside pl-5 text-brand-body text-msg mb-3 space-y-3 break-words [overflow-wrap:anywhere]">{children}</ol>
+    <ol className="list-decimal list-outside pl-5 text-ds-text text-msg mb-3 space-y-3 break-words [overflow-wrap:anywhere]">{children}</ol>
   ),
   li: ({ children }) => (
     <li className="pl-1 break-words [overflow-wrap:anywhere]">{children}</li>
   ),
   p: ({ children }) => (
-    <p className="text-brand-body text-msg mb-3 whitespace-pre-line break-words [overflow-wrap:anywhere]">{children}</p>
+    <p className="text-ds-text text-msg mb-3 whitespace-pre-line break-words [overflow-wrap:anywhere]">{children}</p>
   ),
   strong: ({ children }) => (
-    <strong className="text-brand-dark font-semibold">{children}</strong>
+    <strong className="text-ds-text-strong font-semibold">{children}</strong>
   ),
   a: MarkdownLink,
   hr: () => null,
@@ -71,25 +71,25 @@ const reportMarkdownComponents = {
 
 const followUpMarkdownComponents = {
   h2: ({ children }) => (
-    <h2 className="text-brand-dark font-bold text-lg mb-3 mt-4 break-words [overflow-wrap:anywhere]">{children}</h2>
+    <h2 className="text-ds-text-strong font-bold text-lg mb-3 mt-4 break-words [overflow-wrap:anywhere]">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-brand-dark/90 font-medium text-sm mb-2 mt-3 break-words [overflow-wrap:anywhere]">{children}</h3>
+    <h3 className="text-dsAlpha-text-strong/90 font-medium text-sm mb-2 mt-3 break-words [overflow-wrap:anywhere]">{children}</h3>
   ),
   ul: ({ children }) => (
-    <ul className="list-disc list-outside pl-5 text-brand-body text-msg mb-3 space-y-2 break-words [overflow-wrap:anywhere]">{children}</ul>
+    <ul className="list-disc list-outside pl-5 text-ds-text text-msg mb-3 space-y-2 break-words [overflow-wrap:anywhere]">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="list-decimal list-outside pl-5 text-brand-body text-msg mb-4 space-y-4 break-words [overflow-wrap:anywhere]">{children}</ol>
+    <ol className="list-decimal list-outside pl-5 text-ds-text text-msg mb-4 space-y-4 break-words [overflow-wrap:anywhere]">{children}</ol>
   ),
   li: ({ children }) => (
     <li className="pl-1 break-words [overflow-wrap:anywhere]">{children}</li>
   ),
   p: ({ children }) => (
-    <p className="text-brand-body text-msg mb-3 whitespace-pre-line break-words [overflow-wrap:anywhere]">{children}</p>
+    <p className="text-ds-text text-msg mb-3 whitespace-pre-line break-words [overflow-wrap:anywhere]">{children}</p>
   ),
   strong: ({ children }) => (
-    <strong className="text-brand-dark font-semibold">{children}</strong>
+    <strong className="text-ds-text-strong font-semibold">{children}</strong>
   ),
   a: MarkdownLink,
   hr: () => null,
@@ -124,7 +124,7 @@ export function AIMessage({ message }) {
   if (renderMode === 'status') {
     return (
       <div className="w-full py-1">
-        <p className="text-brand-muted text-msg italic">{message.content}</p>
+        <p className="text-ds-text-muted text-msg italic">{message.content}</p>
       </div>
     );
   }
@@ -132,7 +132,7 @@ export function AIMessage({ message }) {
   if (renderMode === 'stopped') {
     return (
       <div className="w-full min-w-0 py-1">
-        <p className="text-sm text-brand-systemText break-words [overflow-wrap:anywhere]">{message.content}</p>
+        <p className="text-sm text-ds-text-subtle break-words [overflow-wrap:anywhere]">{message.content}</p>
       </div>
     );
   }
@@ -153,7 +153,7 @@ export function AIMessage({ message }) {
         )}
 
         {renderMode === 'simple' && (
-          <p className="text-brand-body text-msg whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+          <p className="text-ds-text text-msg whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
             {message.content}
           </p>
         )}
@@ -163,10 +163,10 @@ export function AIMessage({ message }) {
         <button
           onClick={handleCopy}
           aria-label="Copy message"
-          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity mt-1 flex items-center gap-1 rounded-md text-brand-iconGray hover:text-brand-dark focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70"
+          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity mt-1 flex items-center gap-1 rounded-md text-ds-icon-muted hover:text-ds-text-strong focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70"
         >
           {copied ? (
-            <Check size={14} className="text-brand-systemText" />
+            <Check size={14} className="text-ds-text-subtle" />
           ) : (
             <Copy size={14} />
           )}
