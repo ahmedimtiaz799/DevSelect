@@ -10,12 +10,12 @@ export function SignUp() {
 
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-bold text-brand-dark text-center mb-8">
+      <h1 className="text-2xl font-bold text-ds-text-strong text-center mb-8">
         Create your account
       </h1>
 
       {error && (
-        <p role="alert" className="text-brand-error text-sm text-center -mb-2">{error}</p>
+        <p role="alert" className="text-ds-danger text-sm text-center -mb-2">{error}</p>
       )}
 
       <div className="w-full max-w-xs flex flex-col gap-3">
@@ -34,18 +34,18 @@ export function SignUp() {
         />
       </div>
 
-      <p className="text-sm text-gray-500 mt-4">
+      <p className="text-sm text-ds-text-muted mt-4">
         Already have an account?{' '}
-        <Link to="/login" className="font-semibold text-brand-dark hover:underline">
+        <Link to="/login" className="font-semibold text-ds-text-strong hover:underline">
           Log in
         </Link>
       </p>
 
-      <p className="text-xs text-gray-400 text-center mt-4">
+      <p className="text-xs text-ds-text-subtle text-center mt-4">
         By continuing, you agree to our{' '}
-        <Link to="/terms" className="underline hover:text-brand-dark">Terms</Link>
+        <Link to="/terms" className="underline hover:text-ds-text-strong">Terms</Link>
         {' '}and{' '}
-        <Link to="/privacy" className="underline hover:text-brand-dark">Privacy Policy</Link>
+        <Link to="/privacy" className="underline hover:text-ds-text-strong">Privacy Policy</Link>
       </p>
     </AuthLayout>
   )
