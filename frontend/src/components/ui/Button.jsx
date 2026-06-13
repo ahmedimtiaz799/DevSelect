@@ -3,7 +3,7 @@ function Button({ children, variant = 'primary', size = 'md', onClick, disabled,
   const base = 'inline-flex items-center justify-center rounded-btn font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed'
 
   const variants = {
-    primary: 'bg-brand-dark text-ds-text-inverse hover:bg-opacity-90 hover:scale-[1.02]',
+    primary: 'bg-ds-button-primary text-ds-button-primary-text hover:bg-ds-button-primary-hover hover:scale-[1.02]',
     secondary: 'border-2 border-ds-accent text-ds-accent bg-transparent hover:bg-ds-accent hover:text-ds-text-inverse',
     ghost: 'text-ds-text-strong bg-transparent hover:text-ds-text-muted',
   }

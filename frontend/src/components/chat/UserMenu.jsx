@@ -69,7 +69,7 @@ export function UserMenu({ isCollapsed, labelsVisible = true }) {
     <div ref={menuRef} className="relative w-full">
       {open && (
         <div
-          className={`absolute bottom-full mb-3 w-60 rounded-2xl bg-brand-dark border border-white/15 shadow-xl overflow-hidden z-[9999] ${
+          className={`absolute bottom-full mb-3 w-60 rounded-2xl bg-ds-sidebar border border-white/15 shadow-xl overflow-hidden z-[9999] ${
             isCollapsed ? 'left-0' : 'left-0'
           }`}
         >

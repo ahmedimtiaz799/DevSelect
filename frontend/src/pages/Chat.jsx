@@ -69,6 +69,14 @@ export function Chat() {
   }, [sendMessage])
 
   useEffect(() => {
+    document.documentElement.classList.add('ds-chat-route')
+
+    return () => {
+      document.documentElement.classList.remove('ds-chat-route')
+    }
+  }, [])
+
+  useEffect(() => {
     if (chatId) {
       setActiveChatId(chatId)
       let ignore = false
@@ -242,7 +250,7 @@ export function Chat() {
   }
 
   return (
-    <div className="flex h-dvh bg-ds-bg overflow-hidden overflow-x-hidden">
+    <div className="flex h-dvh bg-ds-surface overflow-hidden overflow-x-hidden">
       <Sidebar
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
@@ -252,7 +260,7 @@ export function Chat() {
       />
 
       <div
-        className={`flex flex-col flex-1 min-h-0 min-w-0 bg-ds-bg transition-all duration-300 ${
+        className={`flex flex-col flex-1 min-h-0 min-w-0 bg-ds-surface transition-all duration-300 ${
           isCollapsed ? 'md:ml-16' : 'md:ml-64'
         }`}
       >
@@ -275,7 +283,7 @@ export function Chat() {
           onProfileSelect={handleProfileSelect}
         />
 
-        <div className="shrink-0 bg-ds-bg pt-2 pb-4">
+        <div className="shrink-0 bg-ds-surface pt-2 pb-4">
           <InputBar
             key={`${draftUserId}:${inputChatId}`}
             chatId={inputChatId}

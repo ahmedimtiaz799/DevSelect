@@ -82,13 +82,13 @@ export function Landing() {
               </p>
             </div>
 
-            <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-gray-200 bg-page-chat shadow-card">
+            <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-ds-border bg-ds-bg shadow-card">
               <div className="grid min-h-[560px] grid-cols-[48px_1fr] sm:grid-cols-[56px_1fr]">
-                <div className="bg-brand-dark px-2 py-4 flex flex-col items-center gap-4">
+                <div className="bg-ds-sidebar px-2 py-4 flex flex-col items-center gap-4">
                   <div className="h-8 w-8 rounded-md text-white/55 flex items-center justify-center">
                     <ChevronRight size={16} />
                   </div>
-                  <div className="h-9 w-9 rounded-lg bg-white text-brand-dark text-lg font-semibold flex items-center justify-center">
+                  <div className="h-9 w-9 rounded-lg border border-[#e8e4dc]/80 bg-[#f4f1ea] text-brand-dark text-lg font-semibold flex items-center justify-center">
                     +
                   </div>
                   <div className="mt-auto h-9 w-9 rounded-full bg-[#F4511E] text-white text-sm font-extrabold flex items-center justify-center">
@@ -96,9 +96,9 @@ export function Landing() {
                   </div>
                 </div>
 
-                <div className="min-w-0 flex flex-col bg-page-chat">
-                  <div className="h-14 border-b border-gray-100 bg-white px-4 sm:px-6 flex items-center">
-                    <h3 className="truncate text-logo-chat text-brand-dark font-extrabold">
+                <div className="min-w-0 flex flex-col bg-ds-surface">
+                  <div className="h-14 border-b border-ds-border-subtle bg-ds-surface px-4 sm:px-6 flex items-center">
+                    <h3 className="truncate text-logo-chat text-ds-text-strong font-extrabold">
                       Ali Hamza — Full Stack AI Engineer
                     </h3>
                   </div>
@@ -106,17 +106,17 @@ export function Landing() {
                   <div className="flex-1 px-4 py-5 sm:px-6 sm:py-6">
                     <div className="mx-auto flex max-w-2xl flex-col gap-5">
                       <div className="flex justify-end">
-                        <div className="max-w-xs rounded-bubble bg-brand-userBubble px-2 py-2 text-brand-body">
-                          <div className="flex items-center gap-2 min-w-0 rounded-lg border border-brand-dark/10 bg-white/70 px-2.5 py-2">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-dark/10 text-brand-dark">
+                        <div className="max-w-xs rounded-bubble bg-ds-user-bubble px-2 py-2 text-ds-text">
+                          <div className="flex items-center gap-2 min-w-0 rounded-lg border border-ds-border bg-ds-surface-elevated px-2.5 py-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-ds-accent-soft text-ds-text-strong">
                               CV
                             </span>
 
                             <span className="min-w-0 text-left">
-                              <span className="block truncate text-sm font-medium leading-5 text-brand-body">
+                              <span className="block truncate text-sm font-medium leading-5 text-ds-text">
                                 ali_hamza_cv.pdf
                               </span>
-                              <span className="block text-xs leading-4 text-brand-muted">
+                              <span className="block text-xs leading-4 text-ds-text-muted">
                                 CV uploaded
                               </span>
                             </span>
@@ -127,24 +127,24 @@ export function Landing() {
                       <div className="min-w-0 px-1 py-2 sm:px-2 sm:py-3">
                         <div className="grid gap-5 text-left">
                           <section>
-                            <h4 className="text-lg font-bold text-brand-dark mb-2">
+                            <h4 className="text-lg font-bold text-ds-text-strong mb-2">
                               Candidate Overview
                             </h4>
-                            <div className="grid gap-1 text-msg text-brand-body">
+                            <div className="grid gap-1 text-msg text-ds-text">
                               <p>
-                                <strong className="text-brand-dark font-semibold">
+                                <strong className="text-ds-text-strong font-semibold">
                                   Candidate Name:
                                 </strong>{' '}
                                 Ali Hamza
                               </p>
                               <p>
-                                <strong className="text-brand-dark font-semibold">
+                                <strong className="text-ds-text-strong font-semibold">
                                   Detected Role:
                                 </strong>{' '}
                                 Full Stack AI Engineer
                               </p>
                               <p>
-                                <strong className="text-brand-dark font-semibold">
+                                <strong className="text-ds-text-strong font-semibold">
                                   Seniority Level:
                                 </strong>{' '}
                                 Junior
@@ -153,41 +153,41 @@ export function Landing() {
                           </section>
 
                           <section>
-                            <h4 className="text-lg font-bold text-brand-dark mb-2">
+                            <h4 className="text-lg font-bold text-ds-text-strong mb-2">
                               CV & Experience Review
                             </h4>
-                            <p className="text-msg text-brand-body">
+                            <p className="text-msg text-ds-text">
                               Strong evidence of full-stack AI work across
                               LangGraph, FastAPI, React, and RAG pipelines.
                             </p>
                           </section>
 
                           <section>
-                            <h4 className="text-lg font-bold text-brand-dark mb-2">
+                            <h4 className="text-lg font-bold text-ds-text-strong mb-2">
                               GitHub Profile Review
                             </h4>
-                            <p className="text-msg text-brand-body">
+                            <p className="text-msg text-ds-text">
                               Verified repositories show consistent project work
                               across AI, backend, and frontend development.
                             </p>
                           </section>
 
                           <section>
-                            <h4 className="text-lg font-bold text-brand-dark mb-2">
+                            <h4 className="text-lg font-bold text-ds-text-strong mb-2">
                               Skill Match Assessment
                             </h4>
-                            <p className="text-msg text-brand-body">
+                            <p className="text-msg text-ds-text">
                               Good alignment with Full Stack AI Engineer
                               requirements.
                             </p>
                           </section>
 
                           <section>
-                            <h4 className="text-lg font-bold text-brand-dark mb-2">
+                            <h4 className="text-lg font-bold text-ds-text-strong mb-2">
                               Hiring Recommendation
                             </h4>
-                            <p className="text-msg text-brand-body">
-                              <strong className="text-brand-dark font-semibold">
+                            <p className="text-msg text-ds-text">
+                              <strong className="text-ds-text-strong font-semibold">
                                 Recommendation:
                               </strong>{' '}
                               Interview
@@ -198,8 +198,8 @@ export function Landing() {
                     </div>
                   </div>
 
-                  <div className="border-t border-gray-100 bg-white px-4 py-3 sm:px-6">
-                    <div className="mx-auto max-w-3xl rounded-input bg-brand-inputBg px-4 py-3 text-left text-sm text-brand-muted">
+                  <div className="border-t border-ds-border-subtle bg-ds-surface px-4 py-3 sm:px-6">
+                    <div className="mx-auto max-w-3xl rounded-input bg-ds-surface px-4 py-3 text-left text-sm text-ds-text-muted ring-1 ring-ds-border-strong">
                       Ask a follow-up about this candidate...
                     </div>
                   </div>

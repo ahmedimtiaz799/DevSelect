@@ -139,7 +139,7 @@ export function Sidebar({
       )}
 
       <aside
-        className={`fixed top-0 left-0 h-full bg-brand-dark border-r border-white/10 flex flex-col z-30 transition-all duration-300
+        className={`fixed top-0 left-0 h-full bg-ds-sidebar border-r border-white/10 flex flex-col z-30 transition-all duration-300
           ${isCollapsed ? 'w-16' : 'w-64'}
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0`}

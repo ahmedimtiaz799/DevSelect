@@ -59,6 +59,15 @@ export default {
           'accent-hover': 'var(--ds-accent-hover)',
           'accent-soft': 'var(--ds-accent-soft)',
 
+          'button-primary': 'var(--ds-button-primary)',
+          'button-primary-hover': 'var(--ds-button-primary-hover)',
+          'button-primary-text': 'var(--ds-button-primary-text)',
+
+          'button-secondary': 'var(--ds-button-secondary)',
+          'button-secondary-hover': 'var(--ds-button-secondary-hover)',
+          'button-secondary-border': 'var(--ds-button-secondary-border)',
+          'button-secondary-text': 'var(--ds-button-secondary-text)',
+
           input: 'var(--ds-input)',
           'user-bubble': 'var(--ds-user-bubble)',
 

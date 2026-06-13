@@ -43,6 +43,21 @@
   --ds-accent-hover-rgb: 36 38 58;
   --ds-accent-soft: rgba(43, 45, 66, 0.1);
 
+  --ds-button-primary: #2b2d42;
+  --ds-button-primary-rgb: 43 45 66;
+  --ds-button-primary-hover: #24263a;
+  --ds-button-primary-hover-rgb: 36 38 58;
+  --ds-button-primary-text: #ffffff;
+  --ds-button-primary-text-rgb: 255 255 255;
+
+  --ds-button-secondary: #2b2d42;
+  --ds-button-secondary-rgb: 43 45 66;
+  --ds-button-secondary-hover: #24263a;
+  --ds-button-secondary-hover-rgb: 36 38 58;
+  --ds-button-secondary-border: transparent;
+  --ds-button-secondary-text: #ffffff;
+  --ds-button-secondary-text-rgb: 255 255 255;
+
   --ds-input: #f5f5f5;
   --ds-input-rgb: 245 245 245;
   --ds-user-bubble: #e8e9ef;
@@ -73,26 +88,28 @@
 }
 
 :root[data-theme-preview='dark'] {
-  --ds-bg: #070A12;
-  --ds-bg-rgb: 7 10 18;
+  color-scheme: dark;
 
-  --ds-surface: #0F172A;
-  --ds-surface-rgb: 15 23 42;
+  --ds-bg: #0B1020;
+  --ds-bg-rgb: 11 16 32;
 
-  --ds-surface-subtle: #111827;
-  --ds-surface-subtle-rgb: 17 24 39;
+  --ds-surface: #111827;
+  --ds-surface-rgb: 17 24 39;
+
+  --ds-surface-subtle: #0F172A;
+  --ds-surface-subtle-rgb: 15 23 42;
 
   --ds-surface-muted: #1E293B;
   --ds-surface-muted-rgb: 30 41 59;
 
-  --ds-surface-elevated: #151B2E;
-  --ds-surface-elevated-rgb: 21 27 46;
+  --ds-surface-elevated: #172033;
+  --ds-surface-elevated-rgb: 23 32 51;
 
   --ds-surface-hover: #1E293B;
   --ds-surface-hover-rgb: 30 41 59;
 
-  --ds-sidebar: #0B1020;
-  --ds-sidebar-rgb: 11 16 32;
+  --ds-sidebar: #111827;
+  --ds-sidebar-rgb: 17 24 39;
 
   --ds-text-strong: #F8FAFC;
   --ds-text-strong-rgb: 248 250 252;
@@ -106,40 +123,55 @@
   --ds-text-muted: #94A3B8;
   --ds-text-muted-rgb: 148 163 184;
 
-  --ds-text-subtle: #64748B;
-  --ds-text-subtle-rgb: 100 116 139;
+  --ds-text-subtle: #7C8AA0;
+  --ds-text-subtle-rgb: 124 138 160;
 
-  --ds-text-inverse: #0B1020;
-  --ds-text-inverse-rgb: 11 16 32;
+  --ds-text-inverse: #FFFFFF;
+  --ds-text-inverse-rgb: 255 255 255;
 
-  --ds-border: rgba(148, 163, 184, 0.16);
+  --ds-border: rgba(148, 163, 184, 0.18);
   --ds-border-rgb: 148 163 184;
 
-  --ds-border-subtle: rgba(148, 163, 184, 0.10);
+  --ds-border-subtle: rgba(148, 163, 184, 0.12);
   --ds-border-subtle-rgb: 148 163 184;
 
-  --ds-border-strong: rgba(148, 163, 184, 0.28);
+  --ds-border-strong: rgba(148, 163, 184, 0.30);
   --ds-border-strong-rgb: 148 163 184;
 
-  --ds-accent: #7E14FF;
-  --ds-accent-rgb: 126 20 255;
+  --ds-accent: #2563EB;
+  --ds-accent-rgb: 37 99 235;
 
-  --ds-accent-hover: #6D28D9;
-  --ds-accent-hover-rgb: 109 40 217;
+  --ds-accent-hover: #1D4ED8;
+  --ds-accent-hover-rgb: 29 78 216;
 
-  --ds-accent-soft: rgba(126, 20, 255, 0.14);
+  --ds-accent-soft: rgba(37, 99, 235, 0.16);
 
-  --ds-input: #0F172A;
-  --ds-input-rgb: 15 23 42;
+  --ds-button-primary: #2563EB;
+  --ds-button-primary-rgb: 37 99 235;
+  --ds-button-primary-hover: #1D4ED8;
+  --ds-button-primary-hover-rgb: 29 78 216;
+  --ds-button-primary-text: #ffffff;
+  --ds-button-primary-text-rgb: 255 255 255;
 
-  --ds-user-bubble: #1E1B4B;
-  --ds-user-bubble-rgb: 30 27 75;
+  --ds-button-secondary: #1E293B;
+  --ds-button-secondary-rgb: 30 41 59;
+  --ds-button-secondary-hover: #24324A;
+  --ds-button-secondary-hover-rgb: 36 50 74;
+  --ds-button-secondary-border: rgba(148, 163, 184, 0.28);
+  --ds-button-secondary-text: #F8FAFC;
+  --ds-button-secondary-text-rgb: 248 250 252;
+
+  --ds-input: #111827;
+  --ds-input-rgb: 17 24 39;
+
+  --ds-user-bubble: #1E293B;
+  --ds-user-bubble-rgb: 30 41 59;
 
   --ds-icon-muted: #94A3B8;
   --ds-icon-muted-rgb: 148 163 184;
 
-  --ds-focus-ring: #A78BFA;
-  --ds-focus-ring-rgb: 167 139 250;
+  --ds-focus-ring: #38BDF8;
+  --ds-focus-ring-rgb: 56 189 248;
 
   --ds-danger: #FB7185;
   --ds-danger-rgb: 251 113 133;
@@ -157,18 +189,22 @@
   --ds-info-rgb: 56 189 248;
   --ds-info-bg: rgba(56, 189, 248, 0.12);
 
-  --ds-scrollbar: rgba(148, 163, 184, 0.28);
+  --ds-scrollbar: rgba(148, 163, 184, 0.32);
   --ds-scrollbar-rgb: 148 163 184;
 
-  --ds-scrollbar-hover: rgba(148, 163, 184, 0.45);
+  --ds-scrollbar-hover: rgba(148, 163, 184, 0.50);
   --ds-scrollbar-hover-rgb: 148 163 184;
 }
 
 html {
+  min-height: 100%;
+  background: var(--ds-bg);
   scrollbar-gutter: stable;
 }
 
 body {
+  min-height: 100%;
+  background: var(--ds-bg);
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -176,7 +212,14 @@ body {
 
 #root {
   min-height: 100dvh;
+  background: var(--ds-bg);
   font-family: inherit;
+}
+
+:root[data-theme-preview='dark'].ds-chat-route,
+:root[data-theme-preview='dark'].ds-chat-route body,
+:root[data-theme-preview='dark'].ds-chat-route #root {
+  background: var(--ds-surface);
 }
 
 button,
