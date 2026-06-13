@@ -30,20 +30,20 @@ const termsSections = [
 
 export function Terms() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-ds-bg">
       <Navbar />
 
       <main className="px-6 py-16 md:py-24">
         <article className="mx-auto max-w-3xl">
-          <p className="text-sm font-semibold text-brand-muted mb-4">
+          <p className="text-sm font-semibold text-ds-text-muted mb-4">
             Last updated: June 2026
           </p>
 
-          <h1 className="text-3xl md:text-display font-extrabold text-brand-dark mb-6">
+          <h1 className="text-3xl md:text-display font-extrabold text-ds-text-strong mb-6">
             Terms of Use
           </h1>
 
-          <p className="text-base md:text-body text-brand-secondary mb-10">
+          <p className="text-base md:text-body text-ds-text-secondary mb-10">
             DevSelect is currently in beta. These terms explain how you should
             use the product while it is being developed and tested.
           </p>
@@ -51,26 +51,26 @@ export function Terms() {
           <div className="flex flex-col gap-8">
             {termsSections.map((section) => (
               <section key={section.title}>
-                <h2 className="text-xl font-extrabold text-brand-dark mb-3">
+                <h2 className="text-xl font-extrabold text-ds-text-strong mb-3">
                   {section.title}
                 </h2>
 
-                <p className="text-base md:text-body text-brand-secondary">
+                <p className="text-base md:text-body text-ds-text-secondary">
                   {section.text}
                 </p>
               </section>
             ))}
 
             <section>
-              <h2 className="text-xl font-extrabold text-brand-dark mb-3">
+              <h2 className="text-xl font-extrabold text-ds-text-strong mb-3">
                 Contact
               </h2>
 
-              <p className="text-base md:text-body text-brand-secondary">
+              <p className="text-base md:text-body text-ds-text-secondary">
                 If you have questions about these terms, contact:{' '}
                 <a
                   href="mailto:ahmed.awan9839@gmail.com"
-                  className="font-semibold text-brand-dark underline underline-offset-4"
+                  className="font-semibold text-ds-text-strong underline underline-offset-4"
                 >
                   ahmed.awan9839@gmail.com
                 </a>

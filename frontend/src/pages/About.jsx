@@ -3,16 +3,16 @@ import { Footer } from '../components/layout/Footer'
 
 export function About() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-ds-bg">
       <Navbar />
 
       <div className="flex flex-col items-center px-6 py-16 md:py-20">
 
-        <h1 className="text-display font-extrabold text-brand-dark mb-8 text-center">
+        <h1 className="text-display font-extrabold text-ds-text-strong mb-8 text-center">
           About DevSelect
         </h1>
 
-        <div className="text-body text-brand-secondary max-w-subtitle text-left mx-auto flex flex-col gap-5">
+        <div className="text-body text-ds-text-secondary max-w-subtitle text-left mx-auto flex flex-col gap-5">
           <p>
             DevSelect is an AI-assisted hiring evaluation tool built by Ahmed
             Imtiaz, a Software Engineer focused on full-stack AI systems.

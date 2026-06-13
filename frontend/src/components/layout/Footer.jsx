@@ -60,13 +60,13 @@ function ExternalLink({ children, href }) {
 
 export function Footer() {
   return (
-    <footer className="bg-brand-dark text-white">
+    <footer className="bg-ds-sidebar text-ds-text-inverse">
       <div className="mx-auto max-w-7xl px-6 py-16 md:px-8 md:py-[72px]">
         <div className="grid gap-x-10 gap-y-11 sm:grid-cols-2 lg:grid-cols-[1.75fr_repeat(5,minmax(0,1fr))]">
           <div>
             <Link
               to="/"
-              className="inline-flex text-lg font-extrabold tracking-wide text-white transition-colors hover:text-white/85 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60 rounded-sm"
+              className="inline-flex text-lg font-extrabold tracking-wide text-ds-text-inverse transition-colors hover:text-white/85 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60 rounded-sm"
             >
               DevSelect
             </Link>

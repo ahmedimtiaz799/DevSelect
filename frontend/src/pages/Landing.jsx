@@ -45,16 +45,16 @@ export function Landing() {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-ds-bg">
       <Navbar />
 
       <main>
         <section className="flex flex-col items-center justify-center text-center px-6 py-16 md:py-24 lg:py-28">
-          <h1 className="text-3xl sm:text-4xl md:text-display lg:text-hero font-extrabold text-brand-dark max-w-hero leading-tight mb-6">
+          <h1 className="text-3xl sm:text-4xl md:text-display lg:text-hero font-extrabold text-ds-text-strong max-w-hero leading-tight mb-6">
             Know Who to Hire Before the Interview
           </h1>
 
-          <p className="text-base md:text-body text-brand-secondary max-w-subtitle mb-10">
+          <p className="text-base md:text-body text-ds-text-secondary max-w-subtitle mb-10">
             DevSelect reviews a candidate's CV and GitHub activity, then
             generates a structured hiring report with a clear recommendation.
           </p>
@@ -68,14 +68,14 @@ export function Landing() {
           </Button>
         </section>
 
-        <section className="px-6 py-14 md:py-20 bg-brand-surfaceSubtle">
+        <section className="px-6 py-14 md:py-20 bg-ds-surface-subtle">
           <div className="max-w-5xl mx-auto">
             <div className="text-center max-w-3xl mx-auto mb-10">
-              <h2 className="text-3xl md:text-display font-extrabold text-brand-dark mb-4">
+              <h2 className="text-3xl md:text-display font-extrabold text-ds-text-strong mb-4">
                 A hiring report built from real candidate evidence
               </h2>
 
-              <p className="text-base md:text-body text-brand-secondary">
+              <p className="text-base md:text-body text-ds-text-secondary">
                 DevSelect combines CV details with GitHub activity, then
                 summarizes the result in a clear report your team can review
                 before the interview.
@@ -212,29 +212,29 @@ export function Landing() {
         <section className="px-6 py-14 md:py-20">
           <div className="max-w-5xl mx-auto grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
             <div>
-              <h2 className="text-3xl md:text-display font-extrabold text-brand-dark mb-5">
+              <h2 className="text-3xl md:text-display font-extrabold text-ds-text-strong mb-5">
                 The evaluation flow
               </h2>
 
-              <p className="text-base md:text-body text-brand-secondary">
+              <p className="text-base md:text-body text-ds-text-secondary">
                 DevSelect turns candidate evidence into a structured hiring
                 report by reviewing the CV and GitHub activity before
                 generating a recommendation.
               </p>
             </div>
 
-            <ol className="border-l border-gray-200">
+            <ol className="border-l border-ds-border">
               {flowSteps.map((step) => (
                 <li key={step.number} className="relative pl-6 pb-8 last:pb-0">
-                  <span className="absolute -left-[17px] top-0 flex h-8 w-8 items-center justify-center rounded-full bg-brand-dark text-white text-xs font-bold">
+                  <span className="absolute -left-[17px] top-0 flex h-8 w-8 items-center justify-center rounded-full bg-ds-accent text-ds-text-inverse text-xs font-bold">
                     {step.number}
                   </span>
 
-                  <h3 className="text-xl font-extrabold text-brand-dark mb-2">
+                  <h3 className="text-xl font-extrabold text-ds-text-strong mb-2">
                     {step.title}
                   </h3>
 
-                  <p className="text-ui text-brand-secondary leading-6">
+                  <p className="text-ui text-ds-text-secondary leading-6">
                     {step.text}
                   </p>
                 </li>
@@ -243,34 +243,34 @@ export function Landing() {
           </div>
         </section>
 
-        <section className="px-6 py-14 md:py-20 bg-brand-surfaceSubtle">
+        <section className="px-6 py-14 md:py-20 bg-ds-surface-subtle">
           <div className="max-w-5xl mx-auto">
             <div className="text-center max-w-3xl mx-auto mb-10">
-              <h2 className="text-3xl md:text-display font-extrabold text-brand-dark mb-4">
+              <h2 className="text-3xl md:text-display font-extrabold text-ds-text-strong mb-4">
                 What the report checks
               </h2>
 
-              <p className="text-base md:text-body text-brand-secondary">
+              <p className="text-base md:text-body text-ds-text-secondary">
                 DevSelect focuses the first screening step on candidate
                 evidence, not guesswork.
               </p>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-card overflow-hidden">
+            <div className="bg-ds-surface border border-ds-border rounded-2xl shadow-card overflow-hidden">
               {reportChecks.map((item, index) => (
                 <div
                   key={item.title}
                   className={`grid gap-2 px-5 py-5 sm:grid-cols-[220px_1fr] sm:gap-6 sm:px-7 ${
                     index === reportChecks.length - 1
                       ? ''
-                      : 'border-b border-gray-200'
+                      : 'border-b border-ds-border'
                   }`}
                 >
-                  <h3 className="text-lg font-extrabold text-brand-dark">
+                  <h3 className="text-lg font-extrabold text-ds-text-strong">
                     {item.title}
                   </h3>
 
-                  <p className="text-ui text-brand-secondary leading-6">
+                  <p className="text-ui text-ds-text-secondary leading-6">
                     {item.text}
                   </p>
                 </div>
