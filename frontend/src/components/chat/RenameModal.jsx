@@ -24,8 +24,8 @@ export function RenameModal({ chatTitle, onConfirm, onCancel }) {
 
   return createPortal(
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <h3 className="text-brand-dark font-bold text-lg mb-4">
+      <div className="bg-ds-surface rounded-2xl shadow-xl w-full max-w-sm p-6">
+        <h3 className="text-ds-text-strong font-bold text-lg mb-4">
           Rename this chat
         </h3>
 
@@ -38,20 +38,20 @@ export function RenameModal({ chatTitle, onConfirm, onCancel }) {
             if (e.key === 'Enter') handleSubmit()
             if (e.key === 'Escape') onCancel()
           }}
-          className="w-full px-4 py-3 text-brand-body text-msg border border-gray-200 rounded-input bg-brand-inputBg outline-none focus:border-brand-dark focus:bg-white focus:shadow-sm transition-colors mb-6"
+          className="w-full px-4 py-3 text-ds-text text-msg border border-ds-border rounded-input bg-ds-input outline-none focus:border-ds-accent focus:bg-ds-surface focus:shadow-sm transition-colors mb-6"
         />
 
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-ui text-brand-body border border-gray-200 rounded-pill hover:bg-brand-inputBg transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
+            className="px-4 py-2 text-ui text-ds-text border border-ds-border rounded-pill hover:bg-ds-input transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
           >
             Cancel
           </button>
 
           <button
             onClick={handleSubmit}
-            className="px-4 py-2 text-ui text-white bg-brand-dark rounded-pill hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
+            className="px-4 py-2 text-ui text-ds-text-inverse bg-ds-accent rounded-pill hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
           >
             Rename
           </button>

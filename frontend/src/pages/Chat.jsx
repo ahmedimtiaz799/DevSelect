@@ -299,20 +299,20 @@ export function Chat() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="new-evaluation-title"
-            className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl ring-1 ring-gray-200"
+            className="w-full max-w-md rounded-xl bg-ds-surface p-5 shadow-xl ring-1 ring-ds-border"
           >
             <h2
               id="new-evaluation-title"
-              className="text-lg font-semibold text-brand-dark"
+              className="text-lg font-semibold text-ds-text-strong"
             >
               Start a new evaluation?
             </h2>
 
-            <p className="mt-3 text-sm leading-6 text-brand-body">
+            <p className="mt-3 text-sm leading-6 text-ds-text">
               This chat already has a completed candidate report. To keep follow-up answers accurate, a new CV should start in a separate chat.
             </p>
 
-            <p className="mt-2 text-sm leading-6 text-brand-muted">
+            <p className="mt-2 text-sm leading-6 text-ds-text-muted">
               Your current report will stay saved in this chat.
             </p>
 
@@ -321,7 +321,7 @@ export function Chat() {
                 type="button"
                 onClick={handleCancelSecondEvaluation}
                 disabled={isStartingNewEvaluation}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
+                className="rounded-lg border border-ds-border px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
               >
                 Cancel
               </button>
@@ -330,7 +330,7 @@ export function Chat() {
                 type="button"
                 onClick={handleStartSecondEvaluation}
                 disabled={isStartingNewEvaluation}
-                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
+                className="rounded-lg bg-ds-accent px-4 py-2 text-sm font-medium text-ds-text-inverse transition-colors hover:bg-dsAlpha-accent/90 disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
               >
                 {isStartingNewEvaluation ? 'Starting...' : 'Start new evaluation'}
               </button>
@@ -345,20 +345,20 @@ export function Chat() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="unsent-cv-title"
-            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl ring-1 ring-gray-200"
+            className="w-full max-w-md rounded-2xl bg-ds-surface p-5 shadow-xl ring-1 ring-ds-border"
           >
             <h2
               id="unsent-cv-title"
-              className="text-lg font-semibold text-brand-dark"
+              className="text-lg font-semibold text-ds-text-strong"
             >
               CV not sent yet
             </h2>
 
-            <p className="mt-3 text-sm leading-6 text-brand-body">
+            <p className="mt-3 text-sm leading-6 text-ds-text">
               Switching chats will remove the selected CV.
             </p>
 
-            <p className="mt-2 text-sm leading-6 text-brand-muted">
+            <p className="mt-2 text-sm leading-6 text-ds-text-muted">
               Your typed text will stay saved as a draft.
             </p>
 
@@ -366,7 +366,7 @@ export function Chat() {
               <button
                 type="button"
                 onClick={handleStayOnCurrentChat}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
+                className="rounded-lg border border-ds-border px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
               >
                 Stay here
               </button>
@@ -374,7 +374,7 @@ export function Chat() {
               <button
                 type="button"
                 onClick={handleDiscardCvAndSwitch}
-                className="rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
+                className="rounded-lg bg-ds-accent px-4 py-2 text-sm font-medium text-ds-text-inverse transition-colors hover:bg-dsAlpha-accent/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
               >
                 Switch without CV
               </button>
