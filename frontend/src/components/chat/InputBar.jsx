@@ -175,32 +175,32 @@ export function InputBar({
   return (
     <div className="mx-4 md:mx-12 mt-2">
       {fileError && (
-        <div className="flex items-center gap-2 text-brand-warning text-sm mb-2 px-1">
+        <div className="flex items-center gap-2 text-ds-warning text-sm mb-2 px-1">
           <AlertCircle size={13} className="shrink-0" />
           <span>{fileError}</span>
         </div>
       )}
 
       {fileWarning && (
-        <div className="flex items-center gap-2 text-brand-warning text-sm mb-2 px-1">
+        <div className="flex items-center gap-2 text-ds-warning text-sm mb-2 px-1">
           <AlertCircle size={13} className="shrink-0" />
           <span>You can only evaluate one CV at a time</span>
         </div>
       )}
 
-      <div className="flex flex-col bg-white ring-1 ring-gray-300 shadow-lg rounded-input px-3 pt-2 pb-2">
+      <div className="flex flex-col bg-ds-surface ring-1 ring-ds-border-strong shadow-lg rounded-input px-3 pt-2 pb-2">
         {file && (
-          <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 mb-2 self-start max-w-[220px]">
-            <FileText size={13} className="text-brand-iconGray shrink-0" />
+          <div className="flex items-center gap-1.5 bg-gray-50 border border-ds-border rounded-lg px-2 py-1.5 mb-2 self-start max-w-[220px]">
+            <FileText size={13} className="text-ds-icon-muted shrink-0" />
 
-            <span className="truncate text-xs text-brand-body max-w-[130px]">
+            <span className="truncate text-xs text-ds-text max-w-[130px]">
               {file.name}
             </span>
 
             <button
               onClick={onFileClear}
               aria-label="Remove selected CV"
-              className="flex items-center justify-center min-w-[20px] min-h-[20px] ml-0.5 rounded-md text-brand-iconGray hover:text-brand-error transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70"
+              className="flex items-center justify-center min-w-[20px] min-h-[20px] ml-0.5 rounded-md text-ds-icon-muted hover:text-ds-danger transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70"
             >
               <X size={12} />
             </button>
@@ -219,7 +219,7 @@ export function InputBar({
           <button
             onClick={() => fileInputRef.current?.click()}
             aria-label="Attach CV"
-            className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg text-brand-iconGray hover:text-brand-dark transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70"
+            className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg text-ds-icon-muted hover:text-ds-text-strong transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70"
           >
             <Plus size={20} />
           </button>
@@ -232,14 +232,14 @@ export function InputBar({
             maxLength={MAX_USER_INPUT_CHARS}
             placeholder={placeholder}
             rows={1}
-            className="flex-1 bg-transparent outline-none focus:outline-none text-base text-brand-body placeholder:text-brand-muted resize-none overflow-hidden leading-6 py-[9px]"
+            className="flex-1 bg-transparent outline-none focus:outline-none text-base text-ds-text placeholder:text-ds-text-muted resize-none overflow-hidden leading-6 py-[9px]"
           />
 
           {isProcessing ? (
             <button
               onClick={handleStopClick}
               aria-label="Stop response"
-              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-brand-dark text-white rounded-full transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
+              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-ds-accent text-ds-text-inverse rounded-full transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
             >
               <Square size={14} fill="white" />
             </button>
@@ -247,7 +247,7 @@ export function InputBar({
             <button
               onClick={handleSend}
               aria-label="Send message"
-              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-brand-dark text-white rounded-lg transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white"
+              className="flex items-center justify-center min-w-[44px] min-h-[44px] bg-ds-accent text-ds-text-inverse rounded-lg transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
             >
               <ArrowUp size={16} />
             </button>
@@ -255,7 +255,7 @@ export function InputBar({
         </div>
 
         {shouldShowCharacterCount && (
-          <div className="mt-1 text-right text-xs text-brand-systemText">
+          <div className="mt-1 text-right text-xs text-ds-text-subtle">
             {text.length}/{MAX_USER_INPUT_CHARS}
           </div>
         )}
