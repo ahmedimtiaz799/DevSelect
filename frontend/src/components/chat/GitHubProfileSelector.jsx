@@ -33,18 +33,18 @@ export function GitHubProfileSelector({ profiles, onSelect }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="w-full max-w-ai-msg rounded-2xl border border-gray-200 bg-white px-4 py-4 shadow-sm"
+      className="w-full max-w-ai-msg rounded-2xl border border-ds-border bg-ds-surface px-4 py-4 shadow-sm"
     >
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-dark/10 text-brand-dark">
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-dsAlpha-accent/10 text-ds-text-strong">
           <GitBranch size={18} />
         </span>
 
         <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold text-brand-dark">
+          <h2 className="text-base font-semibold text-ds-text-strong">
             Multiple GitHub profiles found
           </h2>
-          <p className="mt-1 text-sm leading-6 text-brand-muted">
+          <p className="mt-1 text-sm leading-6 text-ds-text-muted">
             I found more than one GitHub profile in this CV. Select the profile you want DevSelect to evaluate.
           </p>
         </div>
@@ -57,10 +57,10 @@ export function GitHubProfileSelector({ profiles, onSelect }) {
           return (
             <label
               key={url}
-              className={`flex min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors focus-within:outline-none focus-within:ring-1 focus-within:ring-brand-focusRing/70 ${
+              className={`flex min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors focus-within:outline-none focus-within:ring-1 focus-within:ring-dsAlpha-focus-ring/70 ${
                 isSelected
-                  ? 'border-brand-dark bg-brand-dark/5 ring-1 ring-brand-dark'
-                  : 'border-gray-200 bg-white hover:border-brand-dark/40 hover:bg-gray-50'
+                  ? 'border-ds-accent bg-dsAlpha-accent/5 ring-1 ring-ds-accent'
+                  : 'border-ds-border bg-ds-surface hover:border-dsAlpha-accent/40 hover:bg-gray-50'
               }`}
             >
               <input
@@ -69,14 +69,14 @@ export function GitHubProfileSelector({ profiles, onSelect }) {
                 value={url}
                 checked={isSelected}
                 onChange={() => setSelectedProfile(url)}
-                className="h-4 w-4 shrink-0 accent-brand-dark focus-visible:outline-none"
+                className="h-4 w-4 shrink-0 accent-ds-accent focus-visible:outline-none"
               />
 
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-brand-dark">
+                <span className="block truncate text-sm font-medium text-ds-text-strong">
                   {getGitHubUsername(url)}
                 </span>
-                <span className="block truncate text-xs text-brand-muted">
+                <span className="block truncate text-xs text-ds-text-muted">
                   {url}
                 </span>
               </span>
@@ -89,7 +89,7 @@ export function GitHubProfileSelector({ profiles, onSelect }) {
         <button
           type="submit"
           disabled={!selected || isSubmitting}
-          className="min-h-[44px] w-full rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-1 focus-visible:ring-offset-white sm:w-auto"
+          className="min-h-[44px] w-full rounded-lg bg-ds-accent px-4 py-2 text-sm font-medium text-ds-text-inverse transition-colors hover:bg-dsAlpha-accent/90 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg sm:w-auto"
         >
           {isSubmitting ? 'Continuing...' : 'Continue evaluation'}
         </button>

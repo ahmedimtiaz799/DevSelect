@@ -40,10 +40,10 @@ export function EmptyState() {
 
   return (
     <div className="flex w-full flex-col items-center px-4 text-center">
-      <h2 className="text-display text-brand-dark mb-4">
+      <h2 className="text-display text-ds-text-strong mb-4">
         {getGreeting()}{firstName ? `, ${firstName}` : ''}
       </h2>
-      <p className="text-body text-brand-muted">
+      <p className="text-body text-ds-text-muted">
         <CyclingTypewriter texts={PROMPTS} />
       </p>
     </div>
