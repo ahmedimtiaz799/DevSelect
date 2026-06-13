@@ -4,45 +4,72 @@
 
 :root {
   --ds-bg: #ffffff;
+  --ds-bg-rgb: 255 255 255;
   --ds-surface: #ffffff;
+  --ds-surface-rgb: 255 255 255;
   --ds-surface-subtle: #f8fafc;
+  --ds-surface-subtle-rgb: 248 250 252;
   --ds-surface-muted: #f5f5f5;
+  --ds-surface-muted-rgb: 245 245 245;
   --ds-surface-elevated: #ffffff;
+  --ds-surface-elevated-rgb: 255 255 255;
 
   --ds-sidebar: #2b2d42;
+  --ds-sidebar-rgb: 43 45 66;
 
   --ds-text-strong: #2b2d42;
+  --ds-text-strong-rgb: 43 45 66;
   --ds-text: #2d3435;
+  --ds-text-rgb: 45 52 53;
   --ds-text-secondary: #475569;
+  --ds-text-secondary-rgb: 71 85 105;
   --ds-text-muted: #5b5d74;
+  --ds-text-muted-rgb: 91 93 116;
   --ds-text-subtle: #6b7280;
+  --ds-text-subtle-rgb: 107 114 128;
   --ds-text-inverse: #ffffff;
+  --ds-text-inverse-rgb: 255 255 255;
 
   --ds-border: #e5e7eb;
+  --ds-border-rgb: 229 231 235;
   --ds-border-subtle: #f3f4f6;
+  --ds-border-subtle-rgb: 243 244 246;
   --ds-border-strong: #d1d5db;
+  --ds-border-strong-rgb: 209 213 219;
 
   --ds-accent: #2b2d42;
+  --ds-accent-rgb: 43 45 66;
   --ds-accent-hover: #24263a;
+  --ds-accent-hover-rgb: 36 38 58;
   --ds-accent-soft: rgba(43, 45, 66, 0.1);
 
   --ds-input: #f5f5f5;
+  --ds-input-rgb: 245 245 245;
   --ds-user-bubble: #e8e9ef;
+  --ds-user-bubble-rgb: 232 233 239;
 
   --ds-icon-muted: #596061;
+  --ds-icon-muted-rgb: 89 96 97;
   --ds-focus-ring: #6d7c95;
+  --ds-focus-ring-rgb: 109 124 149;
 
   --ds-danger: #b91c1c;
+  --ds-danger-rgb: 185 28 28;
   --ds-danger-bg: #fef2f2;
   --ds-warning: #92400e;
+  --ds-warning-rgb: 146 64 14;
   --ds-warning-bg: #fffbeb;
   --ds-success: #166534;
+  --ds-success-rgb: 22 101 52;
   --ds-success-bg: #f0fdf4;
   --ds-info: #334155;
+  --ds-info-rgb: 51 65 85;
   --ds-info-bg: #f8fafc;
 
   --ds-scrollbar: #c4c4ce;
+  --ds-scrollbar-rgb: 196 196 206;
   --ds-scrollbar-hover: #a0a0b0;
+  --ds-scrollbar-hover-rgb: 160 160 176;
 }
 
 html {

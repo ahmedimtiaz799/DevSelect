@@ -77,6 +77,43 @@ export default {
           scrollbar: 'var(--ds-scrollbar)',
           'scrollbar-hover': 'var(--ds-scrollbar-hover)',
         },
+        dsAlpha: {
+          bg: 'rgb(var(--ds-bg-rgb) / <alpha-value>)',
+          surface: 'rgb(var(--ds-surface-rgb) / <alpha-value>)',
+          'surface-subtle': 'rgb(var(--ds-surface-subtle-rgb) / <alpha-value>)',
+          'surface-muted': 'rgb(var(--ds-surface-muted-rgb) / <alpha-value>)',
+          'surface-elevated': 'rgb(var(--ds-surface-elevated-rgb) / <alpha-value>)',
+
+          sidebar: 'rgb(var(--ds-sidebar-rgb) / <alpha-value>)',
+
+          'text-strong': 'rgb(var(--ds-text-strong-rgb) / <alpha-value>)',
+          text: 'rgb(var(--ds-text-rgb) / <alpha-value>)',
+          'text-secondary': 'rgb(var(--ds-text-secondary-rgb) / <alpha-value>)',
+          'text-muted': 'rgb(var(--ds-text-muted-rgb) / <alpha-value>)',
+          'text-subtle': 'rgb(var(--ds-text-subtle-rgb) / <alpha-value>)',
+          'text-inverse': 'rgb(var(--ds-text-inverse-rgb) / <alpha-value>)',
+
+          border: 'rgb(var(--ds-border-rgb) / <alpha-value>)',
+          'border-subtle': 'rgb(var(--ds-border-subtle-rgb) / <alpha-value>)',
+          'border-strong': 'rgb(var(--ds-border-strong-rgb) / <alpha-value>)',
+
+          accent: 'rgb(var(--ds-accent-rgb) / <alpha-value>)',
+          'accent-hover': 'rgb(var(--ds-accent-hover-rgb) / <alpha-value>)',
+
+          input: 'rgb(var(--ds-input-rgb) / <alpha-value>)',
+          'user-bubble': 'rgb(var(--ds-user-bubble-rgb) / <alpha-value>)',
+
+          'icon-muted': 'rgb(var(--ds-icon-muted-rgb) / <alpha-value>)',
+          'focus-ring': 'rgb(var(--ds-focus-ring-rgb) / <alpha-value>)',
+
+          danger: 'rgb(var(--ds-danger-rgb) / <alpha-value>)',
+          warning: 'rgb(var(--ds-warning-rgb) / <alpha-value>)',
+          success: 'rgb(var(--ds-success-rgb) / <alpha-value>)',
+          info: 'rgb(var(--ds-info-rgb) / <alpha-value>)',
+
+          scrollbar: 'rgb(var(--ds-scrollbar-rgb) / <alpha-value>)',
+          'scrollbar-hover': 'rgb(var(--ds-scrollbar-hover-rgb) / <alpha-value>)',
+        },
       },
       fontSize: {
         'hero':     ['72px',  { lineHeight: '72px',   letterSpacing: '-3.6px', fontWeight: '800' }],
