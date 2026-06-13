@@ -139,7 +139,7 @@ export function Sidebar({
       )}
 
       <aside
-        className={`fixed top-0 left-0 h-full bg-brand-dark border-r border-white/10 flex flex-col z-30 transition-all duration-300
+        className={`fixed top-0 left-0 h-full bg-ds-sidebar border-r border-white/10 flex flex-col z-30 transition-all duration-300
           ${isCollapsed ? 'w-16' : 'w-64'}
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0`}
@@ -255,9 +255,9 @@ export function Sidebar({
           className="flex-1 overflow-y-auto px-2 flex flex-col gap-1
           [&::-webkit-scrollbar]:w-[6px]
           [&::-webkit-scrollbar-track]:bg-transparent
-          [&::-webkit-scrollbar-thumb]:bg-[#c4c4ce]
+          [&::-webkit-scrollbar-thumb]:bg-ds-scrollbar
           [&::-webkit-scrollbar-thumb]:rounded-full
-          [&::-webkit-scrollbar-thumb:hover]:bg-[#a0a0b0]"
+          [&::-webkit-scrollbar-thumb:hover]:bg-ds-scrollbar-hover"
         >
           {chatListError && expandedStructureVisible && (
             <p

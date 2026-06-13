@@ -69,12 +69,12 @@ export function UserMenu({ isCollapsed, labelsVisible = true }) {
     <div ref={menuRef} className="relative w-full">
       {open && (
         <div
-          className={`absolute bottom-full mb-3 w-60 rounded-2xl bg-brand-dark border border-white/15 shadow-xl overflow-hidden z-[9999] ${
+          className={`absolute bottom-full mb-3 w-60 rounded-2xl bg-ds-sidebar border border-white/15 shadow-xl overflow-hidden z-[9999] ${
             isCollapsed ? 'left-0' : 'left-0'
           }`}
         >
           <div className="px-4 py-3">
-            <p className="text-sm font-semibold text-white truncate">
+            <p className="text-sm font-semibold text-ds-text-inverse truncate">
               {displayName}
             </p>
 
@@ -145,7 +145,7 @@ export function UserMenu({ isCollapsed, labelsVisible = true }) {
         }`}
         title={isCollapsed ? displayName : undefined}
       >
-        <div className="flex items-center justify-center w-9 h-9 rounded-full bg-white text-brand-dark text-sm font-extrabold shrink-0">
+        <div className="flex items-center justify-center w-9 h-9 rounded-full bg-ds-text-inverse text-ds-text-strong text-sm font-extrabold shrink-0">
           {avatarUrl ? (
             <img
               src={avatarUrl}
@@ -160,7 +160,7 @@ export function UserMenu({ isCollapsed, labelsVisible = true }) {
 
         {!isCollapsed && (
           <p
-            className={`overflow-hidden whitespace-nowrap text-sm leading-none font-semibold text-white truncate max-w-[150px] text-left transition-opacity duration-150 ${
+            className={`overflow-hidden whitespace-nowrap text-sm leading-none font-semibold text-ds-text-inverse truncate max-w-[150px] text-left transition-opacity duration-150 ${
               labelsVisible ? 'opacity-100' : 'opacity-0'
             }`}
           >
