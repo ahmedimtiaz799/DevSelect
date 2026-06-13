@@ -72,6 +72,98 @@
   --ds-scrollbar-hover-rgb: 160 160 176;
 }
 
+:root[data-theme-preview='dark'] {
+  --ds-bg: #070A12;
+  --ds-bg-rgb: 7 10 18;
+
+  --ds-surface: #0F172A;
+  --ds-surface-rgb: 15 23 42;
+
+  --ds-surface-subtle: #111827;
+  --ds-surface-subtle-rgb: 17 24 39;
+
+  --ds-surface-muted: #1E293B;
+  --ds-surface-muted-rgb: 30 41 59;
+
+  --ds-surface-elevated: #151B2E;
+  --ds-surface-elevated-rgb: 21 27 46;
+
+  --ds-surface-hover: #1E293B;
+  --ds-surface-hover-rgb: 30 41 59;
+
+  --ds-sidebar: #0B1020;
+  --ds-sidebar-rgb: 11 16 32;
+
+  --ds-text-strong: #F8FAFC;
+  --ds-text-strong-rgb: 248 250 252;
+
+  --ds-text: #E5E7EB;
+  --ds-text-rgb: 229 231 235;
+
+  --ds-text-secondary: #CBD5E1;
+  --ds-text-secondary-rgb: 203 213 225;
+
+  --ds-text-muted: #94A3B8;
+  --ds-text-muted-rgb: 148 163 184;
+
+  --ds-text-subtle: #64748B;
+  --ds-text-subtle-rgb: 100 116 139;
+
+  --ds-text-inverse: #0B1020;
+  --ds-text-inverse-rgb: 11 16 32;
+
+  --ds-border: rgba(148, 163, 184, 0.16);
+  --ds-border-rgb: 148 163 184;
+
+  --ds-border-subtle: rgba(148, 163, 184, 0.10);
+  --ds-border-subtle-rgb: 148 163 184;
+
+  --ds-border-strong: rgba(148, 163, 184, 0.28);
+  --ds-border-strong-rgb: 148 163 184;
+
+  --ds-accent: #7E14FF;
+  --ds-accent-rgb: 126 20 255;
+
+  --ds-accent-hover: #6D28D9;
+  --ds-accent-hover-rgb: 109 40 217;
+
+  --ds-accent-soft: rgba(126, 20, 255, 0.14);
+
+  --ds-input: #0F172A;
+  --ds-input-rgb: 15 23 42;
+
+  --ds-user-bubble: #1E1B4B;
+  --ds-user-bubble-rgb: 30 27 75;
+
+  --ds-icon-muted: #94A3B8;
+  --ds-icon-muted-rgb: 148 163 184;
+
+  --ds-focus-ring: #A78BFA;
+  --ds-focus-ring-rgb: 167 139 250;
+
+  --ds-danger: #FB7185;
+  --ds-danger-rgb: 251 113 133;
+  --ds-danger-bg: rgba(251, 113, 133, 0.12);
+
+  --ds-warning: #FBBF24;
+  --ds-warning-rgb: 251 191 36;
+  --ds-warning-bg: rgba(251, 191, 36, 0.12);
+
+  --ds-success: #34D399;
+  --ds-success-rgb: 52 211 153;
+  --ds-success-bg: rgba(52, 211, 153, 0.12);
+
+  --ds-info: #38BDF8;
+  --ds-info-rgb: 56 189 248;
+  --ds-info-bg: rgba(56, 189, 248, 0.12);
+
+  --ds-scrollbar: rgba(148, 163, 184, 0.28);
+  --ds-scrollbar-rgb: 148 163 184;
+
+  --ds-scrollbar-hover: rgba(148, 163, 184, 0.45);
+  --ds-scrollbar-hover-rgb: 148 163 184;
+}
+
 html {
   scrollbar-gutter: stable;
 }
