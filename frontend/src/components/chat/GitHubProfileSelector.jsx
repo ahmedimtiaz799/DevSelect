@@ -60,7 +60,7 @@ export function GitHubProfileSelector({ profiles, onSelect }) {
               className={`flex min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors focus-within:outline-none focus-within:ring-1 focus-within:ring-dsAlpha-focus-ring/70 ${
                 isSelected
                   ? 'border-ds-accent bg-dsAlpha-accent/5 ring-1 ring-ds-accent'
-                  : 'border-ds-border bg-ds-surface hover:border-dsAlpha-accent/40 hover:bg-gray-50'
+                  : 'border-ds-border bg-ds-surface hover:border-dsAlpha-accent/40 hover:bg-ds-surface-subtle'
               }`}
             >
               <input

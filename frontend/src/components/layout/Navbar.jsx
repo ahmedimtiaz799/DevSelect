@@ -4,7 +4,7 @@ import { Menu, X } from 'lucide-react'
 import Button from '../ui/Button'
 
 const baseLinkClass =
-  'text-ui transition-colors duration-200 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ds-bg'
+  'text-ui transition-colors duration-200 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ds-bg'
 const desktopLinkClass =
   `${baseLinkClass} pb-1 border-b-2`
 const mobileLinkClass =
@@ -29,7 +29,7 @@ function Navbar() {
     <nav className="w-full bg-ds-surface px-6 py-4 flex items-center justify-between border-b border-ds-border relative">
       <Link
         to="/"
-        className="text-ds-text-strong font-extrabold text-lg tracking-wide rounded-sm transition-colors duration-200 hover:text-ds-text-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ds-bg"
+        className="text-ds-text-strong font-extrabold text-lg tracking-wide rounded-sm transition-colors duration-200 hover:text-ds-text-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ds-bg"
       >
         DevSelect
       </Link>
@@ -71,7 +71,7 @@ function Navbar() {
 
       <button
         onClick={() => setMenuOpen(!menuOpen)}
-        className="md:hidden text-ds-text-strong p-1 rounded-md transition-colors duration-200 hover:text-ds-text-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ds-bg"
+        className="md:hidden text-ds-text-strong p-1 rounded-md transition-colors duration-200 hover:text-ds-text-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ds-bg"
         aria-label="Toggle menu"
       >
         {menuOpen ? <X size={24} /> : <Menu size={24} />}

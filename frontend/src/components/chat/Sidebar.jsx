@@ -255,9 +255,9 @@ export function Sidebar({
           className="flex-1 overflow-y-auto px-2 flex flex-col gap-1
           [&::-webkit-scrollbar]:w-[6px]
           [&::-webkit-scrollbar-track]:bg-transparent
-          [&::-webkit-scrollbar-thumb]:bg-[#c4c4ce]
+          [&::-webkit-scrollbar-thumb]:bg-ds-scrollbar
           [&::-webkit-scrollbar-thumb]:rounded-full
-          [&::-webkit-scrollbar-thumb:hover]:bg-[#a0a0b0]"
+          [&::-webkit-scrollbar-thumb:hover]:bg-ds-scrollbar-hover"
         >
           {chatListError && expandedStructureVisible && (
             <p

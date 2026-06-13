@@ -329,7 +329,7 @@ export function Chat() {
                 type="button"
                 onClick={handleCancelSecondEvaluation}
                 disabled={isStartingNewEvaluation}
-                className="rounded-lg border border-ds-border px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
+                className="rounded-lg border border-ds-border px-4 py-2 text-sm font-medium text-ds-text-muted transition-colors hover:bg-ds-surface-subtle disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
               >
                 Cancel
               </button>
@@ -374,7 +374,7 @@ export function Chat() {
               <button
                 type="button"
                 onClick={handleStayOnCurrentChat}
-                className="rounded-lg border border-ds-border px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
+                className="rounded-lg border border-ds-border px-4 py-2 text-sm font-medium text-ds-text-muted transition-colors hover:bg-ds-surface-subtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-ds-bg"
               >
                 Stay here
               </button>

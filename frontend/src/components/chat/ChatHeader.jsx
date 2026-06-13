@@ -14,7 +14,7 @@ export function ChatHeader({ chatId, isTitleLoading = false, onMenuClick }) {
       <button
         onClick={onMenuClick}
         aria-label="Open sidebar"
-        className="rounded-md text-ds-icon-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-focusRing/70 md:hidden"
+        className="rounded-md text-ds-icon-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dsAlpha-focus-ring/70 md:hidden"
       >
         <Menu size={22} />
       </button>
