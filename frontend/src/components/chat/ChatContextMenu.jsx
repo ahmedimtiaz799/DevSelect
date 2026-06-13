@@ -25,7 +25,7 @@ export function ChatContextMenu({ position, onRenameClick, onDeleteClick, onPinC
     <div
       ref={ref}
       style={{ top: position.top, left: position.left }}
-      className={`fixed z-[9999] w-44 bg-ds-sidebar border border-white/15 rounded-xl shadow-xl overflow-hidden transition-all duration-150 ease-out
+      className={`fixed z-[9999] w-44 bg-brand-dark border border-white/15 rounded-xl shadow-xl overflow-hidden transition-all duration-150 ease-out
         ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
     >
       <div className="py-1">
