@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, LogOut, Moon, Sun } from 'lucide-react'
+import { Check, Laptop, LogOut, Moon, Sun } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { getAuthProfileDisplay } from '../../lib/authProfile'
+import { useTheme } from '../../hooks/useTheme'
 
 function getFirstName(displayName) {
   if (!displayName) return 'User'
@@ -9,19 +10,11 @@ function getFirstName(displayName) {
   return displayName.trim().split(' ')[0]
 }
 
-function getSavedTheme() {
-  try {
-    return localStorage.getItem('devselect-theme') || 'light'
-  } catch {
-    return 'light'
-  }
-}
-
 export function UserMenu({ isCollapsed, labelsVisible = true }) {
   const { user, signOut } = useAuth()
+  const { themeChoice, setThemeChoice } = useTheme()
 
   const [open, setOpen] = useState(false)
-  const [theme, setTheme] = useState(getSavedTheme)
 
   const menuRef = useRef(null)
 
@@ -51,18 +44,8 @@ export function UserMenu({ isCollapsed, labelsVisible = true }) {
     }
   }, [])
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('devselect-theme', theme)
-    } catch {
-      // Ignore localStorage errors
-    }
-
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-  }, [theme])
-
   function handleThemeChange(nextTheme) {
-    setTheme(nextTheme)
+    setThemeChoice(nextTheme)
   }
 
   return (
@@ -95,6 +78,20 @@ export function UserMenu({ isCollapsed, labelsVisible = true }) {
             </div>
 
             <button
+              onClick={() => handleThemeChange('system')}
+              className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm text-white/80 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:ring-inset"
+            >
+              <span className="flex items-center gap-3">
+                <Laptop size={15} className="text-white/50" />
+                System
+              </span>
+
+              {themeChoice === 'system' && (
+                <Check size={15} className="text-white/80" />
+              )}
+            </button>
+
+            <button
               onClick={() => handleThemeChange('light')}
               className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm text-white/80 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/60 focus-visible:ring-inset"
             >
@@ -103,7 +100,7 @@ export function UserMenu({ isCollapsed, labelsVisible = true }) {
                 Light
               </span>
 
-              {theme === 'light' && (
+              {themeChoice === 'light' && (
                 <Check size={15} className="text-white/80" />
               )}
             </button>
@@ -117,7 +114,7 @@ export function UserMenu({ isCollapsed, labelsVisible = true }) {
                 Dark
               </span>
 
-              {theme === 'dark' && (
+              {themeChoice === 'dark' && (
                 <Check size={15} className="text-white/80" />
               )}
             </button>

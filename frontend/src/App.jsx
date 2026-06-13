@@ -10,6 +10,7 @@ import { SignUp } from './pages/SignUp'
 import { Chat } from './pages/Chat'
 import { ProtectedRoute } from './routes/ProtectedRoute'
 import { PublicOnlyRoute } from './routes/PublicOnlyRoute'
+import { useThemeSync } from './hooks/useTheme'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -24,6 +25,8 @@ function ScrollToTop() {
 }
 
 export default function App() {
+  useThemeSync()
+
   return (
     <>
       <ScrollToTop />

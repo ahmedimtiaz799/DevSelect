@@ -3,6 +3,8 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light;
+
   --ds-bg: #ffffff;
   --ds-bg-rgb: 255 255 255;
   --ds-surface: #ffffff;
@@ -87,7 +89,7 @@
   --ds-scrollbar-hover-rgb: 160 160 176;
 }
 
-:root[data-theme-preview='dark'] {
+:root[data-theme='dark'] {
   color-scheme: dark;
 
   --ds-bg: #0B1020;
@@ -216,9 +218,9 @@ body {
   font-family: inherit;
 }
 
-:root[data-theme-preview='dark'].ds-chat-route,
-:root[data-theme-preview='dark'].ds-chat-route body,
-:root[data-theme-preview='dark'].ds-chat-route #root {
+:root[data-theme='dark'].ds-chat-route,
+:root[data-theme='dark'].ds-chat-route body,
+:root[data-theme='dark'].ds-chat-route #root {
   background: var(--ds-surface);
 }
 
