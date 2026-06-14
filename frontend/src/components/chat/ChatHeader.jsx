@@ -1,12 +1,20 @@
 import { Menu } from 'lucide-react'
 import { useChatStore } from '../../store/chatStore'
-import { normalizeChatTitle } from '../../lib/chatUtils'
+import { normalizeChatTitle, parseCandidateTitle } from '../../lib/chatUtils'
 
-export function ChatHeader({ chatId, isTitleLoading = false, onMenuClick }) {
+export function ChatHeader({
+  chatId,
+  isTitleLoading = false,
+  isEvaluationActive = false,
+  onMenuClick,
+}) {
   const { chats } = useChatStore()
 
   const activeChat = chatId ? chats.find((c) => c.id === chatId) : null
   const title = activeChat?.title ? normalizeChatTitle(activeChat.title) : ''
+  const { name, role, headerTitle } = parseCandidateTitle(title)
+  const displayRole = role || (name && isEvaluationActive ? 'Detecting role…' : null)
+  const displayTitle = displayRole ? `${name} · ${displayRole}` : headerTitle
   const showTitleSkeleton = Boolean(chatId) && isTitleLoading && !title
 
   return (
@@ -20,8 +28,17 @@ export function ChatHeader({ chatId, isTitleLoading = false, onMenuClick }) {
       </button>
 
       {title && (
-        <h1 className="min-w-0 max-w-full flex-1 text-logo-chat text-ds-text-strong font-extrabold truncate">
-          {title}
+        <h1
+          title={displayTitle}
+          className="min-w-0 max-w-full flex-1 text-logo-chat text-ds-text-strong font-extrabold truncate"
+        >
+          <span>{name}</span>
+          {displayRole && (
+            <>
+              <span className="text-ds-text-muted"> · </span>
+              <span className="text-ds-text-muted">{displayRole}</span>
+            </>
+          )}
         </h1>
       )}
 

@@ -2,7 +2,11 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MoreVertical } from 'lucide-react'
 import { useChatStore } from '../../store/chatStore'
-import { normalizeChatTitle, truncateTitle } from '../../lib/chatUtils'
+import {
+  normalizeChatTitle,
+  parseCandidateTitle,
+  truncateTitle,
+} from '../../lib/chatUtils'
 import { ChatContextMenu } from './ChatContextMenu'
 import { DeleteConfirmModal } from './DeleteConfirmModal'
 import { RenameModal } from './RenameModal'
@@ -32,6 +36,7 @@ export function SidebarItem({
 
   const isActive = activeChatId === chat.id
   const chatTitle = normalizeChatTitle(chat.title)
+  const { headerTitle, sidebarTitle } = parseCandidateTitle(chatTitle)
 
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), 10)
@@ -92,7 +97,7 @@ export function SidebarItem({
   return (
     <>
       <div
-        title={isCollapsed ? chatTitle : undefined}
+        title={isCollapsed ? headerTitle : undefined}
         className={`relative group flex items-center justify-between px-2 py-2 rounded-card cursor-pointer transition-all duration-200 ease-out
           ${visible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}
           ${isActive
@@ -105,12 +110,12 @@ export function SidebarItem({
         <div className={`flex items-center gap-1.5 min-w-0 flex-1 ${isCollapsed ? 'justify-center' : ''}`}>
           {!isCollapsed && (
             <span
-              title={chatTitle}
+              title={headerTitle}
               className={`text-ui truncate max-w-[140px] whitespace-nowrap overflow-hidden transition-opacity duration-150 ${
                 labelsVisible ? 'opacity-100' : 'opacity-0'
               }`}
             >
-              {truncateTitle(chatTitle)}
+              {truncateTitle(sidebarTitle)}
             </span>
           )}
         </div>

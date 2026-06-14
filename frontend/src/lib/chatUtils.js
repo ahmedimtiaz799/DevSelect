@@ -1,12 +1,31 @@
 let tempIdCounter = 0
 
 export const CHAT_TITLE_MAX_LENGTH = 80
+const UNKNOWN_ROLE_VALUES = new Set([
+  'unknown role',
+  'unknown',
+  'n/a',
+  'na',
+  'none',
+  'null',
+  'undefined',
+])
 
 function cleanTitleValue(value) {
   return String(value ?? '')
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function normalizeCandidateRole(role) {
+  const cleaned = cleanTitleValue(role)
+
+  if (!cleaned || UNKNOWN_ROLE_VALUES.has(cleaned.toLowerCase())) {
+    return null
+  }
+
+  return cleaned
 }
 
 export function normalizeChatTitle(title, fallback = 'New Chat') {
@@ -27,6 +46,42 @@ export function truncateTitle(title, maxLength = 30) {
   }
 
   return normalizedTitle
+}
+
+export function parseCandidateTitle(title) {
+  const cleanedTitle = cleanTitleValue(title)
+  const normalizedTitle = cleanedTitle || 'Untitled Chat'
+  const emDashSeparator = ' — '
+  const hyphenSeparator = ' - '
+  const separator = normalizedTitle.includes(emDashSeparator)
+    ? emDashSeparator
+    : normalizedTitle.includes(hyphenSeparator)
+      ? hyphenSeparator
+      : null
+
+  if (!separator) {
+    return {
+      name: normalizedTitle,
+      role: null,
+      headerTitle: normalizedTitle,
+      sidebarTitle: normalizedTitle,
+    }
+  }
+
+  const separatorIndex = normalizedTitle.indexOf(separator)
+  const parsedName = cleanTitleValue(normalizedTitle.slice(0, separatorIndex))
+  const parsedRole = normalizeCandidateRole(
+    normalizedTitle.slice(separatorIndex + separator.length)
+  )
+  const name = parsedName || normalizedTitle
+  const headerTitle = parsedRole ? `${name} · ${parsedRole}` : name
+
+  return {
+    name,
+    role: parsedRole,
+    headerTitle,
+    sidebarTitle: name,
+  }
 }
 
 export function formatDate(isoString) {

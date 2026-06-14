@@ -63,6 +63,8 @@ export function Chat() {
     onFileSelect,
     clearFile,
   } = useFileUpload(inputChatId)
+  const isEvaluationActive =
+    activityMode === 'evaluation' && (isLoading || isStreaming)
 
   useEffect(() => {
     sendMessageRef.current = sendMessage
@@ -267,6 +269,7 @@ export function Chat() {
         <ChatHeader
           chatId={chatId ?? null}
           isTitleLoading={Boolean(chatId) && isChatListLoading}
+          isEvaluationActive={isEvaluationActive}
           onMenuClick={() => setMobileOpen(true)}
         />
 
