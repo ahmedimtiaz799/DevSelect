@@ -1,0 +1,23 @@
+{
+  "name": "DevSelect",
+  "short_name": "DevSelect",
+  "description": "AI-powered candidate evaluation for hiring decisions.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#2B2D42",
+  "theme_color": "#2B2D42",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
