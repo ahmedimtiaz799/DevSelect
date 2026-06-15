@@ -286,7 +286,7 @@ export function Chat() {
           onProfileSelect={handleProfileSelect}
         />
 
-        <div className="shrink-0 bg-ds-surface pt-2 pb-4">
+        <div className="shrink-0 bg-ds-surface pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <InputBar
             key={`${draftUserId}:${inputChatId}`}
             chatId={inputChatId}
@@ -305,12 +305,12 @@ export function Chat() {
       </div>
 
       {secondEvaluationDraft && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 px-4 py-4">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="new-evaluation-title"
-            className="w-full max-w-md rounded-xl bg-ds-surface p-5 shadow-xl ring-1 ring-ds-border"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl bg-ds-surface p-5 shadow-xl ring-1 ring-ds-border"
           >
             <h2
               id="new-evaluation-title"
@@ -351,12 +351,12 @@ export function Chat() {
       )}
 
       {pendingNavigation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 px-4 py-4">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="unsent-cv-title"
-            className="w-full max-w-md rounded-2xl bg-ds-surface p-5 shadow-xl ring-1 ring-ds-border"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-ds-surface p-5 shadow-xl ring-1 ring-ds-border"
           >
             <h2
               id="unsent-cv-title"

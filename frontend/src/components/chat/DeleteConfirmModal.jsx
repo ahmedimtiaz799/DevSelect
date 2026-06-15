@@ -21,8 +21,8 @@ export function DeleteConfirmModal({ chatTitle, onConfirm, onCancel }) {
   }, [onCancel])
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4">
-      <div className="bg-ds-surface rounded-2xl shadow-xl w-full max-w-sm p-6">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center overflow-y-auto px-4 py-4">
+      <div className="bg-ds-surface rounded-2xl shadow-xl w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto p-6">
         <h3 className="text-ds-text-strong font-bold text-lg mb-2">
           Delete chat?
         </h3>

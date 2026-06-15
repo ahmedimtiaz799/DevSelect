@@ -43,7 +43,52 @@ function MarkdownLink({ children, href }) {
   );
 }
 
+function MarkdownPre({ children }) {
+  return (
+    <pre className="mb-4 max-w-full overflow-x-auto rounded-xl border border-ds-border bg-ds-surface-elevated p-3 text-sm leading-6 text-ds-text [&_code]:block [&_code]:min-w-max [&_code]:whitespace-pre [&_code]:break-normal [&_code]:bg-transparent [&_code]:p-0">
+      {children}
+    </pre>
+  );
+}
+
+function MarkdownCode({ children, className = '' }) {
+  return (
+    <code
+      className={`${className} rounded-md bg-ds-surface-elevated px-1 py-0.5 text-[0.95em] break-words [overflow-wrap:anywhere]`}
+    >
+      {children}
+    </code>
+  );
+}
+
+function MarkdownTable({ children }) {
+  return (
+    <div className="mb-4 max-w-full overflow-x-auto">
+      <table className="min-w-full border-collapse text-left text-sm text-ds-text">
+        {children}
+      </table>
+    </div>
+  );
+}
+
+const markdownOverflowComponents = {
+  pre: MarkdownPre,
+  code: MarkdownCode,
+  table: MarkdownTable,
+  th: ({ children }) => (
+    <th className="border border-ds-border bg-ds-surface-elevated px-3 py-2 font-semibold text-ds-text-strong">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border border-ds-border px-3 py-2 align-top">
+      {children}
+    </td>
+  ),
+};
+
 const reportMarkdownComponents = {
+  ...markdownOverflowComponents,
   h2: ({ children }) => (
     <h2 className="text-ds-text-strong font-bold text-lg mb-3 mt-5 break-words [overflow-wrap:anywhere]">{children}</h2>
   ),
@@ -70,6 +115,7 @@ const reportMarkdownComponents = {
 };
 
 const followUpMarkdownComponents = {
+  ...markdownOverflowComponents,
   h2: ({ children }) => (
     <h2 className="text-ds-text-strong font-bold text-lg mb-3 mt-4 break-words [overflow-wrap:anywhere]">{children}</h2>
   ),
