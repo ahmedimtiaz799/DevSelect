@@ -1,6 +1,7 @@
 let tempIdCounter = 0
 
 export const CHAT_TITLE_MAX_LENGTH = 80
+const NO_CV_GUIDANCE_TITLE = 'Please upload a candidate CV to begin an evaluation.'
 const UNKNOWN_ROLE_VALUES = new Set([
   'unknown role',
   'unknown',
@@ -31,7 +32,7 @@ function normalizeCandidateRole(role) {
 export function normalizeChatTitle(title, fallback = 'New Chat') {
   const cleaned = cleanTitleValue(title)
   const fallbackTitle = cleanTitleValue(fallback) || 'New Chat'
-  const value = cleaned || fallbackTitle
+  const value = cleaned === NO_CV_GUIDANCE_TITLE ? fallbackTitle : cleaned || fallbackTitle
 
   if (value.length <= CHAT_TITLE_MAX_LENGTH) return value
 

@@ -148,6 +148,10 @@ export function Chat() {
     Boolean(chatId) && !loadedMessagesByChat[chatId]
 
   function getNewChatTitle(text, fileToSend) {
+    if (!fileToSend) {
+      return 'New Chat'
+    }
+
     return normalizeChatTitle(
       text.trim()
         ? text
