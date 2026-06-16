@@ -744,6 +744,23 @@ def resolve_candidate_role_resolution(
                 reason="banking_finance_evidence_overrode_short_training_title",
             )
 
+        if (
+            is_training_or_volunteer_role(schema_role)
+            and best_family not in {ROLE_FAMILY_UNCLEAR, ROLE_FAMILY_EDUCATION_TRAINING}
+            and best_family_score >= 6
+        ):
+            domain = _domain_for_role_family(best_family, candidate, raw_cv_text)
+            return RoleResolution(
+                display_role=ROLE_FAMILY_DISPLAY_ROLES[best_family],
+                role_family=best_family,
+                domain=domain,
+                confidence=_confidence_for_score(best_family_score),
+                source="evidence_family",
+                github_policy=_github_policy_for_domain(domain),
+                overrode_current_title=True,
+                reason="stronger_non_training_evidence_overrode_training_title",
+            )
+
         family = schema_family or ROLE_FAMILY_UNCLEAR
         domain = _domain_for_role_family(family, candidate, raw_cv_text)
         return RoleResolution(
