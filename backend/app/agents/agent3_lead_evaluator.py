@@ -11,7 +11,8 @@ from app.utils.candidate_domain import (
     SKIP_NON_TECHNICAL,
     SKIP_UNCLEAR,
     UNCLEAR,
-    resolve_candidate_display_role_with_source,
+    get_interview_track_for_role_family,
+    resolve_candidate_role_resolution,
 )
 from app.utils.llm_observability import (
     cap_text_for_llm,
@@ -317,10 +318,10 @@ def _role_from_summary(summary: str | None) -> str | None:
     return None
 
 
-def _detect_candidate_role(candidate, raw_cv_text: str | None) -> tuple[str | None, str]:
-    resolved_role, resolved_source = resolve_candidate_display_role_with_source(candidate, raw_cv_text)
-    if resolved_role:
-        return resolved_role, resolved_source
+def _detect_candidate_role(candidate, raw_cv_text: str | None) -> tuple[str | None, str, str | None]:
+    resolution = resolve_candidate_role_resolution(candidate, raw_cv_text)
+    if resolution.display_role:
+        return resolution.display_role, resolution.source, resolution.role_family
 
     role_sources = (
         ("cv_header", _role_from_header(raw_cv_text, _field(candidate, "full_name"))),
@@ -329,9 +330,9 @@ def _detect_candidate_role(candidate, raw_cv_text: str | None) -> tuple[str | No
 
     for source, role in role_sources:
         if role:
-            return role, source
+            return role, source, None
 
-    return None, "missing"
+    return None, "missing", None
 
 
 def _candidate_keys(candidate) -> str:
@@ -404,41 +405,6 @@ def _github_review_guidance(
     )
 
 
-def _non_technical_interview_track(detected_role: str | None) -> str:
-    role_text = (detected_role or "").lower()
-
-    if any(keyword in role_text for keyword in ("teacher", "lecturer", "instructor", "education")):
-        return "teaching/classroom interview"
-    if any(keyword in role_text for keyword in ("doctor", "physician", "nurse", "pharmacist", "lab technician", "laboratory technician", "clinical", "medical")):
-        return "healthcare/clinical interview"
-    if any(keyword in role_text for keyword in ("lawyer", "attorney", "legal", "paralegal")):
-        return "legal interview"
-    if any(keyword in role_text for keyword in ("driver", "transport", "logistics", "delivery")):
-        return "driving/logistics interview"
-    if any(keyword in role_text for keyword in ("chef", "cook", "kitchen", "hospitality", "restaurant")):
-        return "kitchen/hospitality interview"
-    if any(keyword in role_text for keyword in ("security guard", "security officer", "security")):
-        return "security/safety interview"
-    if any(keyword in role_text for keyword in ("electrician", "mechanic", "plumber", "welder", "trade", "maintenance")):
-        return "trade/skills interview"
-    if any(keyword in role_text for keyword in ("ui/ux", "ux designer", "ui designer", "graphic designer", "product designer", "designer")):
-        return "design/portfolio interview"
-    if any(keyword in role_text for keyword in ("warehouse", "store manager", "retail", "merchand", "inventory")):
-        return "operations/retail interview"
-    if any(keyword in role_text for keyword in ("account", "finance", "accounts", "bookkeep", "sap", "treasury", "receivable", "payable")):
-        return "accounts/finance interview"
-    if any(keyword in role_text for keyword in ("sales", "account executive", "business development", "client", "relationship", "marketing", "brand", "content", "social media")):
-        return "sales/marketing interview"
-    if any(keyword in role_text for keyword in ("hr", "human resources", "recruit", "talent")):
-        return "HR/people-operations interview"
-    if any(keyword in role_text for keyword in ("admin", "operations", "office", "coordinator")):
-        return "operations/admin interview"
-    if any(keyword in role_text for keyword in ("customer support", "customer service", "support")):
-        return "customer support interview"
-
-    return "role-specific interview"
-
-
 def _regulated_role_caution(detected_role: str | None) -> str:
     role_text = (detected_role or "").lower()
     if any(
@@ -471,9 +437,11 @@ def _report_structure_guidance(
     candidate_domain: str | None,
     github_review_policy: str | None,
     detected_role: str | None,
+    role_family: str | None = None,
 ) -> str:
+    interview_track = get_interview_track_for_role_family(role_family, candidate_domain)
+
     if github_review_policy == SKIP_NON_TECHNICAL or candidate_domain == NON_TECHNICAL:
-        interview_track = _non_technical_interview_track(detected_role)
         regulated_caution = _regulated_role_caution(detected_role)
         return (
             "- Use the non-technical report structure only: Candidate Overview, CV & Experience Review, Role Fit, Strengths, Risks / Gaps, Hiring Recommendation, Suggested Interview Focus, Suggested Next Steps.\n"
@@ -490,16 +458,21 @@ def _report_structure_guidance(
         return (
             "- Keep the report CV-only when GitHub review was skipped because the role is unclear.\n"
             "- Use cautious wording and explain the limited evaluation scope briefly.\n"
-            "- Only use unclear-role wording when the detected role is genuinely missing or too vague to classify confidently."
+            "- Only use unclear-role wording when the detected role is genuinely missing or too vague to classify confidently.\n"
+            f"- Suggested Interview Focus should use a cautious {interview_track} until the role focus is clarified."
         )
 
     if candidate_domain == SEMI_TECHNICAL:
         return (
             "- Keep the standard technical report structure.\n"
-            "- Use GitHub as supporting evidence rather than the dominant scoring axis unless the role clearly requires hands-on coding."
+            "- Use GitHub as supporting evidence rather than the dominant scoring axis unless the role clearly requires hands-on coding.\n"
+            f"- Suggested Interview Focus should use a {interview_track} grounded in the candidate's role-relevant CV evidence."
         )
 
-    return "- Keep the standard technical report structure."
+    return (
+        "- Keep the standard technical report structure.\n"
+        f"- Suggested Interview Focus should use a {interview_track} grounded in CV and GitHub evidence."
+    )
 
 
 async def _stream_with_fallback(messages: list, thread_id: str | None = None) -> str:
@@ -647,7 +620,7 @@ async def agent3_lead_evaluator(state: DevSelectState) -> dict:
         evaluation_timezone or "not_provided",
     )
 
-    detected_role, role_source = _detect_candidate_role(candidate, state.get("raw_cv_text"))
+    detected_role, role_source, role_family = _detect_candidate_role(candidate, state.get("raw_cv_text"))
     logger.info(
         "Agent 3 candidate role context : thread=%s keys=%s candidate_name=%s role=%s role_source=%s candidate_domain=%s candidate_domain_source=%s github_review_policy=%s",
         thread_id,
@@ -676,6 +649,7 @@ async def agent3_lead_evaluator(state: DevSelectState) -> dict:
         candidate_domain,
         github_review_policy,
         detected_role,
+        role_family,
     )
     candidate_skills = _unique_text_values(
         _field(candidate, "skills", []),

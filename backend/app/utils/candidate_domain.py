@@ -269,6 +269,43 @@ ROLE_FAMILY_DISPLAY_ROLES = {
     ROLE_FAMILY_UNCLEAR: ROLE_FOCUS_NEEDS_CLARIFICATION,
 }
 
+ROLE_FAMILY_INTERVIEW_TRACKS = {
+    ROLE_FAMILY_SOFTWARE_ENGINEERING: "technical interview",
+    ROLE_FAMILY_DATA_AI: "technical interview",
+    ROLE_FAMILY_PRODUCT: "product interview",
+    ROLE_FAMILY_DESIGN: "design/portfolio interview",
+    ROLE_FAMILY_BUSINESS_ANALYSIS: "business analysis interview",
+    ROLE_FAMILY_BANKING_FINANCE: "banking/finance interview",
+    ROLE_FAMILY_ACCOUNTING_AUDIT: "accounts/audit interview",
+    ROLE_FAMILY_SALES_MARKETING: "sales/marketing interview",
+    ROLE_FAMILY_HR_ADMIN: "HR/people-operations interview",
+    ROLE_FAMILY_OPERATIONS_SUPPLY_CHAIN: "operations/supply-chain interview",
+    ROLE_FAMILY_EDUCATION_TRAINING: "teaching/classroom interview",
+    ROLE_FAMILY_HEALTHCARE: "healthcare/clinical interview",
+    ROLE_FAMILY_LEGAL: "legal interview",
+    ROLE_FAMILY_CUSTOMER_SUPPORT: "customer support interview",
+    ROLE_FAMILY_SKILLED_TRADE: "trade/skills interview",
+    ROLE_FAMILY_UNCLEAR: "general screening interview",
+}
+
+
+def get_interview_track_for_role_family(
+    role_family: str | None,
+    candidate_domain: str | None = None,
+) -> str:
+    track = ROLE_FAMILY_INTERVIEW_TRACKS.get(role_family or "")
+    if track:
+        return track
+
+    if candidate_domain == TECHNICAL:
+        return "technical interview"
+    if candidate_domain == SEMI_TECHNICAL:
+        return "role-specific semi-technical interview"
+    if candidate_domain == NON_TECHNICAL:
+        return "role-specific interview"
+
+    return "general screening interview"
+
 ROLE_FAMILY_SIGNAL_KEYWORDS = {
     ROLE_FAMILY_SOFTWARE_ENGINEERING: (
         "software engineer",

@@ -5,10 +5,14 @@ from app.utils.candidate_domain import (
     NON_TECHNICAL,
     SEMI_TECHNICAL,
     SKIP_NON_TECHNICAL,
+    SKIP_UNCLEAR,
     TECHNICAL,
+    UNCLEAR,
     classify_candidate_domain,
+    get_interview_track_for_role_family,
     github_review_policy,
     resolve_candidate_display_role,
+    resolve_candidate_role_resolution,
 )
 
 
@@ -341,6 +345,99 @@ class CandidateRoleResolverTests(unittest.TestCase):
         self.assertNotEqual(display_role, "Volunteer Trainer")
         self.assertEqual(domain, NON_TECHNICAL)
         self.assertEqual(github_review_policy(domain), SKIP_NON_TECHNICAL)
+
+    def test_interview_track_for_full_stack_ai_engineer_is_technical(self):
+        candidate = {
+            "current_title": "Full Stack AI Engineer",
+            "summary": "Full Stack AI Engineer building React, FastAPI, LangGraph and RAG systems.",
+            "skills": ["React", "FastAPI", "LangGraph", "RAG"],
+        }
+
+        resolution = resolve_candidate_role_resolution(candidate, "React FastAPI LangGraph RAG GitHub")
+        track = get_interview_track_for_role_family(resolution.role_family, resolution.domain)
+
+        self.assertEqual(track, "technical interview")
+
+    def test_interview_track_for_business_analyst_is_business_focused(self):
+        candidate = {
+            "current_title": "Business Analyst",
+            "summary": "Business Analyst focused on requirements gathering and stakeholder communication.",
+            "skills": ["Requirements gathering", "Stakeholder communication", "Process mapping"],
+        }
+
+        resolution = resolve_candidate_role_resolution(candidate, "requirements stakeholder process mapping")
+        track = get_interview_track_for_role_family(resolution.role_family, resolution.domain)
+
+        self.assertEqual(track, "business analysis interview")
+
+    def test_interview_track_for_ui_ux_designer_is_design_focused(self):
+        candidate = {
+            "current_title": "UI/UX Designer",
+            "summary": "UI/UX Designer focused on Figma, wireframes, and user flows.",
+            "skills": ["Figma", "Wireframes", "User flows", "Usability testing"],
+        }
+
+        resolution = resolve_candidate_role_resolution(candidate, "figma wireframes user flows usability testing")
+        track = get_interview_track_for_role_family(resolution.role_family, resolution.domain)
+
+        self.assertEqual(track, "design/portfolio interview")
+
+    def test_interview_track_for_banking_finance_uses_domain_track(self):
+        candidate = amber_like_finance_candidate()
+
+        resolution = resolve_candidate_role_resolution(
+            candidate,
+            "BBA Banking and Finance financial analysis digital banking risk assessment",
+        )
+        track = get_interview_track_for_role_family(resolution.role_family, resolution.domain)
+
+        self.assertEqual(track, "banking/finance interview")
+
+    def test_interview_track_for_sales_marketing_uses_domain_track(self):
+        candidate = {
+            "current_title": "Sales Executive",
+            "summary": "Sales Executive handling leads, campaigns, CRM updates and client communication.",
+            "skills": ["Leads", "Campaigns", "CRM", "Client communication", "Conversion tracking"],
+        }
+
+        resolution = resolve_candidate_role_resolution(candidate, "sales leads campaigns crm conversion tracking")
+        track = get_interview_track_for_role_family(resolution.role_family, resolution.domain)
+
+        self.assertEqual(track, "sales/marketing interview")
+
+    def test_interview_track_for_unknown_role_is_general_not_technical(self):
+        candidate = {
+            "current_title": None,
+            "summary": "Motivated candidate with varied interests and mixed general skills.",
+            "skills": ["Communication", "MS Office", "Teamwork", "Research"],
+        }
+
+        resolution = resolve_candidate_role_resolution(candidate, "general skills teamwork research")
+        track = get_interview_track_for_role_family(resolution.role_family, resolution.domain)
+
+        self.assertEqual(resolution.domain, UNCLEAR)
+        self.assertEqual(track, "general screening interview")
+        self.assertNotIn("technical", track)
+        self.assertNotIn("code", track)
+
+    def test_agent3_report_guidance_uses_resolved_family_not_detected_role_keywords(self):
+        from app.agents.agent3_lead_evaluator import _report_structure_guidance
+
+        candidate = amber_like_finance_candidate()
+        resolution = resolve_candidate_role_resolution(
+            candidate,
+            "BBA Banking and Finance financial analysis digital banking risk assessment Volunteer Trainer",
+        )
+
+        guidance = _report_structure_guidance(
+            NON_TECHNICAL,
+            SKIP_NON_TECHNICAL,
+            "Volunteer Trainer",
+            resolution.role_family,
+        )
+
+        self.assertIn("banking/finance interview", guidance)
+        self.assertNotIn("teaching/classroom interview", guidance)
 
 
 if __name__ == "__main__":
