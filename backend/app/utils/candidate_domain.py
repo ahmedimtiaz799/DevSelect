@@ -214,7 +214,6 @@ DISPLAY_ROLE_KEYWORDS = (
         "associate",
         "banking",
         "business",
-        "candidate",
         "consultant",
         "coordinator",
         "designer",
