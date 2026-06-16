@@ -10,7 +10,7 @@ STRICT RULES:
 6. Extract ALL github.com URLs you find — do not pick just one.
 7. Output must be valid JSON parsable by json.loads(). No trailing commas.
 8. Programming languages go in "languages". Frameworks and tools go in "frameworks".
-9. For "current_title", use the clear role/title shown under the candidate name, in the professional summary, or in the most recent work experience. Do not leave it null when a role/title is explicitly present.
+9. For "current_title", use the clear role/title shown under the candidate name, in the professional summary, or in the most recent work experience. For business/finance CVs with a clear summary, degree, skills, or target sector, do not let a short unrelated volunteer/training role override the stronger business/finance profile. Do not leave it null when a role/title is explicitly present.
 10. For "projects", extract concise project entries containing the project name and the strongest technologies or purpose explicitly stated in the CV.
 11. Each "projects" array item must be a single string. Do not return project objects.
 

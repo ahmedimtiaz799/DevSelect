@@ -11,6 +11,7 @@ from app.utils.candidate_domain import (
     SKIP_NON_TECHNICAL,
     SKIP_UNCLEAR,
     UNCLEAR,
+    resolve_candidate_display_role_with_source,
 )
 from app.utils.llm_observability import (
     cap_text_for_llm,
@@ -52,6 +53,7 @@ ROLE_KEYWORDS = (
     "teacher",
     "lecturer",
     "instructor",
+    "trainer",
     "doctor",
     "physician",
     "nurse",
@@ -84,6 +86,8 @@ ROLE_KEYWORDS = (
     "sales",
     "operations",
     "finance",
+    "financial",
+    "banking",
     "warehouse",
     "retail",
     "legal",
@@ -314,11 +318,12 @@ def _role_from_summary(summary: str | None) -> str | None:
 
 
 def _detect_candidate_role(candidate, raw_cv_text: str | None) -> tuple[str | None, str]:
+    resolved_role, resolved_source = resolve_candidate_display_role_with_source(candidate, raw_cv_text)
+    if resolved_role:
+        return resolved_role, resolved_source
+
     role_sources = (
-        ("schema", _clean_role(_field(candidate, "current_title"))),
-        ("work_experience", _role_from_experience(candidate)),
         ("cv_header", _role_from_header(raw_cv_text, _field(candidate, "full_name"))),
-        ("summary", _role_from_summary(_field(candidate, "summary"))),
         ("raw_cv_summary", _role_from_summary(raw_cv_text)),
     )
 
@@ -380,7 +385,7 @@ def _github_review_guidance(
 
     if github_review_policy == SKIP_UNCLEAR or candidate_domain == UNCLEAR:
         return (
-            f"- Candidate domain is UNCLEAR for {role_label}. GitHub review was skipped because the role evidence is not clear enough to justify code-based evaluation.\n"
+            f"- Candidate domain is UNCLEAR for {role_label}. GitHub review was skipped because the role evidence is too broad to justify GitHub-based evaluation.\n"
             "- Proceed with a cautious CV-only evaluation.\n"
             "- Do not invent GitHub weaknesses or treat the skipped review as a negative.\n"
             "- Keep the report CV-only and explain the limited evaluation scope briefly without inventing a GitHub section."

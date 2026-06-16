@@ -30,6 +30,7 @@ from app.utils.candidate_domain import (
     SKIP_NON_TECHNICAL,
     classify_candidate_domain,
     github_review_policy,
+    resolve_candidate_display_role_with_source,
 )
 from app.utils.llm_provider import (
     GROQ_PROVIDER,
@@ -441,11 +442,18 @@ ROLE_KEYWORDS = (
     "developer",
     "architect",
     "designer",
+    "executive",
+    "officer",
+    "accountant",
     "manager",
     "analyst",
     "scientist",
     "specialist",
     "consultant",
+    "teacher",
+    "lecturer",
+    "instructor",
+    "trainer",
     "devops",
     "qa",
     "frontend",
@@ -460,6 +468,15 @@ ROLE_KEYWORDS = (
     "data",
     "product",
     "scrum",
+    "banking",
+    "finance",
+    "financial",
+    "business",
+    "marketing",
+    "sales",
+    "operations",
+    "administrator",
+    "coordinator",
 )
 
 ROLE_STOP_LINES = {
@@ -578,16 +595,14 @@ def _ensure_candidate_role(
     candidate: CandidateExtraction,
     raw_cv_text: str,
 ) -> tuple[CandidateExtraction, str]:
-    existing_role = _clean_role(candidate.current_title)
-    if existing_role:
-        if existing_role != candidate.current_title:
-            return candidate.model_copy(update={"current_title": existing_role}), "schema"
-        return candidate, "schema"
+    resolved_role, resolved_source = resolve_candidate_display_role_with_source(candidate, raw_cv_text)
+    if resolved_role:
+        if resolved_role != candidate.current_title:
+            return candidate.model_copy(update={"current_title": resolved_role}), resolved_source
+        return candidate, resolved_source
 
     role_sources = (
-        ("work_experience", _candidate_role_from_experience(candidate)),
         ("cv_header", _candidate_role_from_header(raw_cv_text, candidate.full_name)),
-        ("summary", _candidate_role_from_summary(candidate.summary)),
         ("raw_cv_summary", _candidate_role_from_summary(raw_cv_text)),
     )
 

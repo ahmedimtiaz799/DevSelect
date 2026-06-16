@@ -32,6 +32,7 @@ from app.utils.budget_limits import (
     record_budget_usage,
 )
 from app.utils.cv_likeness import assess_cv_likeness
+from app.utils.candidate_domain import resolve_candidate_display_role
 from app.utils.llm_observability import cap_text_for_llm
 from app.utils.llm_provider import LLMProviderUnavailableError
 
@@ -365,7 +366,11 @@ def _known_role(value) -> str | None:
     return role
 
 
-def _candidate_role(candidate) -> str | None:
+def _candidate_role(candidate, raw_cv_text: str | None = None) -> str | None:
+    role = _known_role(resolve_candidate_display_role(candidate, raw_cv_text))
+    if role:
+        return role
+
     role = _known_role(_field(candidate, "current_title"))
     if role:
         return role
@@ -424,7 +429,10 @@ def _candidate_meta(values: dict | None, tasks=None) -> dict:
 
     if candidate:
         name = _clean_text(_field(candidate, "full_name"))
-        role = _candidate_role(candidate)
+        role = _candidate_role(
+            candidate,
+            values.get("raw_cv_text") or values.get("pdf_preview_text"),
+        )
 
         if name:
             meta["candidate_name"] = name

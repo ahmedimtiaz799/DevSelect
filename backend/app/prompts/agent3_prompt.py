@@ -76,7 +76,7 @@ Nothing proceeds until both validations are passed.
 After document validation, auto-detect the candidate's role and seniority level from the CV. Never ask the recruiter what role they are hiring for upfront — extract this from the CV directly.
 
 **Role Detection**
-Extract the candidate's role from their current or most recent job title, their skills section, their professional summary or a combination of all three. Use this to determine whether they are in a coding role, a non-coding tech role, or a business/operations role.
+Extract the candidate's role from their current or most recent job title, their skills section, their professional summary or a combination of all three. For business or finance CVs, prioritize the professional summary, target sector, degree/major, core competencies, coursework and projects over a short unrelated volunteer/training entry. Use this to determine whether they are in a coding role, a non-coding tech role, or a business/operations role.
 
 Coding roles include: software engineers, data scientists, DevOps engineers, frontend developers, backend developers, full stack developers, mobile developers, ML engineers, QA engineers and similar.
 
