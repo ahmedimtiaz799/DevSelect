@@ -1,0 +1,26 @@
+-- DevSelect Supabase baseline placeholder.
+--
+-- IMPORTANT:
+-- This file is documentation only until the current Supabase schema is exported.
+-- Do not treat this file as a complete schema baseline.
+--
+-- Before any real deployment, replace this placeholder with an exported schema
+-- from the active Supabase project, including:
+--   - tables
+--   - columns
+--   - primary keys and foreign keys
+--   - indexes
+--   - RLS enabled/forced state
+--   - policies
+--   - grants
+--   - extensions
+--
+-- Current audit assumptions:
+--   - public.chats and public.messages are user-facing tables accessed by the
+--     frontend through the Supabase anon client and protected by RLS policies.
+--   - public.checkpoints, public.checkpoint_blobs, public.checkpoint_writes,
+--     and public.checkpoint_migrations are LangGraph checkpoint tables.
+--   - checkpoint tables are backend-only and accessed by FastAPI through
+--     DATABASE_URL / AsyncPostgresSaver, not by frontend Supabase clients.
+--
+-- DO NOT APPLY THIS PLACEHOLDER AS A REAL BASELINE.
