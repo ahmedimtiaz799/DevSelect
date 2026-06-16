@@ -142,7 +142,7 @@ class CandidateRoleResolverTests(unittest.TestCase):
 
         display_role = resolve_candidate_display_role(candidate, "general skills teamwork research")
 
-        self.assertIn(display_role, {None, "Role focus needs clarification"})
+        self.assertEqual(display_role, "Role focus needs clarification")
         self.assertNotIn(display_role, {FINANCE_ROLE, "Volunteer Trainer", "Full Stack AI Engineer"})
         self.assertNotEqual(display_role, "Role unclear for code-based evaluation")
 

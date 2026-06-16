@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import re
 from typing import Any
 
@@ -11,6 +12,37 @@ UNCLEAR = "unclear"
 
 SKIP_NON_TECHNICAL = "skip_non_technical"
 SKIP_UNCLEAR = "skip_unclear"
+
+ROLE_FOCUS_NEEDS_CLARIFICATION = "Role focus needs clarification"
+
+ROLE_FAMILY_SOFTWARE_ENGINEERING = "software_engineering"
+ROLE_FAMILY_DATA_AI = "data_ai"
+ROLE_FAMILY_PRODUCT = "product"
+ROLE_FAMILY_DESIGN = "design"
+ROLE_FAMILY_BUSINESS_ANALYSIS = "business_analysis"
+ROLE_FAMILY_BANKING_FINANCE = "banking_finance"
+ROLE_FAMILY_ACCOUNTING_AUDIT = "accounting_audit"
+ROLE_FAMILY_SALES_MARKETING = "sales_marketing"
+ROLE_FAMILY_HR_ADMIN = "hr_admin"
+ROLE_FAMILY_OPERATIONS_SUPPLY_CHAIN = "operations_supply_chain"
+ROLE_FAMILY_EDUCATION_TRAINING = "education_training"
+ROLE_FAMILY_HEALTHCARE = "healthcare"
+ROLE_FAMILY_LEGAL = "legal"
+ROLE_FAMILY_CUSTOMER_SUPPORT = "customer_support"
+ROLE_FAMILY_SKILLED_TRADE = "skilled_trade"
+ROLE_FAMILY_UNCLEAR = "unclear"
+
+
+@dataclass(frozen=True)
+class RoleResolution:
+    display_role: str
+    role_family: str
+    domain: str
+    confidence: str
+    source: str
+    github_policy: str | None
+    overrode_current_title: bool
+    reason: str
 
 TECHNICAL_ROLE_KEYWORDS = (
     "software engineer",
@@ -199,6 +231,177 @@ SEMI_TECHNICAL_ROLE_KEYWORDS = (
     "technical project manager",
 )
 
+ROLE_FAMILY_DOMAINS = {
+    ROLE_FAMILY_SOFTWARE_ENGINEERING: TECHNICAL,
+    ROLE_FAMILY_DATA_AI: TECHNICAL,
+    ROLE_FAMILY_PRODUCT: SEMI_TECHNICAL,
+    ROLE_FAMILY_DESIGN: SEMI_TECHNICAL,
+    ROLE_FAMILY_BUSINESS_ANALYSIS: SEMI_TECHNICAL,
+    ROLE_FAMILY_BANKING_FINANCE: NON_TECHNICAL,
+    ROLE_FAMILY_ACCOUNTING_AUDIT: NON_TECHNICAL,
+    ROLE_FAMILY_SALES_MARKETING: NON_TECHNICAL,
+    ROLE_FAMILY_HR_ADMIN: NON_TECHNICAL,
+    ROLE_FAMILY_OPERATIONS_SUPPLY_CHAIN: NON_TECHNICAL,
+    ROLE_FAMILY_EDUCATION_TRAINING: NON_TECHNICAL,
+    ROLE_FAMILY_HEALTHCARE: NON_TECHNICAL,
+    ROLE_FAMILY_LEGAL: NON_TECHNICAL,
+    ROLE_FAMILY_CUSTOMER_SUPPORT: NON_TECHNICAL,
+    ROLE_FAMILY_SKILLED_TRADE: NON_TECHNICAL,
+    ROLE_FAMILY_UNCLEAR: UNCLEAR,
+}
+
+ROLE_FAMILY_DISPLAY_ROLES = {
+    ROLE_FAMILY_SOFTWARE_ENGINEERING: "Software Engineering Candidate",
+    ROLE_FAMILY_DATA_AI: "Data / AI Candidate",
+    ROLE_FAMILY_PRODUCT: "Product Candidate",
+    ROLE_FAMILY_DESIGN: "Design Candidate",
+    ROLE_FAMILY_BUSINESS_ANALYSIS: "Business Analyst",
+    ROLE_FAMILY_BANKING_FINANCE: BANKING_FINANCE_ROLE_TITLE,
+    ROLE_FAMILY_ACCOUNTING_AUDIT: "Accounting / Audit Candidate",
+    ROLE_FAMILY_SALES_MARKETING: "Sales / Marketing Candidate",
+    ROLE_FAMILY_HR_ADMIN: "HR / Admin Candidate",
+    ROLE_FAMILY_OPERATIONS_SUPPLY_CHAIN: "Operations Candidate",
+    ROLE_FAMILY_EDUCATION_TRAINING: "Education / Training Candidate",
+    ROLE_FAMILY_HEALTHCARE: "Healthcare Candidate",
+    ROLE_FAMILY_LEGAL: "Legal Candidate",
+    ROLE_FAMILY_CUSTOMER_SUPPORT: "Customer Support Candidate",
+    ROLE_FAMILY_SKILLED_TRADE: "Skilled Trade Candidate",
+    ROLE_FAMILY_UNCLEAR: ROLE_FOCUS_NEEDS_CLARIFICATION,
+}
+
+ROLE_FAMILY_SIGNAL_KEYWORDS = {
+    ROLE_FAMILY_SOFTWARE_ENGINEERING: (
+        "software engineer",
+        "software developer",
+        "full stack",
+        "frontend",
+        "backend",
+        "web developer",
+        "mobile developer",
+        "devops",
+        "qa engineer",
+        "react",
+        "fastapi",
+        "api",
+    ),
+    ROLE_FAMILY_DATA_AI: (
+        "ai engineer",
+        "machine learning",
+        "ml engineer",
+        "data engineer",
+        "data scientist",
+        "analytics",
+        "rag",
+        "llm",
+        "langgraph",
+    ),
+    ROLE_FAMILY_PRODUCT: (
+        "product manager",
+        "product owner",
+        "roadmap",
+        "backlog",
+        "user stories",
+        "product strategy",
+    ),
+    ROLE_FAMILY_DESIGN: (
+        "ui/ux",
+        "ux designer",
+        "ui designer",
+        "product designer",
+        "graphic designer",
+        "portfolio",
+        "wireframe",
+    ),
+    ROLE_FAMILY_BUSINESS_ANALYSIS: (
+        "business analyst",
+        "requirements",
+        "stakeholder",
+        "process mapping",
+        "dashboard",
+        "documentation",
+    ),
+    ROLE_FAMILY_BANKING_FINANCE: BANKING_FINANCE_FOCUS_KEYWORDS + BANKING_FINANCE_SKILL_KEYWORDS,
+    ROLE_FAMILY_ACCOUNTING_AUDIT: (
+        "accountant",
+        "accounting",
+        "audit",
+        "bookkeeping",
+        "ledger",
+        "tax",
+        "treasury",
+    ),
+    ROLE_FAMILY_SALES_MARKETING: (
+        "sales",
+        "marketing",
+        "account executive",
+        "business development",
+        "client relationship",
+        "campaign",
+        "brand",
+    ),
+    ROLE_FAMILY_HR_ADMIN: (
+        "human resources",
+        "hr",
+        "recruiter",
+        "talent acquisition",
+        "admin",
+        "administrator",
+        "office",
+    ),
+    ROLE_FAMILY_OPERATIONS_SUPPLY_CHAIN: (
+        "operations",
+        "supply chain",
+        "logistics",
+        "warehouse",
+        "procurement",
+        "inventory",
+        "retail",
+    ),
+    ROLE_FAMILY_EDUCATION_TRAINING: (
+        "teacher",
+        "teaching",
+        "trainer",
+        "training",
+        "instructor",
+        "classroom",
+        "curriculum",
+        "lesson",
+        "education",
+        "coaching",
+    ),
+    ROLE_FAMILY_HEALTHCARE: (
+        "doctor",
+        "physician",
+        "nurse",
+        "pharmacist",
+        "clinical",
+        "healthcare",
+        "lab technician",
+    ),
+    ROLE_FAMILY_LEGAL: (
+        "lawyer",
+        "attorney",
+        "legal",
+        "paralegal",
+        "compliance",
+    ),
+    ROLE_FAMILY_CUSTOMER_SUPPORT: (
+        "customer support",
+        "customer service",
+        "customer success",
+        "support",
+        "helpdesk",
+    ),
+    ROLE_FAMILY_SKILLED_TRADE: (
+        "electrician",
+        "mechanic",
+        "plumber",
+        "welder",
+        "technician",
+        "maintenance",
+    ),
+}
+
 DISPLAY_ROLE_KEYWORDS = (
     TECHNICAL_ROLE_KEYWORDS
     + SEMI_TECHNICAL_ROLE_KEYWORDS
@@ -315,8 +518,133 @@ def _candidate_evidence_text(candidate: Any, raw_cv_text: str | None) -> str:
     return _normalize_text(" ".join(str(part or "") for part in evidence))
 
 
+def _candidate_evidence_groups(candidate: Any, raw_cv_text: str | None) -> dict[str, str]:
+    formal_experience: list[str] = []
+    volunteer_experience: list[str] = []
+
+    for experience in _field(candidate, "work_experience", []) or []:
+        parts = [
+            _field(experience, "title"),
+            _field(experience, "company"),
+            _field(experience, "description"),
+        ]
+        text = " ".join(str(part or "") for part in parts)
+        title = _field(experience, "title")
+        if is_training_or_volunteer_role(title) or "volunteer" in _normalize_text(text):
+            volunteer_experience.append(text)
+        else:
+            formal_experience.append(text)
+
+    education = []
+    for item in _field(candidate, "education", []) or []:
+        education.append(_field(item, "degree"))
+        education.append(_field(item, "institution"))
+
+    return {
+        "current_title": _normalize_text(_field(candidate, "current_title")),
+        "summary": _normalize_text(_field(candidate, "summary")),
+        "education": _normalize_text(" ".join(str(part or "") for part in education)),
+        "skills": _normalize_text(
+            " ".join(
+                str(item or "")
+                for field_name in ("skills", "languages", "frameworks")
+                for item in (_field(candidate, field_name, []) or [])
+            )
+        ),
+        "certifications_projects": _normalize_text(
+            " ".join(
+                str(item or "")
+                for field_name in ("certifications", "projects")
+                for item in (_field(candidate, field_name, []) or [])
+            )
+        ),
+        "formal_experience": _normalize_text(" ".join(formal_experience)),
+        "volunteer_experience": _normalize_text(" ".join(volunteer_experience)),
+        "raw_cv_text": _normalize_text(raw_cv_text),
+    }
+
+
 def is_training_or_volunteer_role(role: str | None) -> bool:
     return _contains_any(_normalize_text(role), TRAINING_OR_VOLUNTEER_ROLE_KEYWORDS)
+
+
+def _family_hits(text: str, family: str) -> int:
+    return _count_keyword_hits(text, ROLE_FAMILY_SIGNAL_KEYWORDS.get(family, ()))
+
+
+def _role_family_scores(candidate: Any, raw_cv_text: str | None) -> dict[str, int]:
+    groups = _candidate_evidence_groups(candidate, raw_cv_text)
+    weights = {
+        "current_title": 4,
+        "summary": 5,
+        "education": 4,
+        "skills": 3,
+        "certifications_projects": 2,
+        "formal_experience": 2,
+        "volunteer_experience": 1,
+        "raw_cv_text": 1,
+    }
+    scores: dict[str, int] = {}
+
+    for family in ROLE_FAMILY_SIGNAL_KEYWORDS:
+        score = 0
+        for source, text in groups.items():
+            hits = _family_hits(text, family)
+            if hits:
+                score += hits * weights[source]
+        scores[family] = score
+
+    return scores
+
+
+def _best_role_family(candidate: Any, raw_cv_text: str | None) -> tuple[str, int]:
+    scores = _role_family_scores(candidate, raw_cv_text)
+    if not scores:
+        return ROLE_FAMILY_UNCLEAR, 0
+
+    family, score = max(scores.items(), key=lambda item: item[1])
+    if score <= 0:
+        return ROLE_FAMILY_UNCLEAR, 0
+
+    return family, score
+
+
+def _role_family_from_text(text: str | None) -> str | None:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return None
+
+    scores = {
+        family: _family_hits(normalized, family)
+        for family in ROLE_FAMILY_SIGNAL_KEYWORDS
+    }
+    family, score = max(scores.items(), key=lambda item: item[1])
+    return family if score > 0 else None
+
+
+def _github_policy_for_domain(domain: str) -> str | None:
+    if domain == NON_TECHNICAL:
+        return SKIP_NON_TECHNICAL
+    if domain == UNCLEAR:
+        return SKIP_UNCLEAR
+    return None
+
+
+def _domain_for_role_family(family: str, candidate: Any, raw_cv_text: str | None) -> str:
+    domain = ROLE_FAMILY_DOMAINS.get(family, UNCLEAR)
+    if domain == NON_TECHNICAL and _technical_signal_score(candidate, raw_cv_text) >= 3:
+        return SEMI_TECHNICAL
+    return domain
+
+
+def _confidence_for_score(score: int) -> str:
+    if score >= 10:
+        return "high"
+    if score >= 5:
+        return "medium"
+    if score > 0:
+        return "low"
+    return "unknown"
 
 
 def _clean_display_role(value: Any) -> str | None:
@@ -377,53 +705,139 @@ def infer_banking_finance_role(candidate: Any, raw_cv_text: str | None = None) -
     ):
         return None
 
-    has_focus = _contains_any(evidence_text, BANKING_FINANCE_FOCUS_KEYWORDS)
-    has_education = _contains_any(evidence_text, BANKING_FINANCE_EDUCATION_KEYWORDS) and (
-        "banking" in evidence_text or "finance" in evidence_text or "financial" in evidence_text
-    )
-    skill_hits = _count_keyword_hits(evidence_text, BANKING_FINANCE_SKILL_KEYWORDS)
+    groups = _candidate_evidence_groups(candidate, raw_cv_text)
+    focus_score = _family_hits(groups["summary"], ROLE_FAMILY_BANKING_FINANCE)
+    education_score = _count_keyword_hits(groups["education"], BANKING_FINANCE_EDUCATION_KEYWORDS)
+    skill_score = _family_hits(groups["skills"], ROLE_FAMILY_BANKING_FINANCE)
+    project_score = _family_hits(groups["certifications_projects"], ROLE_FAMILY_BANKING_FINANCE)
+    raw_score = _family_hits(groups["raw_cv_text"], ROLE_FAMILY_BANKING_FINANCE)
 
-    if has_education and (has_focus or skill_hits >= 1):
+    if education_score and (focus_score or skill_score or project_score or raw_score):
         return BANKING_FINANCE_ROLE_TITLE
 
-    if has_focus and skill_hits >= 2:
+    if focus_score and skill_score >= 2:
         return BANKING_FINANCE_ROLE_TITLE
 
     return None
+
+
+def resolve_candidate_role_resolution(
+    candidate: Any,
+    raw_cv_text: str | None = None,
+) -> RoleResolution:
+    best_family, best_family_score = _best_role_family(candidate, raw_cv_text)
+    banking_finance_role = infer_banking_finance_role(candidate, raw_cv_text)
+    schema_role = _clean_display_role(_field(candidate, "current_title"))
+
+    if schema_role:
+        schema_family = _role_family_from_text(schema_role) or best_family
+        if banking_finance_role and is_training_or_volunteer_role(schema_role):
+            domain = _domain_for_role_family(ROLE_FAMILY_BANKING_FINANCE, candidate, raw_cv_text)
+            return RoleResolution(
+                display_role=banking_finance_role,
+                role_family=ROLE_FAMILY_BANKING_FINANCE,
+                domain=domain,
+                confidence="high",
+                source="banking_finance_profile",
+                github_policy=_github_policy_for_domain(domain),
+                overrode_current_title=True,
+                reason="banking_finance_evidence_overrode_short_training_title",
+            )
+
+        family = schema_family or ROLE_FAMILY_UNCLEAR
+        domain = _domain_for_role_family(family, candidate, raw_cv_text)
+        return RoleResolution(
+            display_role=schema_role,
+            role_family=family,
+            domain=domain,
+            confidence=_confidence_for_score(best_family_score or 4),
+            source="schema",
+            github_policy=_github_policy_for_domain(domain),
+            overrode_current_title=False,
+            reason="specific_current_title_used",
+        )
+
+    if banking_finance_role:
+        domain = _domain_for_role_family(ROLE_FAMILY_BANKING_FINANCE, candidate, raw_cv_text)
+        return RoleResolution(
+            display_role=banking_finance_role,
+            role_family=ROLE_FAMILY_BANKING_FINANCE,
+            domain=domain,
+            confidence="high",
+            source="banking_finance_profile",
+            github_policy=_github_policy_for_domain(domain),
+            overrode_current_title=False,
+            reason="banking_finance_evidence_from_summary_education_skills",
+        )
+
+    summary_role = _role_from_summary(_field(candidate, "summary"))
+    if summary_role:
+        family = _role_family_from_text(summary_role) or best_family
+        domain = _domain_for_role_family(family, candidate, raw_cv_text)
+        return RoleResolution(
+            display_role=summary_role,
+            role_family=family,
+            domain=domain,
+            confidence=_confidence_for_score(best_family_score),
+            source="summary",
+            github_policy=_github_policy_for_domain(domain),
+            overrode_current_title=False,
+            reason="summary_role_used",
+        )
+
+    if best_family != ROLE_FAMILY_UNCLEAR and best_family_score >= 6:
+        domain = _domain_for_role_family(best_family, candidate, raw_cv_text)
+        return RoleResolution(
+            display_role=ROLE_FAMILY_DISPLAY_ROLES[best_family],
+            role_family=best_family,
+            domain=domain,
+            confidence=_confidence_for_score(best_family_score),
+            source="evidence_family",
+            github_policy=_github_policy_for_domain(domain),
+            overrode_current_title=False,
+            reason="multi_signal_role_family_used",
+        )
+
+    experience_role = _role_from_experience(candidate)
+    if experience_role:
+        family = _role_family_from_text(experience_role) or best_family
+        domain = _domain_for_role_family(family, candidate, raw_cv_text)
+        return RoleResolution(
+            display_role=experience_role,
+            role_family=family,
+            domain=domain,
+            confidence=_confidence_for_score(best_family_score),
+            source="work_experience",
+            github_policy=_github_policy_for_domain(domain),
+            overrode_current_title=False,
+            reason="experience_role_used",
+        )
+
+    return RoleResolution(
+        display_role=ROLE_FOCUS_NEEDS_CLARIFICATION,
+        role_family=ROLE_FAMILY_UNCLEAR,
+        domain=UNCLEAR,
+        confidence="unknown",
+        source="missing",
+        github_policy=SKIP_UNCLEAR,
+        overrode_current_title=False,
+        reason="insufficient_role_evidence",
+    )
 
 
 def resolve_candidate_display_role_with_source(
     candidate: Any,
     raw_cv_text: str | None = None,
 ) -> tuple[str | None, str]:
-    banking_finance_role = infer_banking_finance_role(candidate, raw_cv_text)
-    schema_role = _clean_display_role(_field(candidate, "current_title"))
-
-    if schema_role:
-        if banking_finance_role and is_training_or_volunteer_role(schema_role):
-            return banking_finance_role, "banking_finance_profile"
-        return schema_role, "schema"
-
-    if banking_finance_role:
-        return banking_finance_role, "banking_finance_profile"
-
-    summary_role = _role_from_summary(_field(candidate, "summary"))
-    if summary_role:
-        return summary_role, "summary"
-
-    experience_role = _role_from_experience(candidate)
-    if experience_role:
-        return experience_role, "work_experience"
-
-    return None, "missing"
+    resolution = resolve_candidate_role_resolution(candidate, raw_cv_text)
+    return resolution.display_role, resolution.source
 
 
 def resolve_candidate_display_role(
     candidate: Any,
     raw_cv_text: str | None = None,
 ) -> str | None:
-    role, _source = resolve_candidate_display_role_with_source(candidate, raw_cv_text)
-    return role
+    return resolve_candidate_role_resolution(candidate, raw_cv_text).display_role
 
 
 def _technical_signal_score(candidate: Any, raw_cv_text: str | None) -> int:
@@ -445,6 +859,10 @@ def _technical_signal_score(candidate: Any, raw_cv_text: str | None) -> int:
 
 
 def classify_candidate_domain(candidate: Any, raw_cv_text: str | None = None) -> tuple[str, str]:
+    resolution = resolve_candidate_role_resolution(candidate, raw_cv_text)
+    if resolution.role_family != ROLE_FAMILY_UNCLEAR:
+        return resolution.domain, f"{resolution.source}:{resolution.role_family}"
+
     role_evidence = [
         _field(candidate, "current_title"),
         _field(candidate, "summary"),
