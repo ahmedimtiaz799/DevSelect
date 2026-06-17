@@ -10,10 +10,13 @@ Do not apply the D1 hardening drafts to production first.
 - Local backend env files exist:
   - `backend/.env`
   - `backend/.env.example`
+  - `backend/.env.staging.example`
 - Local frontend env files exist:
   - `frontend/.env`
   - `frontend/.env.example`
-- No separate staging env file was found locally.
+  - `frontend/.env.staging.example`
+- Staging example files exist locally, but no real staging env file should be
+  committed.
 - No separate production env file was found locally.
 - No Supabase CLI config file was found locally.
 - The env examples document one Supabase variable set, not separate staging and
@@ -94,9 +97,12 @@ Limitations:
 - Backend staging database URL is never copied into frontend env.
 - Production env values are not reused for staging tests.
 - Staging provider keys and Redis values are separate where possible.
-- `.env`, `.env.local`, and `.env.production` remain uncommitted.
+- `.env`, `.env.local`, `.env.staging`, `.env.production`, and local variants
+  remain uncommitted.
 - Staging secrets are stored in the hosting platform or local private env files,
   not in Git.
+- `backend/.env.staging.example` and `frontend/.env.staging.example` are
+  placeholder-only templates, not real secrets.
 
 ## Never Use Production First
 

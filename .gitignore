@@ -1,7 +1,10 @@
 # ─── Environment variables (NEVER commit these) ──────────────────────────────
 .env
 .env.local
+.env.staging
+.env.staging.local
 .env.production
+.env.*.local
 
 # ─── Python backend ──────────────────────────────────────────────────────────
 venv/
