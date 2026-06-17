@@ -1,26 +1,223 @@
--- DevSelect Supabase baseline placeholder.
+-- DevSelect Supabase baseline schema snapshot.
 --
--- IMPORTANT:
--- This file is documentation only until the current Supabase schema is exported.
--- Do not treat this file as a complete schema baseline.
+-- DO NOT RUN DIRECTLY.
+-- BASELINE SNAPSHOT ONLY.
+-- GENERATED FROM CURRENT SUPABASE STATE.
+-- REVIEW BEFORE USING TO CREATE NEW DATABASES.
 --
--- Before any real deployment, replace this placeholder with an exported schema
--- from the active Supabase project, including:
---   - tables
---   - columns
---   - primary keys and foreign keys
---   - indexes
---   - RLS enabled/forced state
---   - policies
---   - grants
---   - extensions
+-- This file documents the schema inspected during the D1-E read-only audit.
+-- It contains no real data rows, no user IDs, no credentials, and no CV data.
 --
--- Current audit assumptions:
---   - public.chats and public.messages are user-facing tables accessed by the
---     frontend through the Supabase anon client and protected by RLS policies.
---   - public.checkpoints, public.checkpoint_blobs, public.checkpoint_writes,
---     and public.checkpoint_migrations are LangGraph checkpoint tables.
---   - checkpoint tables are backend-only and accessed by FastAPI through
---     DATABASE_URL / AsyncPostgresSaver, not by frontend Supabase clients.
+-- The DDL below is intentionally written as comments so this file cannot make
+-- database changes if opened or pasted accidentally. Convert it into reviewed
+-- executable migrations only after validating the current Supabase project.
 --
--- DO NOT APPLY THIS PLACEHOLDER AS A REAL BASELINE.
+-- Extension note:
+--   public.chats.candidate_embedding uses vector(1024), which requires the
+--   pgvector/vector extension to exist in the target database.
+--
+-- ---------------------------------------------------------------------------
+-- public.chats
+-- ---------------------------------------------------------------------------
+--
+-- Intent:
+--   User-facing chat metadata table.
+--
+-- Columns:
+--   id                  uuid not null default gen_random_uuid()
+--   user_id             uuid not null
+--   title               text default 'New Chat'::text
+--   thread_id           text
+--   created_at          timestamp with time zone default now()
+--   updated_at          timestamp with time zone default now()
+--   candidate_embedding vector(1024)
+--   is_pinned           boolean default false
+--   pinned_at           timestamp with time zone
+--
+-- Constraints:
+--   primary key (id)
+--   foreign key (user_id) references auth.users(id)
+--
+-- Existing indexes at snapshot time:
+--   chats_pkey unique btree (id)
+--
+-- RLS:
+--   enabled: true
+--   force RLS: false
+--
+-- Policies:
+--   name: users own chats
+--   role: authenticated
+--   command: all
+--   using: user_id = auth.uid()
+--   with check: user_id = auth.uid()
+--
+-- ---------------------------------------------------------------------------
+-- public.messages
+-- ---------------------------------------------------------------------------
+--
+-- Intent:
+--   User-facing chat messages and saved assistant outputs.
+--
+-- Columns:
+--   id           uuid not null default gen_random_uuid()
+--   chat_id      uuid not null
+--   role         text
+--   content      text
+--   created_at   timestamp with time zone default now()
+--   message_type text
+--
+-- Constraints:
+--   primary key (id)
+--   foreign key (chat_id) references public.chats(id) on delete cascade
+--   check: role in ('user', 'assistant', 'status')
+--
+-- Existing indexes at snapshot time:
+--   messages_pkey unique btree (id)
+--   idx_messages_chat_id btree (chat_id)
+--
+-- RLS:
+--   enabled: true
+--   force RLS: false
+--
+-- Policies:
+--   name: user's own messages
+--   role: authenticated
+--   command: all
+--   using / with check:
+--     exists (
+--       select 1
+--       from public.chats c
+--       where c.id = messages.chat_id
+--         and c.user_id = auth.uid()
+--     )
+--
+-- ---------------------------------------------------------------------------
+-- public.checkpoints
+-- ---------------------------------------------------------------------------
+--
+-- Intent:
+--   Backend-only LangGraph checkpoint table.
+--   Frontend/browser roles should not access this table.
+--
+-- Columns:
+--   thread_id            text not null
+--   checkpoint_ns        text not null default ''::text
+--   checkpoint_id        text not null
+--   parent_checkpoint_id text
+--   type                 text
+--   checkpoint           jsonb not null
+--   metadata             jsonb not null default '{}'::jsonb
+--
+-- Constraints:
+--   primary key (thread_id, checkpoint_ns, checkpoint_id)
+--
+-- Existing indexes at snapshot time:
+--   checkpoints_pkey unique btree (thread_id, checkpoint_ns, checkpoint_id)
+--   checkpoints_thread_id_idx btree (thread_id)
+--
+-- RLS:
+--   enabled: true
+--   force RLS: false
+--
+-- Policies:
+--   none
+--
+-- ---------------------------------------------------------------------------
+-- public.checkpoint_blobs
+-- ---------------------------------------------------------------------------
+--
+-- Intent:
+--   Backend-only LangGraph checkpoint blob table.
+--   Frontend/browser roles should not access this table.
+--
+-- Columns:
+--   thread_id     text not null
+--   checkpoint_ns text not null default ''::text
+--   channel       text not null
+--   version       text not null
+--   type          text not null
+--   blob          bytea
+--
+-- Constraints:
+--   primary key (thread_id, checkpoint_ns, channel, version)
+--
+-- Existing indexes at snapshot time:
+--   checkpoint_blobs_pkey unique btree (thread_id, checkpoint_ns, channel, version)
+--   checkpoint_blobs_thread_id_idx btree (thread_id)
+--
+-- RLS:
+--   enabled: true
+--   force RLS: false
+--
+-- Policies:
+--   none
+--
+-- ---------------------------------------------------------------------------
+-- public.checkpoint_writes
+-- ---------------------------------------------------------------------------
+--
+-- Intent:
+--   Backend-only LangGraph checkpoint writes table.
+--   Frontend/browser roles should not access this table.
+--
+-- Columns:
+--   thread_id     text not null
+--   checkpoint_ns text not null default ''::text
+--   checkpoint_id text not null
+--   task_id       text not null
+--   idx           integer not null
+--   channel       text not null
+--   type          text
+--   blob          bytea not null
+--   task_path     text not null default ''::text
+--
+-- Constraints:
+--   primary key (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+--
+-- Existing indexes at snapshot time:
+--   checkpoint_writes_pkey unique btree
+--     (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+--   checkpoint_writes_thread_id_idx btree (thread_id)
+--
+-- RLS:
+--   enabled: true
+--   force RLS: false
+--
+-- Policies:
+--   none
+--
+-- ---------------------------------------------------------------------------
+-- public.checkpoint_migrations
+-- ---------------------------------------------------------------------------
+--
+-- Intent:
+--   Backend-only LangGraph checkpoint migration tracker.
+--   Frontend/browser roles should not access this table.
+--
+-- Columns:
+--   v integer not null
+--
+-- Constraints:
+--   primary key (v)
+--
+-- Existing indexes at snapshot time:
+--   checkpoint_migrations_pkey unique btree (v)
+--
+-- RLS:
+--   enabled: true
+--   force RLS: false
+--
+-- Policies:
+--   none
+--
+-- ---------------------------------------------------------------------------
+-- Observed privilege posture at snapshot time
+-- ---------------------------------------------------------------------------
+--
+-- D1-E catalog inspection found overly broad grants on the inspected tables for
+-- browser/API roles. See 001_harden_table_grants.sql for the local draft that
+-- proposes revoking checkpoint access from anon/authenticated users and removing
+-- anon grants from chats/messages.
+--
+-- Do not apply grant changes without staging verification.

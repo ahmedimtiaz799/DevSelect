@@ -36,6 +36,16 @@ Never expose these to frontend/Vite:
 
 Only `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` belong in frontend env.
 
+## Baseline Status
+
+`supabase/migrations/000_baseline_current_schema.sql` is a snapshot document
+generated from the current Supabase state during a read-only audit. It is not an
+executable migration and should not be run directly.
+
+Before using the baseline to create or repair an environment, review it against
+the current Supabase project and convert it into intentional, executable
+migrations.
+
 ## Migration Status
 
 The migration files in `supabase/migrations/` are local drafts and are not
@@ -43,13 +53,12 @@ applied yet.
 
 Before deployment:
 
-1. Export the real current Supabase schema.
-2. Replace `000_baseline_current_schema.sql` with the exported baseline.
-3. Verify all table and column names used by follow-up migrations.
-4. Review existing RLS policies for `chats` and `messages`.
-5. Apply migrations only in staging first.
-6. Run the manual RLS checks in `rls_manual_tests.sql`.
-7. Confirm the FastAPI evaluation flow still works with checkpoints.
+1. Review the baseline snapshot against the current Supabase project.
+2. Verify all table and column names used by follow-up migrations.
+3. Review existing RLS policies for `chats` and `messages`.
+4. Apply migrations only in staging first.
+5. Run the manual RLS checks in `rls_manual_tests.sql`.
+6. Confirm the FastAPI evaluation flow still works with checkpoints.
 
 ## FORCE RLS
 
