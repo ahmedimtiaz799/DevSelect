@@ -24,8 +24,9 @@ Stop unless every item below is true:
 
 Apply only:
 
-1. `supabase/migrations/001_harden_table_grants.sql`
-2. `supabase/migrations/002_add_core_indexes.sql`
+1. `supabase/migrations/000_init_devselect_staging_schema.sql`
+2. `supabase/migrations/001_harden_table_grants.sql`
+3. `supabase/migrations/002_add_core_indexes.sql`
 
 Do not apply:
 
@@ -34,29 +35,38 @@ Do not apply:
 
 `000_baseline_current_schema.sql` is documentation only.
 
+`000_init_devselect_staging_schema.sql` is a staging-only schema init draft.
+Review it before applying, and do not apply it to production without separate
+review.
+
 `rls_manual_tests.sql` is manual verification SQL. Run it only in a controlled
 staging SQL session and not with service-role context.
 
 ## Exact Apply Order
 
 1. Take a staging schema backup/export.
-2. Confirm current staging tables exist:
+2. If staging is empty/new, apply
+   `supabase/migrations/000_init_devselect_staging_schema.sql` to staging.
+3. Run normal staging backend startup once to allow the LangGraph Postgres
+   checkpointer to create/check its checkpoint tables.
+4. Confirm current staging tables exist:
    - `public.chats`
    - `public.messages`
    - `public.checkpoints`
    - `public.checkpoint_blobs`
    - `public.checkpoint_writes`
    - `public.checkpoint_migrations`
-3. Confirm current RLS policies exist for `public.chats` and `public.messages`.
-4. Confirm checkpoint tables have no anon/authenticated user policies.
-5. Apply `supabase/migrations/001_harden_table_grants.sql` to staging.
-6. Verify grants after `001`.
-7. Apply `supabase/migrations/002_add_core_indexes.sql` to staging.
-8. Verify indexes after `002`.
-9. Run manual RLS tests using anon/authenticated context only.
-10. Run frontend staging smoke tests.
-11. Run backend staging evaluation/checkpoint smoke tests.
-12. Document results before any production discussion.
+5. Confirm current RLS policies exist for `public.chats` and `public.messages`.
+6. Confirm checkpoint tables have no anon/authenticated user policies.
+7. Apply `supabase/migrations/001_harden_table_grants.sql` to staging.
+8. Verify grants and checkpoint RLS after `001`.
+9. Run a normal-lifespan backend `/health` smoke test after `001`.
+10. Apply `supabase/migrations/002_add_core_indexes.sql` to staging.
+11. Verify indexes after `002`.
+12. Run a normal-lifespan backend `/health` smoke test after `002`.
+13. Run manual RLS tests using anon/authenticated context only.
+14. Run the frontend staging OAuth/session/sidebar smoke test.
+15. Document validated and pending results before any production discussion.
 
 ## Post-001 Verification Checklist
 
@@ -79,8 +89,21 @@ After applying `001_harden_table_grants.sql`, verify:
 - authenticated users cannot read `public.checkpoint_blobs`.
 - authenticated users cannot read `public.checkpoint_writes`.
 - authenticated users cannot read `public.checkpoint_migrations`.
+- RLS is enabled on `public.checkpoints`.
+- RLS is enabled on `public.checkpoint_blobs`.
+- RLS is enabled on `public.checkpoint_writes`.
+- RLS is enabled on `public.checkpoint_migrations`.
 - checkpoint tables still have no anon/authenticated user policies.
+- authenticated has only `SELECT`, `INSERT`, `UPDATE`, `DELETE` on
+  `public.chats`.
+- authenticated has only `SELECT`, `INSERT`, `UPDATE`, `DELETE` on
+  `public.messages`.
+- authenticated does not have `TRUNCATE`, `REFERENCES`, or `TRIGGER` on
+  `public.chats`.
+- authenticated does not have `TRUNCATE`, `REFERENCES`, or `TRIGGER` on
+  `public.messages`.
 - backend service/database path can still access checkpoint tables.
+- backend still boots after grant hardening.
 
 ## Post-002 Verification Checklist
 
@@ -94,36 +117,44 @@ After applying `002_add_core_indexes.sql`, verify:
 - chat history queries still perform normally.
 - message loading still performs normally.
 
-## Frontend Staging Smoke Test
+## Validated Staging Results
 
-Use staging frontend and staging backend only.
+The following checks passed on the separate staging environment:
 
-- Login works.
-- New chat creation works.
-- Chat history loads.
-- User message persistence works.
-- Assistant message persistence works.
-- Follow-up message persistence works.
-- Logout then login still shows the correct user's data.
-- User B cannot see User A chats.
-- User B cannot open User A chat URL directly.
-- User B cannot see User A messages.
+- `000_init_devselect_staging_schema.sql` applied successfully.
+- Normal backend startup created/checked the LangGraph checkpoint tables.
+- `001_harden_table_grants.sql` applied successfully.
+- Normal-lifespan backend `/health` passed after `001`.
+- `002_add_core_indexes.sql` applied successfully.
+- Normal-lifespan backend `/health` passed after `002`.
+- Manual RLS verification passed using disposable staging users.
+- Frontend Google OAuth login returned to authenticated `/chat`.
+- The authenticated session persisted after refresh.
+- Sidebar/chat-history reads completed without visible RLS or auth errors.
+- Staging Supabase was used; main/production Supabase was not contacted.
+- No `/api/chat`, `/upload`, `/stream`, evaluation, or provider call occurred
+  during the frontend smoke test.
 
-## Backend Staging Smoke Test
+`New Chat` was observed to be navigation/local state only and did not create a
+database row during the safe frontend smoke test.
 
-Use staging backend env only.
+## Pending / Not Validated
 
-- Backend boots with staging env.
-- Service role key remains backend-only.
-- Database connection for LangGraph checkpoints remains backend-only.
-- LangGraph checkpoint write/read works.
-- One controlled CV evaluation completes.
-- SSE stream still emits status/token/done or controlled error events.
-- Final report persists to `public.messages`.
-- Follow-up after completed report works.
-- Follow-up messages persist to `public.messages`.
-- No checkpoint permission errors appear in backend logs.
-- No frontend/browser role can read checkpoint tables.
+The following behavior remains explicitly untested:
+
+- frontend-created `public.chats` row persistence
+- frontend-created `public.messages` row persistence
+- `/api/chat`
+- CV upload and `/upload`
+- `/stream`
+- evaluation pipeline
+- SSE streaming
+- final report persistence
+- follow-up persistence
+- Gemini, Groq, LlamaParse, and GitHub provider flows
+
+These checks require a separate approved staging test. Do not infer that they
+passed from the OAuth/session/sidebar smoke test.
 
 ## Rollback Plan
 
@@ -167,8 +198,10 @@ Production remains blocked until:
 - Staging grant hardening passes.
 - Staging indexes pass.
 - Manual RLS tests pass.
-- Frontend smoke tests pass.
-- Backend checkpoint/evaluation smoke tests pass.
+- Frontend OAuth/session/sidebar smoke tests pass.
+- Frontend chat/message write persistence passes.
+- Backend evaluation/checkpoint flows pass.
+- Final report and follow-up persistence pass.
 - No secrets are exposed.
 - Retention cleanup work is tracked separately.
 - Cost-control hardening work is tracked separately.

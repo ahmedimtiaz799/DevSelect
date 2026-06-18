@@ -1,7 +1,17 @@
 # DevSelect Supabase Notes
 
-This folder contains local migration and verification drafts for DevSelect.
-These files have not been applied to Supabase.
+This folder contains local migration and verification files for DevSelect.
+
+The D1 migration stack has been applied to and validated on the separate
+`devselect-staging` environment:
+
+1. `000_init_devselect_staging_schema.sql`
+2. `001_harden_table_grants.sql`
+3. `002_add_core_indexes.sql`
+
+The migration stack has not been promoted or applied to main/production.
+Main/production requires a separate pre-flight review, schema backup/export,
+controlled apply session, and post-apply validation.
 
 ## Architecture
 
@@ -48,17 +58,38 @@ migrations.
 
 ## Migration Status
 
-The migration files in `supabase/migrations/` are local drafts and are not
-applied yet.
+The executable migration stack has been validated on staging only. The
+comment-only baseline remains documentation and must not be applied.
+
+Validated on staging:
+
+- app and checkpoint tables exist
+- app and checkpoint RLS posture was verified
+- table grants and core indexes were verified
+- backend `/health` passed after the full migration stack
+- manual RLS verification passed
+- frontend Google OAuth, session refresh, and sidebar/chat-history reads passed
+
+Not yet validated:
+
+- frontend-created chat-row persistence
+- frontend-created message-row persistence
+- `/api/chat`, CV upload, `/upload`, and `/stream`
+- evaluation and SSE streaming
+- final report and follow-up persistence
+- Gemini, Groq, LlamaParse, or GitHub provider flows
+
+During the safe frontend smoke test, `New Chat` was navigation/local state only
+and did not create a database row.
 
 Before deployment:
 
-1. Review the baseline snapshot against the current Supabase project.
-2. Verify all table and column names used by follow-up migrations.
-3. Review existing RLS policies for `chats` and `messages`.
-4. Apply migrations only in staging first.
-5. Run the manual RLS checks in `rls_manual_tests.sql`.
-6. Confirm the FastAPI evaluation flow still works with checkpoints.
+1. Review the baseline snapshot against the target main/production project.
+2. Export or back up the target schema before applying anything.
+3. Verify all table, column, policy, grant, and index assumptions.
+4. Run a separately approved main/production apply session.
+5. Repeat post-apply backend, RLS, and frontend validation.
+6. Validate the pending chat-write and evaluation flows before public use.
 
 ## FORCE RLS
 

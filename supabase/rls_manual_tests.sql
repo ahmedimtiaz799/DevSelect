@@ -1,85 +1,157 @@
 -- DevSelect manual RLS checks.
 --
--- DO NOT RUN WITH SERVICE ROLE.
+-- STAGING ONLY.
+-- DO NOT RUN WITH SERVICE ROLE AS THE TEST CONTEXT.
 -- DO NOT RUN AGAINST PRODUCTION UNTIL REVIEWED.
+-- USE DISPOSABLE STAGING USERS ONLY.
+-- ALL TEST DATA MUST BE INSIDE TRANSACTIONS WITH ROLLBACK.
 --
--- These are manual verification snippets for a staging database or a carefully
--- controlled SQL session. Replace placeholder UUIDs before use.
+-- These snippets are for manual verification in a controlled staging SQL
+-- session. They should not be run automatically by a migration tool.
 --
 -- Notes:
+--   - Replace USER_A_UUID, USER_B_UUID, and USER_A_CHAT_ID before use.
+--   - USER_A_CHAT_ID must be an existing staging chat owned by USER_A_UUID.
+--   - Zero rows are only meaningful when the referenced test row exists.
 --   - auth.uid() depends on request.jwt.claim.sub.
---   - set role anon/authenticated is used to simulate frontend API roles.
---   - If your SQL environment runs as a table owner or privileged role, results
---     may not reflect normal PostgREST/Supabase client behavior.
+--   - set local role anon/authenticated simulates frontend API roles.
+--   - If your SQL environment runs as table owner or another privileged role,
+--     results may not reflect normal PostgREST/Supabase client behavior.
+--   - Each expected-denial statement is isolated in its own transaction because
+--     permission/RLS errors abort the current transaction until rollback.
+--
+-- Placeholder values to replace before running:
+--   USER_A_UUID
+--   USER_B_UUID
+--   USER_A_CHAT_ID
 
 -- ---------------------------------------------------------------------------
--- Placeholders
--- ---------------------------------------------------------------------------
--- User A id: 00000000-0000-0000-0000-000000000001
--- User B id: 00000000-0000-0000-0000-000000000002
--- User A chat id: 11111111-1111-1111-1111-111111111111
-
--- ---------------------------------------------------------------------------
--- 1. anon cannot access chats/messages
--- Expected: zero rows or permission/RLS denial.
+-- 1. anon cannot select from chats/messages.
+-- Expected: permission/RLS denial, or zero rows if the SQL environment masks
+-- denied rows. A zero-row result is only meaningful if staging has rows.
 -- ---------------------------------------------------------------------------
 begin;
 set local role anon;
 select * from public.chats limit 1;
+rollback;
+
+begin;
+set local role anon;
 select * from public.messages limit 1;
 rollback;
 
 -- ---------------------------------------------------------------------------
--- 2. authenticated User B cannot read User A chat
--- Expected: zero rows.
+-- 2. anon cannot insert into chats/messages.
+-- Expected: permission/RLS denial. Both attempts are rolled back.
 -- ---------------------------------------------------------------------------
 begin;
-set local role authenticated;
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', true);
-select * from public.chats
-where id = '11111111-1111-1111-1111-111111111111';
+set local role anon;
+insert into public.chats (user_id, title)
+values ('USER_A_UUID', 'RLS anon insert test - should not persist');
 rollback;
 
--- ---------------------------------------------------------------------------
--- 3. authenticated User B cannot insert into User A chat
--- Expected: insert blocked by RLS or foreign/ownership policy.
--- Adjust columns to match the real messages schema before using.
--- ---------------------------------------------------------------------------
 begin;
-set local role authenticated;
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', true);
+set local role anon;
 insert into public.messages (chat_id, role, content)
 values (
-  '11111111-1111-1111-1111-111111111111',
+  'USER_A_CHAT_ID',
   'user',
-  'RLS ownership test - should not insert into another user chat'
+  'RLS anon message insert test - should not persist'
 );
 rollback;
 
 -- ---------------------------------------------------------------------------
--- 4. authenticated user cannot read checkpoint tables
+-- 3. anon cannot access checkpoint tables.
 -- Expected: permission/RLS denial or zero rows.
 -- ---------------------------------------------------------------------------
 begin;
-set local role authenticated;
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
+set local role anon;
 select * from public.checkpoints limit 1;
+rollback;
+
+begin;
+set local role anon;
 select * from public.checkpoint_blobs limit 1;
+rollback;
+
+begin;
+set local role anon;
 select * from public.checkpoint_writes limit 1;
+rollback;
+
+begin;
+set local role anon;
 select * from public.checkpoint_migrations limit 1;
 rollback;
 
 -- ---------------------------------------------------------------------------
--- 5. authenticated User A can access own chats/messages
--- Expected: own chat row is visible. Message query should return own messages.
+-- 4. authenticated User A can access own chats/messages.
+-- Expected: USER_A_CHAT_ID is visible. Message query returns own messages for
+-- that chat. Zero rows are inconclusive unless USER_A_CHAT_ID exists and has
+-- messages.
 -- ---------------------------------------------------------------------------
 begin;
 set local role authenticated;
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
 select * from public.chats
-where id = '11111111-1111-1111-1111-111111111111';
+where id = 'USER_A_CHAT_ID';
 select m.*
 from public.messages m
-where m.chat_id = '11111111-1111-1111-1111-111111111111'
+where m.chat_id = 'USER_A_CHAT_ID'
 limit 10;
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 5. authenticated User B cannot read User A chat.
+-- Expected: zero rows. This is only meaningful if USER_A_CHAT_ID exists and is
+-- owned by USER_A_UUID.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_B_UUID', true);
+select * from public.chats
+where id = 'USER_A_CHAT_ID';
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 6. authenticated User B cannot insert into User A chat.
+-- Expected: insert blocked by RLS/ownership policy. Attempt is rolled back.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_B_UUID', true);
+insert into public.messages (chat_id, role, content)
+values (
+  'USER_A_CHAT_ID',
+  'user',
+  'RLS User B ownership test - should not insert into User A chat'
+);
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 7. authenticated users cannot access checkpoint tables.
+-- Expected: permission/RLS denial or zero rows.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+select * from public.checkpoints limit 1;
+rollback;
+
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+select * from public.checkpoint_blobs limit 1;
+rollback;
+
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+select * from public.checkpoint_writes limit 1;
+rollback;
+
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+select * from public.checkpoint_migrations limit 1;
 rollback;
