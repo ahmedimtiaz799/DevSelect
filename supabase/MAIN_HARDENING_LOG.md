@@ -40,15 +40,43 @@ was required.
 - No CV upload, evaluation, SSE, or AI/provider flow was triggered.
 - Git remained clean after testing.
 
+## D4 Safe Write-Path Validation
+
+- Manual authentication succeeded.
+- A fresh empty `/chat` was used with no CV or other file attached.
+- The approved message was `D4 safe write test - no CV - no provider call`.
+- The frontend created one `public.chats` row.
+- The frontend persisted two `public.messages` rows: the user message and the
+  assistant CV-upload guidance message.
+- The sidebar increased from 54 to 55 chats.
+- Both messages and the sidebar entry persisted after refresh.
+- Confirmed PostgREST writes returned:
+  - `POST /rest/v1/chats`: 201
+  - `PATCH /rest/v1/chats`: 200
+  - `POST /rest/v1/messages`: 201
+- No `/api/chat`, `/upload`, `/stream`, `/resume`, or `/follow-up` request
+  occurred.
+- No CV upload, evaluation, SSE, LangGraph evaluation, or AI/provider flow was
+  triggered.
+- No Supabase/Postgres permission, RLS, or grant error occurred.
+- Git remained clean after testing.
+
+The first verification refreshed prematurely, interrupting message persistence.
+The same approved message was retried safely in the existing empty disposable
+chat after confirming that no file, completed report, or follow-up state was
+present. The final result was one disposable chat with two persisted messages.
+
+The disposable D4 `New Chat` remains in main. Remove it later only through the
+normal safe UI delete path or an explicitly documented cleanup plan.
+
 ## Pending Validation
 
 The hardening smoke tests intentionally did not validate:
 
-- frontend-created `public.chats` row persistence
-- frontend-created `public.messages` row persistence
 - `/api/chat`
 - CV upload and `/upload`
 - `/stream` and `/resume`
+- `/follow-up` and follow-up streaming
 - the evaluation pipeline and SSE streaming
 - final report and follow-up persistence
 - Gemini, Groq, LlamaParse, or GitHub provider flows

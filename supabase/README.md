@@ -90,6 +90,11 @@ Validated on main:
 - the sidebar loaded 54 existing chats
 - one existing chat and its messages loaded read-only
 - refresh preserved the session, sidebar, and opened-chat read path
+- the D4 safe write-path test created one frontend chat row
+- the D4 test persisted the user message and CV-upload guidance message
+- both D4 messages and the sidebar chat persisted after refresh
+- D4 used direct Supabase/PostgREST writes only; no `/api/chat`, `/upload`,
+  `/stream`, `/resume`, or `/follow-up` request occurred
 - no Supabase/Postgres permission, RLS, grant, or browser HTTP 4xx/5xx errors
   were observed
 - no CV upload, evaluation, SSE, or AI/provider flow was triggered
@@ -97,15 +102,20 @@ Validated on main:
 
 Still pending:
 
-- frontend-created chat-row persistence
-- frontend-created message-row persistence
 - `/api/chat`, CV upload, `/upload`, `/stream`, and `/resume`
-- evaluation and SSE streaming
+- evaluation, SSE streaming, and follow-up API behavior
 - final report and follow-up persistence
 - Gemini, Groq, LlamaParse, or GitHub provider flows
 
-During the safe frontend smoke test, `New Chat` was navigation/local state only
-and did not create a database row.
+Clicking `New Chat` alone remains navigation/local state and does not create a
+database row. D4 created the disposable row only after sending the approved
+plain-text, no-CV test message. The first verification refreshed prematurely;
+the same approved message was then retried safely in the still-empty disposable
+chat. The final result was one chat with two persisted messages.
+
+The disposable D4 `New Chat` remains in main and should be removed later only
+through the normal safe UI delete path or an explicitly documented cleanup
+plan.
 
 The main frontend smoke test produced a small, non-blocking Supabase auth
 device clock-skew warning. Sync Windows system time before further auth testing.
@@ -113,7 +123,7 @@ device clock-skew warning. Sync Windows system time before further auth testing.
 Before broader production use:
 
 1. Sync Windows system time and repeat auth checks if the warning persists.
-2. Validate frontend chat and message write persistence.
+2. Clean up the disposable D4 chat through an approved safe path.
 3. Validate `/api/chat`, upload, stream, resume, evaluation, and SSE behavior.
 4. Validate final report and follow-up persistence.
 5. Validate provider flows under an explicitly approved test plan.
