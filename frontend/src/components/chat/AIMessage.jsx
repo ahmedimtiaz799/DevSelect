@@ -170,7 +170,7 @@ export function AIMessage({ message }) {
   if (renderMode === 'status') {
     return (
       <div className="w-full py-1">
-        <p className="text-ds-text-muted text-msg italic">{message.content}</p>
+        <p className="select-text text-ds-text-muted text-msg italic">{message.content}</p>
       </div>
     );
   }
@@ -178,14 +178,14 @@ export function AIMessage({ message }) {
   if (renderMode === 'stopped') {
     return (
       <div className="w-full min-w-0 py-1">
-        <p className="text-sm text-ds-text-subtle break-words [overflow-wrap:anywhere]">{message.content}</p>
+        <p className="select-text text-sm text-ds-text-subtle break-words [overflow-wrap:anywhere]">{message.content}</p>
       </div>
     );
   }
 
   return (
     <div className="group relative w-full min-w-0 max-w-full">
-      <div className="prose-none min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
+      <div className="prose-none min-w-0 max-w-full select-text break-words [overflow-wrap:anywhere] [&_*]:select-text">
         {renderMode === 'report' && (
           <ReactMarkdown components={reportMarkdownComponents}>
             {message.content}

@@ -44,7 +44,7 @@ export function MessageBubble({ content = '', fileName }) {
           )}
 
           {hasText && (
-            <p className="max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+            <p className="max-w-full select-text whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
               {content}
             </p>
           )}
