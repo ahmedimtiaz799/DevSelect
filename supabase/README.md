@@ -9,9 +9,15 @@ The D1 migration stack has been applied to and validated on the separate
 2. `001_harden_table_grants.sql`
 3. `002_add_core_indexes.sql`
 
-The migration stack has not been promoted or applied to main/production.
-Main/production requires a separate pre-flight review, schema backup/export,
-controlled apply session, and post-apply validation.
+Staging validation was completed before any main changes. Main `devselect` was
+then inspected and backed up before hardening. Because main already contained
+the application schema and data, `000_init_devselect_staging_schema.sql` was
+intentionally skipped there. Migrations `001_harden_table_grants.sql` and
+`002_add_core_indexes.sql` were applied successfully to main and followed by
+backend and read-only frontend smoke tests.
+
+See `supabase/MAIN_HARDENING_LOG.md` for the completed main sequence, validation
+results, and remaining test boundaries.
 
 ## Architecture
 
@@ -58,8 +64,10 @@ migrations.
 
 ## Migration Status
 
-The executable migration stack has been validated on staging only. The
-comment-only baseline remains documentation and must not be applied.
+The executable migration stack was validated on staging first. Main hardening
+was then completed with `001` and `002`; the staging-only schema initializer
+`000` was intentionally not applied to main. The comment-only baseline remains
+documentation and must not be applied.
 
 Validated on staging:
 
@@ -70,11 +78,28 @@ Validated on staging:
 - manual RLS verification passed
 - frontend Google OAuth, session refresh, and sidebar/chat-history reads passed
 
-Not yet validated:
+Validated on main:
+
+- main schema and data were inspected before changes
+- a backup/export was created before hardening
+- `001_harden_table_grants.sql` was applied successfully
+- backend `/health` returned 200 after `001`
+- `002_add_core_indexes.sql` was applied successfully
+- backend `/health` returned 200 after `002`
+- manual main-account sign-in and the authenticated `/chat` route passed
+- the sidebar loaded 54 existing chats
+- one existing chat and its messages loaded read-only
+- refresh preserved the session, sidebar, and opened-chat read path
+- no Supabase/Postgres permission, RLS, grant, or browser HTTP 4xx/5xx errors
+  were observed
+- no CV upload, evaluation, SSE, or AI/provider flow was triggered
+- no rollback was required
+
+Still pending:
 
 - frontend-created chat-row persistence
 - frontend-created message-row persistence
-- `/api/chat`, CV upload, `/upload`, and `/stream`
+- `/api/chat`, CV upload, `/upload`, `/stream`, and `/resume`
 - evaluation and SSE streaming
 - final report and follow-up persistence
 - Gemini, Groq, LlamaParse, or GitHub provider flows
@@ -82,14 +107,16 @@ Not yet validated:
 During the safe frontend smoke test, `New Chat` was navigation/local state only
 and did not create a database row.
 
-Before deployment:
+The main frontend smoke test produced a small, non-blocking Supabase auth
+device clock-skew warning. Sync Windows system time before further auth testing.
 
-1. Review the baseline snapshot against the target main/production project.
-2. Export or back up the target schema before applying anything.
-3. Verify all table, column, policy, grant, and index assumptions.
-4. Run a separately approved main/production apply session.
-5. Repeat post-apply backend, RLS, and frontend validation.
-6. Validate the pending chat-write and evaluation flows before public use.
+Before broader production use:
+
+1. Sync Windows system time and repeat auth checks if the warning persists.
+2. Validate frontend chat and message write persistence.
+3. Validate `/api/chat`, upload, stream, resume, evaluation, and SSE behavior.
+4. Validate final report and follow-up persistence.
+5. Validate provider flows under an explicitly approved test plan.
 
 ## FORCE RLS
 
