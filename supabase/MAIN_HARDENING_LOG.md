@@ -66,8 +66,25 @@ The same approved message was retried safely in the existing empty disposable
 chat after confirming that no file, completed report, or follow-up state was
 present. The final result was one disposable chat with two persisted messages.
 
-The disposable D4 `New Chat` remains in main. Remove it later only through the
-normal safe UI delete path or an explicitly documented cleanup plan.
+## D5 Safe Cleanup/Delete Validation
+
+- The disposable D4 chat was found by its exact approved test message.
+- The normal chat context menu and delete confirmation modal were used.
+- The confirmation correctly targeted the disposable `New Chat`.
+- `DELETE /rest/v1/chats` returned 204.
+- Existing cascade delete behavior removed the two associated messages.
+- The sidebar decreased from 55 to 54 chats.
+- Refresh confirmed that the deleted chat did not return.
+- No `/api/chat`, `/upload`, `/stream`, `/resume`, or `/follow-up` request
+  occurred.
+- No CV upload, evaluation, SSE, LangGraph evaluation, or AI/provider flow was
+  triggered.
+- No Supabase/Postgres permission, RLS, or grant error occurred.
+- Git remained clean after testing.
+
+The disposable D4 data is now removed. The isolated temporary browser profile
+used for D4 and D5 is optional local test tooling and may be cleaned up
+separately when safe.
 
 ## Pending Validation
 

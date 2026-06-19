@@ -95,6 +95,13 @@ Validated on main:
 - both D4 messages and the sidebar chat persisted after refresh
 - D4 used direct Supabase/PostgREST writes only; no `/api/chat`, `/upload`,
   `/stream`, `/resume`, or `/follow-up` request occurred
+- the D5 safe cleanup test deleted the disposable D4 chat through the normal UI
+- `DELETE /rest/v1/chats` returned 204 and existing cascade behavior removed
+  the associated messages
+- the sidebar returned from 55 to 54 chats, and refresh confirmed the deleted
+  chat did not return
+- D5 triggered no `/api/chat`, `/upload`, `/stream`, `/resume`, or `/follow-up`
+  request
 - no Supabase/Postgres permission, RLS, grant, or browser HTTP 4xx/5xx errors
   were observed
 - no CV upload, evaluation, SSE, or AI/provider flow was triggered
@@ -113,9 +120,13 @@ plain-text, no-CV test message. The first verification refreshed prematurely;
 the same approved message was then retried safely in the still-empty disposable
 chat. The final result was one chat with two persisted messages.
 
-The disposable D4 `New Chat` remains in main and should be removed later only
-through the normal safe UI delete path or an explicitly documented cleanup
-plan.
+D5 removed the disposable D4 `New Chat` through the normal UI delete and
+confirmation path. The associated messages were removed through the existing
+cascade delete behavior. The sidebar and a subsequent refresh confirmed that
+the cleanup persisted.
+
+The isolated temporary browser profile used for D4 and D5 may be removed later
+as a separate optional local cleanup task.
 
 The main frontend smoke test produced a small, non-blocking Supabase auth
 device clock-skew warning. Sync Windows system time before further auth testing.
@@ -123,10 +134,9 @@ device clock-skew warning. Sync Windows system time before further auth testing.
 Before broader production use:
 
 1. Sync Windows system time and repeat auth checks if the warning persists.
-2. Clean up the disposable D4 chat through an approved safe path.
-3. Validate `/api/chat`, upload, stream, resume, evaluation, and SSE behavior.
-4. Validate final report and follow-up persistence.
-5. Validate provider flows under an explicitly approved test plan.
+2. Validate `/api/chat`, upload, stream, resume, evaluation, and SSE behavior.
+3. Validate final report and follow-up persistence.
+4. Validate provider flows under an explicitly approved test plan.
 
 ## FORCE RLS
 
