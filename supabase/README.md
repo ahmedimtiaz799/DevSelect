@@ -118,14 +118,22 @@ Validated on main:
 - the manual CV-only follow-up retest respected the GitHub exclusion, softened
   the hypothetical recommendation, and preserved the original full-scope No
   Hire
+- D7A identified five disposable D6 chats and confirmed that the corrected
+  follow-up answer persisted after a fresh app load
+- D7B deleted exactly those five chats through the normal authenticated UI
+  delete path
+- all five deletes returned 204, the sidebar decreased from 57 to 52, and
+  refresh confirmed that the deleted chats did not return
+- non-D6 chats were preserved, and no upload, evaluation, stream, resume,
+  follow-up, or AI/provider call occurred during cleanup
+- no SQL, service-role deletion, or manual database mutation was used for D7
 - no rollback was required
 
 Still pending:
 
-- follow-up answer persistence after refresh
-- safe cleanup of disposable D6 test chats
 - broader CV, provider, quota, and failure-mode regression coverage
-- deployment preparation and post-deployment monitoring
+- deployment preparation, deployment prompt files, and post-deployment
+  monitoring
 
 Clicking `New Chat` alone remains navigation/local state and does not create a
 database row. D4 created the disposable row only after sending the approved
@@ -147,10 +155,8 @@ device clock-skew warning. Sync Windows system time before further auth testing.
 Before broader production use:
 
 1. Sync Windows system time and repeat auth checks if the warning persists.
-2. Clean up the disposable D6 chats through a safe normal UI path and document
-   the result.
-3. Confirm follow-up answer persistence after refresh.
-4. Complete broader regression and deployment preparation.
+2. Prepare deployment configuration and deployment prompt files.
+3. Complete broader regression and post-deployment monitoring preparation.
 
 ## FORCE RLS
 

@@ -150,22 +150,48 @@ The manual retest passed:
 - the original No Hire remained applicable when the selected GitHub profile
   was included
 
-Follow-up answer persistence after refresh was not confirmed from the available
-logs.
+During D7A, the corrected follow-up answer was confirmed to remain persisted
+after a fresh app load.
+
+## D7 Disposable Test Chat Cleanup
+
+D7A identified exactly five disposable D6 chats:
+
+1. the failed-CORS `Operations_Supply_Chain_Test_CV` chat
+2. the completed Muhammad Saad Khan Operations and Supply Chain report
+3. the Muhammad Saad Khan Gemini-overload attempt
+4. the Muhammad Saad Khan Groq-rate-limit attempt
+5. the Ayan Raza technical GitHub-selector report and follow-up chat
+
+D7B deleted exactly those five chats through the normal authenticated sidebar
+menu and delete confirmation modal:
+
+- each chat's persisted content was verified immediately before deletion
+- all five `DELETE /rest/v1/chats` requests returned 204
+- the sidebar count decreased from 57 to 52
+- refresh confirmed that none of the deleted chats returned
+- representative non-D6 chats remained present
+- no uncertain chat was deleted
+- no upload, evaluation, stream, resume, follow-up, or AI/provider call occurred
+- no SQL, service-role deletion, or manual database mutation was used
+- no project files changed during cleanup, and Git remained clean
+
+D6 validation and its disposable-data cleanup are complete.
 
 ## Pending Validation
 
 The following items remain pending:
 
-- follow-up answer persistence after refresh
-- cleanup of the disposable D6 evaluation chats through a safe normal UI path
 - broader regression coverage across additional CV and provider scenarios
-- deployment preparation and post-deployment monitoring
+- deployment preparation, deployment prompt files, and post-deployment
+  monitoring
 
 The D6 Operations and technical GitHub-selector flows validated controlled CV
 upload, evaluation, SSE completion, report generation, profile selection, and
 the relevant LlamaParse, Gemini, and GitHub-backed paths. This does not replace
 broader regression, quota, failure-mode, or deployment validation.
+
+The next phase is deployment preparation.
 
 ## Non-Blocking Warning
 
