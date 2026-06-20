@@ -104,15 +104,28 @@ Validated on main:
   request
 - no Supabase/Postgres permission, RLS, grant, or browser HTTP 4xx/5xx errors
   were observed
-- no CV upload, evaluation, SSE, or AI/provider flow was triggered
+- controlled D6 evaluation tests validated an Operations and Supply Chain CV
+  and a technical CV with multiple GitHub URLs
+- the Operations candidate was correctly identified as a junior Operations and
+  Supply Chain Coordinator; Volunteer Trainer did not become the main role
+- the technical profile selector and manual selection flow worked, and the
+  final report correctly treated a clearly wrong/famous-person GitHub profile
+  plus unrelated technical evidence as a major CV mismatch
+- a prompt-only follow-up fix added counterfactual evidence-scope handling and
+  calibrated GitHub name-mismatch reasoning without changing Agent 1, Agent 2,
+  Agent 3, frontend behavior, report format, or the saved-report architecture
+- four deterministic follow-up prompt tests passed
+- the manual CV-only follow-up retest respected the GitHub exclusion, softened
+  the hypothetical recommendation, and preserved the original full-scope No
+  Hire
 - no rollback was required
 
 Still pending:
 
-- `/api/chat`, CV upload, `/upload`, `/stream`, and `/resume`
-- evaluation, SSE streaming, and follow-up API behavior
-- final report and follow-up persistence
-- Gemini, Groq, LlamaParse, or GitHub provider flows
+- follow-up answer persistence after refresh
+- safe cleanup of disposable D6 test chats
+- broader CV, provider, quota, and failure-mode regression coverage
+- deployment preparation and post-deployment monitoring
 
 Clicking `New Chat` alone remains navigation/local state and does not create a
 database row. D4 created the disposable row only after sending the approved
@@ -134,9 +147,10 @@ device clock-skew warning. Sync Windows system time before further auth testing.
 Before broader production use:
 
 1. Sync Windows system time and repeat auth checks if the warning persists.
-2. Validate `/api/chat`, upload, stream, resume, evaluation, and SSE behavior.
-3. Validate final report and follow-up persistence.
-4. Validate provider flows under an explicitly approved test plan.
+2. Clean up the disposable D6 chats through a safe normal UI path and document
+   the result.
+3. Confirm follow-up answer persistence after refresh.
+4. Complete broader regression and deployment preparation.
 
 ## FORCE RLS
 

@@ -86,19 +86,86 @@ The disposable D4 data is now removed. The isolated temporary browser profile
 used for D4 and D5 is optional local test tooling and may be cleaned up
 separately when safe.
 
+## D6 Controlled Evaluation Validation
+
+### Operations and Supply Chain CV
+
+- The candidate was identified as Muhammad Saad Khan.
+- DevSelect detected the role as Operations and Supply Chain Coordinator at
+  junior seniority and recommended Proceed to Interview.
+- The CV's operations, supply chain, procurement, inventory, and logistics
+  evidence determined the role.
+- A short Volunteer Trainer entry did not override the stronger role evidence.
+- The chat header showed the correct role.
+- The non-technical/business operations path completed without visible GitHub
+  confusion in the report.
+
+### Technical CV With GitHub Selection
+
+- The candidate was identified as Ayan Raza and the role as Junior Full Stack
+  AI Engineer.
+- The CV contained two GitHub URLs, and the profile selector and manual profile
+  selection flow worked.
+- The selected profile was evaluated successfully.
+- DevSelect recommended No Hire because the selected profile was clearly
+  inconsistent with the CV's React, FastAPI, Python, and AI claims.
+- The mismatch combined a clearly wrong/famous-person profile with unrelated
+  Linux, C, Assembly, and systems-programming evidence.
+- This validated that a famous or technically strong profile is not rewarded
+  when its identity and technical evidence materially contradict the CV.
+
+### Follow-Up Evidence-Scope Fix
+
+The first CV-only follow-up answer incorrectly reused the GitHub mismatch after
+the recruiter explicitly asked to ignore GitHub. Inspection found that the
+persisted-report follow-up prompt was over-anchored to the saved recommendation
+and had no counterfactual evidence-scope rules.
+
+The prompt-only fix:
+
+- added scoped/counterfactual evidence instructions
+- requires excluded evidence to remain excluded from the hypothetical answer
+- allows a hypothetical recommendation to differ from the persisted report
+- preserves the persisted final report as the official full-scope result
+- treats a GitHub name-only mismatch as a verification note rather than an
+  automatic No Hire
+- preserves a major red flag for a clearly wrong/famous-person profile when
+  repository, language, project, or identity evidence materially contradicts
+  the CV
+
+Four deterministic prompt-contract tests passed. Agent 1, Agent 2, Agent 3,
+frontend behavior, report format, and the persisted-report follow-up
+architecture were unchanged. No full evaluation reload or rerun logic was
+added.
+
+The manual retest passed:
+
+- backend `/health` returned 200
+- one follow-up request completed normally over SSE
+- no new upload, evaluation stream, or resume request occurred
+- no provider quota error occurred
+- the CV-only hypothetical softened to Potential Hire with reservations /
+  Consider for Interview
+- the answer did not use the excluded GitHub mismatch as its CV-only reason
+- the original No Hire remained applicable when the selected GitHub profile
+  was included
+
+Follow-up answer persistence after refresh was not confirmed from the available
+logs.
+
 ## Pending Validation
 
-The hardening smoke tests intentionally did not validate:
+The following items remain pending:
 
-- `/api/chat`
-- CV upload and `/upload`
-- `/stream` and `/resume`
-- `/follow-up` and follow-up streaming
-- the evaluation pipeline and SSE streaming
-- final report and follow-up persistence
-- Gemini, Groq, LlamaParse, or GitHub provider flows
+- follow-up answer persistence after refresh
+- cleanup of the disposable D6 evaluation chats through a safe normal UI path
+- broader regression coverage across additional CV and provider scenarios
+- deployment preparation and post-deployment monitoring
 
-These flows require a separate, explicitly approved write/evaluation test plan.
+The D6 Operations and technical GitHub-selector flows validated controlled CV
+upload, evaluation, SSE completion, report generation, profile selection, and
+the relevant LlamaParse, Gemini, and GitHub-backed paths. This does not replace
+broader regression, quota, failure-mode, or deployment validation.
 
 ## Non-Blocking Warning
 
