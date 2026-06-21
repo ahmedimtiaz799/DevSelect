@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str
     SUPABASE_JWT_SECRET: str
+    SUPABASE_JWT_ALGORITHMS: str = "ES256"
+    SUPABASE_JWT_AUDIENCE: str = "authenticated"
 
     DATABASE_URL: str
 
