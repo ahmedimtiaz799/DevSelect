@@ -11,9 +11,13 @@ export function useFileUpload(chatId) {
   const file = uploadedFiles[chatId] ?? null;
 
   useEffect(() => {
-    clearUploadedFile(chatId);
-    setError(null);
-  }, [chatId]);
+    const timeout = setTimeout(() => {
+      clearUploadedFile(chatId);
+      setError(null);
+    }, 0);
+
+    return () => clearTimeout(timeout);
+  }, [chatId, clearUploadedFile]);
 
   function onFileSelect(selectedFile) {
     if (selectedFile.type !== 'application/pdf') {

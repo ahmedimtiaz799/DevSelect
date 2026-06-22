@@ -10,42 +10,40 @@ export function CyclingTypewriter({
   const [textIndex, setTextIndex] = useState(0)
   const [charIndex, setCharIndex] = useState(0)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [isPaused, setIsPaused] = useState(false)
 
   useEffect(() => {
-    if (isPaused) {
-      const timeout = setTimeout(() => {
-        setIsPaused(false)
-        setIsDeleting(true)
-      }, pauseTime)
-      return () => clearTimeout(timeout)
-    }
-
     const current = texts[textIndex]
+    let delay
 
     if (!isDeleting) {
       if (charIndex < current.length) {
-        const timeout = setTimeout(() => {
-          setDisplayText(current.slice(0, charIndex + 1))
-          setCharIndex((prev) => prev + 1)
-        }, typingSpeed)
-        return () => clearTimeout(timeout)
+        delay = typingSpeed
       } else {
-        setIsPaused(true)
+        delay = pauseTime
       }
     } else {
-      if (charIndex > 0) {
-        const timeout = setTimeout(() => {
+      delay = charIndex > 0 ? deletingSpeed : 0
+    }
+
+    const timeout = setTimeout(() => {
+      if (!isDeleting) {
+        if (charIndex < current.length) {
+          setDisplayText(current.slice(0, charIndex + 1))
+          setCharIndex((prev) => prev + 1)
+        } else {
+          setIsDeleting(true)
+        }
+      } else if (charIndex > 0) {
           setDisplayText(current.slice(0, charIndex - 1))
           setCharIndex((prev) => prev - 1)
-        }, deletingSpeed)
-        return () => clearTimeout(timeout)
       } else {
         setIsDeleting(false)
         setTextIndex((prev) => (prev + 1) % texts.length)
       }
-    }
-  }, [charIndex, isDeleting, isPaused, textIndex, texts, typingSpeed, deletingSpeed, pauseTime])
+    }, delay)
+
+    return () => clearTimeout(timeout)
+  }, [charIndex, isDeleting, textIndex, texts, typingSpeed, deletingSpeed, pauseTime])
 
   return (
     <span>

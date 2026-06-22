@@ -1,13 +1,10 @@
 import { useState, useEffect } from 'react'
 
-function TypewriterText({ text, typingSpeed = 40, className = '' }) {
+function TypewriterAnimation({ text, typingSpeed, className }) {
   const [displayed, setDisplayed] = useState('')
   const [done, setDone] = useState(false)
 
   useEffect(() => {
-    setDisplayed('')
-    setDone(false)
-
     let index = 0
 
     const interval = setInterval(() => {
@@ -30,6 +27,17 @@ function TypewriterText({ text, typingSpeed = 40, className = '' }) {
         <span className="inline-block w-[2px] h-[1em] bg-brand-dark ml-[1px] align-middle animate-pulse" />
       )}
     </span>
+  )
+}
+
+function TypewriterText({ text, typingSpeed = 40, className = '' }) {
+  return (
+    <TypewriterAnimation
+      key={`${text}:${typingSpeed}`}
+      text={text}
+      typingSpeed={typingSpeed}
+      className={className}
+    />
   )
 }
 
