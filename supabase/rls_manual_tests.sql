@@ -155,3 +155,141 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
 select * from public.checkpoint_migrations limit 1;
 rollback;
+
+-- ---------------------------------------------------------------------------
+-- 8. authenticated User A can create a chat with allowed frontend columns.
+-- Expected: insert succeeds and is rolled back.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+insert into public.chats (user_id, title)
+values ('USER_A_UUID', 'Gate 2 allowed chat insert test')
+returning id;
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 9. RLS WITH CHECK blocks User A from creating a chat for User B.
+-- Expected: insert is rejected by the existing chats ownership policy.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+insert into public.chats (user_id, title)
+values ('USER_B_UUID', 'Gate 2 forbidden cross-user chat insert');
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 10. authenticated User A cannot create or update backend-owned thread_id.
+-- Expected: both statements fail with a column permission denial.
+-- Each denial is isolated because it aborts its transaction.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+insert into public.chats (user_id, title, thread_id)
+values (
+  'USER_A_UUID',
+  'Gate 2 forbidden thread insert test',
+  'gate2-forbidden-client-thread'
+);
+rollback;
+
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+update public.chats
+set thread_id = 'gate2-forbidden-client-thread'
+where id = 'USER_A_CHAT_ID';
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 11. authenticated User A can rename and pin their own existing chat.
+-- Expected: the update affects USER_A_CHAT_ID and is rolled back.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+update public.chats
+set
+  title = 'Gate 2 allowed rename test',
+  updated_at = now(),
+  is_pinned = true,
+  pinned_at = now()
+where id = 'USER_A_CHAT_ID'
+returning id, title, is_pinned;
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 12. authenticated User A can insert a message into their own chat.
+-- Expected: insert succeeds and is rolled back.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+insert into public.messages (chat_id, role, content)
+values (
+  'USER_A_CHAT_ID',
+  'user',
+  'Gate 2 allowed own-message insert test'
+)
+returning id;
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 13. authenticated users cannot update or directly delete messages.
+-- Expected: both statements fail with a table/column permission denial.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+update public.messages
+set content = 'Gate 2 forbidden message update'
+where chat_id = 'USER_A_CHAT_ID';
+rollback;
+
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_A_UUID', true);
+delete from public.messages
+where chat_id = 'USER_A_CHAT_ID';
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 14. authenticated User B cannot update/delete User A chat or read messages.
+-- Expected: updates/deletes affect zero rows and message select returns zero.
+-- ---------------------------------------------------------------------------
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'USER_B_UUID', true);
+update public.chats
+set title = 'Gate 2 forbidden cross-user rename'
+where id = 'USER_A_CHAT_ID'
+returning id;
+delete from public.chats
+where id = 'USER_A_CHAT_ID'
+returning id;
+select * from public.messages
+where chat_id = 'USER_A_CHAT_ID';
+rollback;
+
+-- ---------------------------------------------------------------------------
+-- 15. duplicate non-null thread_id values are rejected.
+-- Run this constraint check in the privileged staging SQL session, not while
+-- set to anon/authenticated. Both disposable rows are inside this rollback.
+-- Expected: the second insert fails with a unique-constraint violation.
+-- ---------------------------------------------------------------------------
+begin;
+insert into public.chats (user_id, title, thread_id)
+values (
+  'USER_A_UUID',
+  'Gate 2 unique thread test A',
+  'gate2-duplicate-thread-test'
+);
+insert into public.chats (user_id, title, thread_id)
+values (
+  'USER_A_UUID',
+  'Gate 2 unique thread test B',
+  'gate2-duplicate-thread-test'
+);
+rollback;
