@@ -16,6 +16,7 @@ import {
 } from '../lib/messagePersistence';
 import { supabase } from '../lib/supabase';
 import { normalizeUserInput } from '../lib/textLimits';
+import { safeUserErrorMessage } from '../lib/errorSafety';
 
 const PLACEHOLDER_ROLE_LABELS = new Set([
   'unknown role',
@@ -274,27 +275,6 @@ export function useChat(chatId) {
     });
   }
 
-  function getSafeBackendMessage(message) {
-    if (typeof message !== 'string') return '';
-
-    const value = message.trim();
-    if (!value || value.length > 240) return '';
-
-    const lower = value.toLowerCase();
-    if (
-      lower.includes('traceback') ||
-      lower.includes('stack trace') ||
-      lower.includes('exception') ||
-      lower.includes('api key') ||
-      lower.includes('secret') ||
-      lower.includes('token=')
-    ) {
-      return '';
-    }
-
-    return value;
-  }
-
   function getStreamErrorMessage(errorPayload) {
     if (errorPayload?.code === 'GEMINI_QUOTA_EXCEEDED') {
       const retryAfter = Number(errorPayload.retry_after_seconds);
@@ -320,32 +300,44 @@ export function useChat(chatId) {
         return `Too many requests. Please try again in ${retryAfter} seconds.`;
       }
 
-      return errorPayload?.error || 'Too many requests. Please wait a moment and try again.';
+      return safeUserErrorMessage(
+        errorPayload?.error,
+        'Too many requests. Please wait a moment and try again.'
+      );
     }
 
     if (errorPayload?.code === 'STREAM_SERVICE_UNAVAILABLE') {
-      return errorPayload?.error || 'AI evaluation is temporarily unavailable. Please try again later.';
+      return safeUserErrorMessage(
+        errorPayload?.error,
+        'AI evaluation is temporarily unavailable. Please try again later.'
+      );
     }
 
     if (errorPayload?.code === 'STREAM_START_FAILED') {
-      return errorPayload?.error || 'Streaming could not start. Please try again.';
+      return safeUserErrorMessage(
+        errorPayload?.error,
+        'Streaming could not start. Please try again.'
+      );
     }
 
-    const safeError = getSafeBackendMessage(errorPayload?.error);
-    if (safeError) return safeError;
-
-    return 'Evaluation failed. Please try again.';
+    return safeUserErrorMessage(
+      errorPayload?.error,
+      'Evaluation failed. Please try again.'
+    );
   }
 
   function getRequestErrorMessage(error) {
-    return error?.message || 'Evaluation failed. Please try again.';
+    return safeUserErrorMessage(
+      error?.message,
+      'Evaluation failed. Please try again.'
+    );
   }
 
   function getFollowUpStreamErrorMessage(errorPayload) {
-    const safeError = getSafeBackendMessage(errorPayload?.error);
-    if (safeError) return safeError;
-
-    return 'Follow-up answer failed. Please try again.';
+    return safeUserErrorMessage(
+      errorPayload?.error,
+      'Follow-up answer failed. Please try again.'
+    );
   }
 
   function getBudgetLimitMessage(response) {
@@ -376,7 +368,12 @@ export function useChat(chatId) {
 
   function ensureReadyToStream(result) {
     if (!result?.thread_id || !result?.resume_payload?.scenario) {
-      throw new Error(result?.error || 'Evaluation could not be started. Please try again.');
+      throw new Error(
+        safeUserErrorMessage(
+          result?.error,
+          'Evaluation could not be started. Please try again.'
+        )
+      );
     }
   }
 
@@ -629,7 +626,12 @@ export function useChat(chatId) {
       }
 
       if (response.status !== 200 && response.status !== 202) {
-        throw new Error(response.data?.error || 'Evaluation failed. Please try again.');
+        throw new Error(
+          safeUserErrorMessage(
+            response.data?.error,
+            'Evaluation failed. Please try again.'
+          )
+        );
       }
 
       if (response.status === 202) {

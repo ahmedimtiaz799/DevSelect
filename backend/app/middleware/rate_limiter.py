@@ -127,7 +127,6 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         if status == "denied":
             logger.warning(f"Rate limit exceeded : key={key} retry_after={value}s")
             response = rate_limit_response(
-                error="Too many requests. Please slow down.",
                 code="RATE_LIMIT_EXCEEDED",
                 retry_after_seconds=value,
             )

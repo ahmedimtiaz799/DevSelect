@@ -112,7 +112,6 @@ class QuotaPolicyTests(unittest.TestCase):
 
     def test_standard_429_response_includes_code_and_retry_after(self):
         response = rate_limit_response(
-            error="Slow down.",
             code="RATE_LIMIT_EXCEEDED",
             retry_after_seconds=17,
         )

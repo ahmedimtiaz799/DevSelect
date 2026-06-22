@@ -9,6 +9,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 
 from app.config import settings
 from app.utils.logging_hygiene import scrub_sentry_event
+from app.utils.public_errors import sanitize_http_exception_detail
 
 logger = logging.getLogger("devselect")
 USER_INPUT_TOO_LONG_MESSAGE = f"Message is too long. Please keep it under {settings.MAX_USER_INPUT_CHARS} characters."
@@ -60,7 +61,13 @@ async def handle_http_exception(request: Request, exc: HTTPException) -> JSONRes
 
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": exc.detail},
+        content={
+            "error": sanitize_http_exception_detail(
+                exc.detail,
+                exc.status_code,
+            )
+        },
+        headers=exc.headers,
     )
 
 
@@ -78,7 +85,7 @@ async def handle_validation_exception(request: Request, exc: RequestValidationEr
     errors = [
         {
             "field": " -> ".join(str(loc) for loc in error["loc"]),
-            "message": error["msg"],
+            "message": "Invalid value.",
         }
         for error in exc.errors()
     ]

@@ -1,4 +1,5 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source';
+import { safeErrorPayload, safeUserErrorMessage } from './errorSafety';
 
 const BASE_URL = import.meta.env.VITE_API_URL;
 const DEBUG_STREAM_LOGS = import.meta.env.DEV;
@@ -35,27 +36,6 @@ function retryAfterSeconds(response, payload) {
     : null;
 }
 
-function safeBackendErrorMessage(message) {
-  if (typeof message !== 'string') return '';
-
-  const value = message.trim();
-  if (!value || value.length > 240) return '';
-
-  const lower = value.toLowerCase();
-  if (
-    lower.includes('traceback') ||
-    lower.includes('stack trace') ||
-    lower.includes('exception') ||
-    lower.includes('api key') ||
-    lower.includes('secret') ||
-    lower.includes('token=')
-  ) {
-    return '';
-  }
-
-  return value;
-}
-
 function streamStartupCode(status) {
   if (status === 429) return 'STREAM_RATE_LIMITED';
   if (status === 503) return 'STREAM_SERVICE_UNAVAILABLE';
@@ -86,15 +66,16 @@ async function readStreamStartupPayload(response) {
 async function parseStreamStartupError(response) {
   const payload = await readStreamStartupPayload(response);
   const retryAfter = retryAfterSeconds(response, payload);
-  const safeError = safeBackendErrorMessage(payload?.error);
+  const fallback = streamStartupFallbackMessage(response.status, retryAfter);
+  const safePayload = safeErrorPayload(payload, fallback);
   const error =
     response.status === 429 && retryAfter
       ? streamStartupFallbackMessage(response.status, retryAfter)
-      : safeError || streamStartupFallbackMessage(response.status, retryAfter);
+      : safePayload.error;
 
   return {
     error,
-    code: payload?.code || streamStartupCode(response.status),
+    code: safePayload.code || streamStartupCode(response.status),
     retry_after_seconds: retryAfter,
     status: response.status,
   };
@@ -158,7 +139,12 @@ export function streamChatResponse(
       }
       if (event.event === 'error') {
         settled = true;
-        onError(parseEventData(event.data));
+        onError(
+          safeErrorPayload(
+            parseEventData(event.data),
+            'Evaluation failed. Please try again.'
+          )
+        );
         abortStream();
         return;
       }
@@ -185,7 +171,12 @@ export function streamChatResponse(
       return;
     }
     settled = true;
-    onError({ error: err?.message ?? 'Stream connection failed' });
+    onError({
+      error: safeUserErrorMessage(
+        err?.message,
+        'Stream connection failed. Please try again.'
+      ),
+    });
   });
 
   return abortStream;
@@ -232,7 +223,12 @@ export function streamFollowUpResponse(chatId, question, token, handlers) {
       }
       if (event.event === 'error') {
         settled = true;
-        onError(parseEventData(event.data));
+        onError(
+          safeErrorPayload(
+            parseEventData(event.data),
+            'Follow-up answer failed. Please try again.'
+          )
+        );
         abortStream();
         return;
       }
@@ -259,7 +255,12 @@ export function streamFollowUpResponse(chatId, question, token, handlers) {
       return;
     }
     settled = true;
-    onError({ error: err?.message ?? 'Follow-up answer failed. Please try again.' });
+    onError({
+      error: safeUserErrorMessage(
+        err?.message,
+        'Follow-up answer failed. Please try again.'
+      ),
+    });
   });
 
   return abortStream;

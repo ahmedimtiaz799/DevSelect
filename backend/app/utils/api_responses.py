@@ -1,9 +1,10 @@
 from fastapi.responses import JSONResponse
 
+from app.utils.public_errors import public_error_payload
+
 
 def rate_limit_response(
     *,
-    error: str,
     code: str,
     retry_after_seconds: int | None = None,
 ) -> JSONResponse:
@@ -12,13 +13,13 @@ def rate_limit_response(
         if retry_after_seconds is not None and retry_after_seconds > 0
         else None
     )
-    content = {
-        "error": error,
-        "code": code,
-    }
+    content = public_error_payload(
+        code,
+        default_code="RATE_LIMIT_EXCEEDED",
+        retry_after_seconds=retry_after,
+    )
     headers = {}
     if retry_after is not None:
-        content["retry_after_seconds"] = retry_after
         headers["Retry-After"] = str(retry_after)
 
     return JSONResponse(status_code=429, content=content, headers=headers)

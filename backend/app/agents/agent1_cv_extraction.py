@@ -731,8 +731,14 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
             "error": CV_ANALYSIS_TEMPORARILY_UNAVAILABLE_MESSAGE,
             "error_code": "LLM_PROVIDER_CONFIGURATION_ERROR",
         }
-    except ValueError as e:
-        return {"pdf_bytes": None, "pdf_temp_path": None, "raw_cv_text": raw_cv_text, "error": str(e)}
+    except ValueError:
+        return {
+            "pdf_bytes": None,
+            "pdf_temp_path": None,
+            "raw_cv_text": raw_cv_text,
+            "error": CV_EXTRACTION_INVALID_MESSAGE,
+            "error_code": "CV_EXTRACTION_INVALID",
+        }
     except Agent1StructuredOutputError:
         if current_ai_provider() == GROQ_PROVIDER:
             return {

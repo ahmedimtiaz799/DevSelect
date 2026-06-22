@@ -44,6 +44,7 @@ from app.utils.evaluation_lock import (
     claim_evaluation_stream,
     release_evaluation_lock,
 )
+from app.utils.public_errors import public_error_payload
 
 
 logger = logging.getLogger("devselect")
@@ -1100,10 +1101,12 @@ async def upload_cv(
         if lock_decision.code == EVALUATION_LOCK_UNAVAILABLE:
             return JSONResponse(
                 status_code=503,
-                content={"error": lock_decision.error, "code": lock_decision.code},
+                content=public_error_payload(
+                    lock_decision.code,
+                    default_code=EVALUATION_LOCK_UNAVAILABLE,
+                ),
             )
         return rate_limit_response(
-            error=lock_decision.error or "An evaluation is already in progress.",
             code=lock_decision.code or "EVALUATION_ALREADY_IN_PROGRESS",
             retry_after_seconds=lock_decision.retry_after_seconds,
         )
@@ -1194,18 +1197,22 @@ async def upload_cv(
 
         error_code = result.get("error_code") or "EVALUATION_UPLOAD_FAILED"
         if "RATE_LIMIT" in error_code or error_code == "GEMINI_QUOTA_EXCEEDED":
-            return rate_limit_response(
-                error=result["error"],
-                code=error_code,
+            payload = public_error_payload(
+                error_code,
+                default_code="EVALUATION_UPLOAD_FAILED",
                 retry_after_seconds=result.get("retry_after_seconds"),
+            )
+            return rate_limit_response(
+                code=payload["code"],
+                retry_after_seconds=payload.get("retry_after_seconds"),
             )
 
         return JSONResponse(
             status_code=503,
-            content={
-                "error": result["error"],
-                "code": result.get("error_code") or "EVALUATION_UPLOAD_FAILED",
-            },
+            content=public_error_payload(
+                error_code,
+                default_code="EVALUATION_UPLOAD_FAILED",
+            ),
         )
 
     interrupts = result.get("__interrupt__") or []
@@ -1367,7 +1374,6 @@ async def follow_up_question(
     except GeminiQuotaExceededError as e:
         logger.warning("Follow-up quota failure : chat=%s error_type=%s", chat_id, type(e).__name__)
         return rate_limit_response(
-            error=e.user_message,
             code=e.code,
             retry_after_seconds=e.retry_after_seconds,
         )
@@ -1383,35 +1389,28 @@ async def follow_up_question(
         )
         if e.status_code == 429:
             return rate_limit_response(
-                error=e.user_message,
                 code=llm_rate_limit_code(e.provider),
                 retry_after_seconds=e.retry_after_seconds,
             )
         return JSONResponse(
             status_code=503,
-            content={
-                "error": e.user_message,
-                "code": e.error_code,
-                "retry_after_seconds": e.retry_after_seconds,
-            },
+            content=public_error_payload(
+                e.error_code,
+                default_code="FOLLOW_UP_FAILED",
+                retry_after_seconds=e.retry_after_seconds,
+            ),
         )
     except FollowUpAnswerIncompleteError as e:
         logger.warning("Follow-up answer incomplete : chat=%s", chat_id)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": e.user_message,
-                "code": "FOLLOW_UP_INCOMPLETE",
-            },
+            content=public_error_payload("FOLLOW_UP_INCOMPLETE"),
         )
     except Exception as e:
         logger.error("Follow-up failed : chat=%s error_type=%s", chat_id, type(e).__name__)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": "Follow-up answer failed. Please try again.",
-                "code": "FOLLOW_UP_FAILED",
-            },
+            content=public_error_payload("FOLLOW_UP_FAILED"),
         )
 
     return JSONResponse(
@@ -1466,11 +1465,11 @@ async def follow_up_stream_generator(
         logger.info("Follow-up SSE stream completed : chat=%s", chat_id)
     except GeminiQuotaExceededError as e:
         logger.warning("Follow-up SSE quota failure : chat=%s error_type=%s", chat_id, type(e).__name__)
-        payload = {
-            "error": e.user_message,
-            "code": e.code,
-            "retry_after_seconds": e.retry_after_seconds,
-        }
+        payload = public_error_payload(
+            e.code,
+            default_code="FOLLOW_UP_FAILED",
+            retry_after_seconds=e.retry_after_seconds,
+        )
         yield f"event: error\ndata: {json.dumps(payload)}\n\n"
     except LLMProviderUnavailableError as e:
         logger.warning(
@@ -1482,26 +1481,25 @@ async def follow_up_stream_generator(
             e.provider_status,
             exc_info=True,
         )
-        payload = {
-            "error": e.user_message,
-            "code": (
+        payload = public_error_payload(
+            (
                 llm_rate_limit_code(e.provider)
                 if e.status_code == 429
                 else e.error_code
             ),
-        }
-        if e.retry_after_seconds:
-            payload["retry_after_seconds"] = e.retry_after_seconds
+            default_code="FOLLOW_UP_FAILED",
+            retry_after_seconds=e.retry_after_seconds,
+        )
         yield f"event: error\ndata: {json.dumps(payload)}\n\n"
     except FollowUpAnswerIncompleteError as e:
         logger.warning("Follow-up SSE answer incomplete : chat=%s", chat_id)
-        yield f"event: error\ndata: {json.dumps({'error': e.user_message, 'code': 'FOLLOW_UP_INCOMPLETE'})}\n\n"
+        yield f"event: error\ndata: {json.dumps(public_error_payload('FOLLOW_UP_INCOMPLETE'))}\n\n"
     except asyncio.CancelledError:
         logger.info("Follow-up SSE stream cancelled : chat=%s", chat_id)
         return
     except Exception as e:
         logger.error("Follow-up SSE failed : chat=%s error_type=%s", chat_id, type(e).__name__)
-        yield f"event: error\ndata: {json.dumps({'error': 'Follow-up answer failed. Please try again.', 'code': 'FOLLOW_UP_FAILED'})}\n\n"
+        yield f"event: error\ndata: {json.dumps(public_error_payload('FOLLOW_UP_FAILED'))}\n\n"
 
 
 @router.post("/{chat_id}/follow-up/stream")
@@ -1607,7 +1605,6 @@ async def evaluation_stream_generator(
                 last_meta = current_meta
 
             if state_snapshot.get("error"):
-                error = state_snapshot["error"]
                 await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
                 purge_reason = "pipeline_state_error"
                 logger.warning(
@@ -1615,12 +1612,11 @@ async def evaluation_stream_generator(
                     thread_id,
                     state_snapshot.get("error_code") or "unknown",
                 )
-                payload = {
-                    "error": error,
-                    "code": state_snapshot.get("error_code") or "EVALUATION_PIPELINE_ERROR",
-                }
-                if state_snapshot.get("retry_after_seconds"):
-                    payload["retry_after_seconds"] = state_snapshot["retry_after_seconds"]
+                payload = public_error_payload(
+                    state_snapshot.get("error_code"),
+                    default_code="EVALUATION_PIPELINE_ERROR",
+                    retry_after_seconds=state_snapshot.get("retry_after_seconds"),
+                )
                 yield f"event: error\ndata: {json.dumps(payload)}\n\n"
                 return
 
@@ -1676,11 +1672,11 @@ async def evaluation_stream_generator(
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         purge_reason = "provider_quota_failure"
         logger.warning("SSE pipeline quota failure : thread=%s error_type=%s", thread_id, type(e).__name__)
-        payload = {
-            "error": e.user_message,
-            "code": e.code,
-            "retry_after_seconds": e.retry_after_seconds,
-        }
+        payload = public_error_payload(
+            e.code,
+            default_code="EVALUATION_PIPELINE_ERROR",
+            retry_after_seconds=e.retry_after_seconds,
+        )
         yield f"event: error\ndata: {json.dumps(payload)}\n\n"
     except LLMProviderUnavailableError as e:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
@@ -1694,16 +1690,15 @@ async def evaluation_stream_generator(
             e.provider_status,
             exc_info=True,
         )
-        payload = {
-            "error": e.user_message,
-            "code": (
+        payload = public_error_payload(
+            (
                 llm_rate_limit_code(e.provider)
                 if e.status_code == 429
                 else e.error_code
             ),
-        }
-        if e.retry_after_seconds:
-            payload["retry_after_seconds"] = e.retry_after_seconds
+            default_code="EVALUATION_PIPELINE_ERROR",
+            retry_after_seconds=e.retry_after_seconds,
+        )
         yield f"event: error\ndata: {json.dumps(payload)}\n\n"
     except asyncio.CancelledError:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
@@ -1714,7 +1709,7 @@ async def evaluation_stream_generator(
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         purge_reason = "pipeline_exception"
         logger.error("SSE pipeline failed : thread=%s error_type=%s", thread_id, type(e).__name__)
-        yield f"event: error\ndata: {json.dumps({'error': 'Evaluation failed'})}\n\n"
+        yield f"event: error\ndata: {json.dumps(public_error_payload('EVALUATION_FAILED'))}\n\n"
     finally:
         await _release_stream_thread(thread_id, reason="stream_generator_finally")
         if purge_reason:
@@ -1861,10 +1856,7 @@ async def stream_evaluation(
         await release_evaluation_lock(chat_id, evaluation_lock_token)
         return JSONResponse(
             status_code=503,
-            content={
-                "error": "Evaluation admission is temporarily unavailable. Please try again later.",
-                "code": EVALUATION_LOCK_UNAVAILABLE,
-            },
+            content=public_error_payload(EVALUATION_LOCK_UNAVAILABLE),
         )
 
     return _sse_response(

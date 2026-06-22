@@ -11,6 +11,7 @@ from app.config import settings
 from app.prompts.agent3_prompt import AGENT3_SYSTEM_PROMPT
 from app.utils.api_responses import rate_limit_response
 from app.utils.llm_observability import estimate_tokens_from_chars, estimate_tokens_from_text
+from app.utils.public_errors import public_error_payload
 
 
 logger = logging.getLogger("devselect")
@@ -281,13 +282,12 @@ def budget_response(decision: BudgetDecision) -> JSONResponse:
     if decision.code in {BUDGET_REDIS_UNAVAILABLE, BUDGET_ENFORCEMENT_DISABLED}:
         return JSONResponse(
             status_code=503,
-            content={
-                "error": decision.error or BUDGET_MESSAGES[BUDGET_REDIS_UNAVAILABLE],
-                "code": decision.code or BUDGET_REDIS_UNAVAILABLE,
-            },
+            content=public_error_payload(
+                decision.code,
+                default_code=BUDGET_REDIS_UNAVAILABLE,
+            ),
         )
     return rate_limit_response(
-        error=decision.error or "AI quota limit reached.",
         code=decision.code or GLOBAL_DAILY_EVALUATION_LIMIT_REACHED,
         retry_after_seconds=decision.retry_after_seconds,
     )
