@@ -4,17 +4,33 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s — %(message)s"
 )
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+ADMIN_SECRET_MIN_LENGTH = 32
+ADMIN_SECRET_PLACEHOLDER_MARKERS = (
+    "<staging-admin-secret>",
+    "your_admin_secret",
+    "change-me",
+    "changeme",
+    "placeholder",
+    "example",
+)
 
 class Settings(BaseSettings):
     """
     All application configuration loaded from environment variables.
-    
+
     pydantic-settings reads these automatically from the .env file.
     If any required variable is missing, the app will fail at startup
     with a clear error message not silently at runtime.
     """
-      
+
+    APP_ENV: str = "production"
+    ADMIN_ROUTES_ENABLED: bool = False
+    API_DOCS_ENABLED: bool | None = None
+
     SUPABASE_URL: str
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str
@@ -66,7 +82,7 @@ class Settings(BaseSettings):
 
     UPSTASH_REDIS_REST_URL: str
     UPSTASH_REDIS_REST_TOKEN: str
-    ADMIN_SECRET: str
+    ADMIN_SECRET: str = ""
 
     SENTRY_DSN: str | None = None
 
@@ -74,5 +90,33 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    @property
+    def is_production(self) -> bool:
+        return self.APP_ENV.strip().lower() in {"production", "prod"}
+
+    @property
+    def api_docs_enabled(self) -> bool:
+        if self.API_DOCS_ENABLED is not None:
+            return self.API_DOCS_ENABLED
+        return not self.is_production
+
+    @model_validator(mode="after")
+    def validate_gate3_security(self):
+        if self.ADMIN_ROUTES_ENABLED:
+            secret = self.ADMIN_SECRET.strip()
+            lowered_secret = secret.lower()
+            if (
+                len(secret) < ADMIN_SECRET_MIN_LENGTH
+                or any(marker in lowered_secret for marker in ADMIN_SECRET_PLACEHOLDER_MARKERS)
+            ):
+                raise ValueError(
+                    "ADMIN_SECRET must be a non-placeholder value of at least "
+                    f"{ADMIN_SECRET_MIN_LENGTH} characters when admin routes are enabled"
+                )
+
+        if self.is_production and self.DEV_MOCK_EVALUATION:
+            raise ValueError("DEV_MOCK_EVALUATION cannot be enabled in production")
+
+        return self
 
 settings = Settings()

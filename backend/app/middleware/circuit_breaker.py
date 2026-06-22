@@ -1,5 +1,6 @@
 import time as _time
 import logging
+import secrets
 import httpx
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import JSONResponse
@@ -113,14 +114,15 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-def _require_admin_secret(x_admin_secret: str | None) -> None:
-    if x_admin_secret != settings.ADMIN_SECRET:
+def _require_admin_secret(x_admin_secret: str | None, expected_secret: str) -> None:
+    provided_secret = x_admin_secret or ""
+    if not provided_secret or not secrets.compare_digest(provided_secret, expected_secret):
         raise HTTPException(status_code=403, detail="Invalid admin secret.")
 
 
 @admin_router.post("/circuit/open")
-async def open_circuit(x_admin_secret: str | None = Header(None)):
-    _require_admin_secret(x_admin_secret)
+async def open_circuit(request: Request, x_admin_secret: str | None = Header(None)):
+    _require_admin_secret(x_admin_secret, request.app.state.settings.ADMIN_SECRET)
     await _set_flag("true")
     logger.warning("Circuit breaker OPENED by admin.")
     return JSONResponse(
@@ -130,8 +132,8 @@ async def open_circuit(x_admin_secret: str | None = Header(None)):
 
 
 @admin_router.post("/circuit/close")
-async def close_circuit(x_admin_secret: str | None = Header(None)):
-    _require_admin_secret(x_admin_secret)
+async def close_circuit(request: Request, x_admin_secret: str | None = Header(None)):
+    _require_admin_secret(x_admin_secret, request.app.state.settings.ADMIN_SECRET)
     await _delete_flag()
     logger.info("Circuit breaker CLOSED by admin.")
     return JSONResponse(
@@ -141,8 +143,8 @@ async def close_circuit(x_admin_secret: str | None = Header(None)):
 
 
 @admin_router.get("/reliability/status")
-async def reliability_status(x_admin_secret: str | None = Header(None)):
-    _require_admin_secret(x_admin_secret)
+async def reliability_status(request: Request, x_admin_secret: str | None = Header(None)):
+    _require_admin_secret(x_admin_secret, request.app.state.settings.ADMIN_SECRET)
 
     redis_reachable = False
     circuit_open: bool | None = None
