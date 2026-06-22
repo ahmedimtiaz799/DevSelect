@@ -78,3 +78,12 @@ export async function followUpQuestion(chatId, question) {
   const result = await response.json()
   return { status: response.status, data: result }
 }
+
+export async function deleteChatWithCleanup(chatId) {
+  const headers = await getAuthHeaders()
+  const response = await fetch(`${BASE_URL}/api/chat/${chatId}/delete`, {
+    method: 'POST',
+    headers,
+  })
+  return response.ok
+}

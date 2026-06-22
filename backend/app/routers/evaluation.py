@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from typing import Optional, AsyncGenerator
 from uuid import uuid4
 import asyncio
@@ -35,6 +35,8 @@ from app.utils.cv_likeness import assess_cv_likeness
 from app.utils.candidate_domain import resolve_candidate_display_role
 from app.utils.llm_observability import cap_text_for_llm
 from app.utils.llm_provider import LLMProviderUnavailableError
+from app.utils.checkpoint_retention import purge_graph_thread
+
 
 logger = logging.getLogger("devselect")
 
@@ -270,7 +272,44 @@ def _run_cv_likeness_precheck(pdf_bytes: bytes) -> str:
     if assessment["should_reject"]:
         raise UploadSecurityError("NOT_A_CV")
 
-    return preview_text
+    capped_preview, _, _, _ = cap_text_for_llm(
+        preview_text,
+        settings.CV_PREVIEW_MAX_CHARS,
+    )
+    return capped_preview
+
+
+async def _read_validated_pdf_upload(file: UploadFile) -> tuple[bytes, str]:
+    try:
+        if file.size and file.size > MAX_CV_UPLOAD_BYTES:
+            raise UploadSecurityError("FILE_TOO_LARGE")
+
+        safe_name = _safe_upload_name(file.filename)
+        if not safe_name.lower().endswith(".pdf"):
+            raise UploadSecurityError("INVALID_FILE_TYPE")
+
+        if file.content_type != "application/pdf":
+            raise UploadSecurityError("INVALID_FILE_TYPE")
+
+        header = await file.read(PDF_HEADER_READ_BYTES)
+        if not _has_pdf_header(header):
+            raise UploadSecurityError("INVALID_PDF")
+
+        await file.seek(0)
+        pdf_bytes = await file.read(MAX_CV_UPLOAD_BYTES + 1)
+        if len(pdf_bytes) > MAX_CV_UPLOAD_BYTES:
+            raise UploadSecurityError("FILE_TOO_LARGE")
+
+        _validate_pdf_structure(pdf_bytes)
+        return pdf_bytes, _run_cv_likeness_precheck(pdf_bytes)
+    finally:
+        try:
+            await file.close()
+        except Exception as error:
+            logger.warning(
+                "Upload file close failed : error_type=%s",
+                type(error).__name__,
+            )
 
 
 def _write_temp_pdf(pdf_bytes: bytes) -> str:
@@ -719,25 +758,40 @@ async def _cached_report_stream_generator(
     thread_id: str,
     meta: dict,
     report: str,
+    graph=None,
 ) -> AsyncGenerator[str, None]:
-    if await request.is_disconnected():
-        logger.info(f"Cached SSE client disconnected before stream start : thread={thread_id}")
-        return
-
-    cached_meta = _meta_with_report_role(meta, report)
-    yield f"event: meta\ndata: {json.dumps(cached_meta)}\n\n"
-    yield f"event: status\ndata: {json.dumps({'text': 'Generating Recommendation...'})}\n\n"
-    logger.info(f"Cached SSE stream started : thread={thread_id}")
-
-    for char in report:
+    try:
         if await request.is_disconnected():
-            logger.info(f"Cached SSE client disconnected during token stream : thread={thread_id}")
+            logger.info(f"Cached SSE client disconnected before stream start : thread={thread_id}")
             return
 
-        yield f"event: token\ndata: {json.dumps({'text': char})}\n\n"
+        cached_meta = _meta_with_report_role(meta, report)
+        yield f"event: meta\ndata: {json.dumps(cached_meta)}\n\n"
+        yield f"event: status\ndata: {json.dumps({'text': 'Generating Recommendation...'})}\n\n"
+        logger.info(f"Cached SSE stream started : thread={thread_id}")
 
-    yield f"event: done\ndata: {json.dumps({})}\n\n"
-    logger.info(f"Cached SSE stream completed : thread={thread_id}")
+        for char in report:
+            if await request.is_disconnected():
+                logger.info(f"Cached SSE client disconnected during token stream : thread={thread_id}")
+                return
+
+            yield f"event: token\ndata: {json.dumps({'text': char})}\n\n"
+
+        yield f"event: done\ndata: {json.dumps({})}\n\n"
+        logger.info(f"Cached SSE stream completed : thread={thread_id}")
+    finally:
+        if graph is not None:
+            try:
+                await purge_graph_thread(
+                    graph,
+                    thread_id,
+                    reason="cached_report_delivered",
+                )
+            except Exception as error:
+                logger.warning(
+                    "Cached checkpoint purge failed : error_type=%s",
+                    type(error).__name__,
+                )
 
 
 async def _claim_stream_thread(thread_id: str, chat_id: str | None = None) -> bool:
@@ -995,28 +1049,8 @@ async def upload_cv(
 ):
     owned_chat = await _get_owned_chat(chat_id, user_id)
 
-    if file.size and file.size > MAX_CV_UPLOAD_BYTES:
-        return _upload_security_response("FILE_TOO_LARGE")
-
-    safe_name = _safe_upload_name(file.filename)
-    if not safe_name.lower().endswith(".pdf"):
-        return _upload_security_response("INVALID_FILE_TYPE")
-
-    if file.content_type != "application/pdf":
-        return _upload_security_response("INVALID_FILE_TYPE")
-
-    header = await file.read(PDF_HEADER_READ_BYTES)
-    if not _has_pdf_header(header):
-        return _upload_security_response("INVALID_PDF")
-
-    await file.seek(0)
-    pdf_bytes = await file.read()
-    if len(pdf_bytes) > MAX_CV_UPLOAD_BYTES:
-        return _upload_security_response("FILE_TOO_LARGE")
-
     try:
-        _validate_pdf_structure(pdf_bytes)
-        pdf_preview_text = _run_cv_likeness_precheck(pdf_bytes)
+        pdf_bytes, pdf_preview_text = await _read_validated_pdf_upload(file)
     except UploadSecurityError as e:
         return _upload_security_response(e.code)
 
@@ -1104,12 +1138,18 @@ async def upload_cv(
             initial_state,
             config={"configurable": {"thread_id": thread_id}},
         )
-    except Exception:
+    finally:
         _delete_temp_file(pdf_temp_path)
-        raise
 
     if result.get("error"):
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
+        try:
+            await purge_graph_thread(graph, thread_id, reason="upload_failed")
+        except Exception as error:
+            logger.warning(
+                "Failed upload checkpoint purge deferred to TTL : error_type=%s",
+                type(error).__name__,
+            )
         logger.warning(
             "Upload evaluation failed before interrupt : thread=%s error_code=%s",
             thread_id,
@@ -1133,6 +1173,13 @@ async def upload_cv(
 
     if not isinstance(interrupt_payload, dict) or "scenario" not in interrupt_payload:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
+        try:
+            await purge_graph_thread(graph, thread_id, reason="upload_interrupt_missing")
+        except Exception as error:
+            logger.warning(
+                "Invalid upload checkpoint purge deferred to TTL : error_type=%s",
+                type(error).__name__,
+            )
         logger.error(f"Upload evaluation returned no resume scenario : thread={thread_id}")
         return JSONResponse(
             status_code=500,
@@ -1158,6 +1205,60 @@ async def upload_cv(
             "resume_payload": interrupt_payload,
         },
     )
+
+
+@router.post("/{chat_id}/delete", status_code=204)
+async def delete_chat_with_checkpoint_cleanup(
+    chat_id: str,
+    request: Request,
+    user_id: str = Depends(verify_token),
+):
+    owned_chat = await _get_owned_chat(chat_id, user_id)
+    thread_id = _chat_thread_id(owned_chat)
+    async with EVALUATION_GUARD_LOCK:
+        if thread_id and thread_id in ACTIVE_STREAM_THREADS:
+            raise HTTPException(
+                status_code=409,
+                detail="Stop the active evaluation before deleting this chat.",
+            )
+
+    if thread_id:
+        try:
+            await purge_graph_thread(
+                request.app.state.graph,
+                thread_id,
+                reason="chat_deleted",
+            )
+        except Exception as error:
+            logger.warning(
+                "Chat delete checkpoint purge failed : error_type=%s",
+                type(error).__name__,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Chat cleanup is temporarily unavailable. Please try again.",
+            ) from error
+
+    try:
+        supabase = await get_supabase()
+        await (
+            supabase.table("chats")
+            .delete()
+            .eq("id", chat_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except Exception as error:
+        logger.error(
+            "Chat delete failed after checkpoint cleanup : error_type=%s",
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Chat could not be deleted. Please try again.",
+        ) from error
+
+    return Response(status_code=204)
 
 
 @router.post("/{chat_id}/resume")
@@ -1399,9 +1500,17 @@ async def evaluation_stream_generator(
     if await request.is_disconnected():
         logger.info(f"SSE client disconnected before stream start : thread={thread_id}")
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
+        try:
+            await purge_graph_thread(graph, thread_id, reason="prestart_disconnect")
+        except Exception as error:
+            logger.warning(
+                "Stopped checkpoint purge deferred to TTL : error_type=%s",
+                type(error).__name__,
+            )
         await _release_stream_thread(thread_id, reason="prestart_disconnect")
         return
 
+    purge_reason = None
     try:
         yield f"event: meta\ndata: {json.dumps(meta)}\n\n"
         logger.info(
@@ -1427,6 +1536,7 @@ async def evaluation_stream_generator(
             if await request.is_disconnected():
                 logger.info(f"SSE client disconnected : thread={thread_id}")
                 await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
+                purge_reason = "stream_disconnected"
                 return
 
             current_meta = _candidate_meta(state_snapshot)
@@ -1437,6 +1547,7 @@ async def evaluation_stream_generator(
             if state_snapshot.get("error"):
                 error = state_snapshot["error"]
                 await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
+                purge_reason = "pipeline_state_error"
                 logger.warning(
                     "SSE pipeline state error : thread=%s error_code=%s",
                     thread_id,
@@ -1478,12 +1589,14 @@ async def evaluation_stream_generator(
                     if await request.is_disconnected():
                         logger.info(f"SSE client disconnected during token stream : thread={thread_id}")
                         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
+                        purge_reason = "stream_disconnected"
                         return
 
                     yield f"event: token\ndata: {json.dumps({'text': char})}\n\n"
 
         if not report_sent:
             await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
+            purge_reason = "report_missing"
             logger.warning(f"SSE stream ended without report : thread={thread_id}")
             payload = {
                 "error": "Evaluation stopped unexpectedly. Please try again.",
@@ -1493,11 +1606,13 @@ async def evaluation_stream_generator(
             return
 
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_COMPLETED)
+        purge_reason = "evaluation_completed"
         yield f"event: done\ndata: {json.dumps({})}\n\n"
         logger.info(f"SSE stream completed : thread={thread_id}")
 
     except GeminiQuotaExceededError as e:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
+        purge_reason = "provider_quota_failure"
         logger.warning("SSE pipeline quota failure : thread=%s error_type=%s", thread_id, type(e).__name__)
         payload = {
             "error": e.user_message,
@@ -1507,6 +1622,7 @@ async def evaluation_stream_generator(
         yield f"event: error\ndata: {json.dumps(payload)}\n\n"
     except LLMProviderUnavailableError as e:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
+        purge_reason = "provider_unavailable"
         logger.warning(
             "SSE pipeline provider unavailable : thread=%s provider=%s model=%s status_code=%s provider_status=%s",
             thread_id,
@@ -1525,14 +1641,24 @@ async def evaluation_stream_generator(
         yield f"event: error\ndata: {json.dumps(payload)}\n\n"
     except asyncio.CancelledError:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_STOPPED)
+        purge_reason = "stream_cancelled"
         logger.info(f"SSE stream cancelled : thread={thread_id}")
         return
     except Exception as e:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
+        purge_reason = "pipeline_exception"
         logger.error("SSE pipeline failed : thread=%s error_type=%s", thread_id, type(e).__name__)
         yield f"event: error\ndata: {json.dumps({'error': 'Evaluation failed'})}\n\n"
     finally:
         await _release_stream_thread(thread_id, reason="stream_generator_finally")
+        if purge_reason:
+            try:
+                await purge_graph_thread(graph, thread_id, reason=purge_reason)
+            except Exception as error:
+                logger.warning(
+                    "Terminal checkpoint purge deferred to TTL : error_type=%s",
+                    type(error).__name__,
+                )
 
 
 @router.get("/{chat_id}/stream")
@@ -1640,6 +1766,7 @@ async def stream_evaluation(
                 thread_id,
                 meta,
                 snapshot.values["report"],
+                graph,
             )
         )
 

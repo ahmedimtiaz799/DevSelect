@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useChatStore } from '../store/chatStore'
 import { useAuth } from './useAuth'
 import { normalizeChatTitle } from '../lib/chatUtils'
+import { deleteChatWithCleanup } from '../lib/api'
 
 export function useChatHistory() {
   const navigate = useNavigate()
@@ -76,12 +77,8 @@ export function useChatHistory() {
   }
 
   async function deleteChat(chatId) {
-    const { error } = await supabase
-      .from('chats')
-      .delete()
-      .eq('id', chatId)
-
-    if (error) return
+    const deleted = await deleteChatWithCleanup(chatId)
+    if (!deleted) return
 
     deleteChatFromStore(chatId)
 

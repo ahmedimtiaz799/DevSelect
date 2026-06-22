@@ -1,6 +1,7 @@
 import asyncio
 import sys
 from contextlib import asynccontextmanager
+from contextlib import suppress
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -14,6 +15,7 @@ from app.agents.graph import build_graph
 from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.middleware.circuit_breaker import CircuitBreakerMiddleware, admin_router
 from app.middleware.error_handler import init_sentry, register_exception_handlers
+from app.utils.checkpoint_retention import checkpoint_cleanup_loop
 
 
 if sys.platform == "win32":
@@ -37,7 +39,20 @@ async def lifespan(app: FastAPI):
         checkpointer = AsyncPostgresSaver(checkpoint_pool)
         await checkpointer.setup()
         app.state.graph = build_graph(checkpointer)
-        yield
+        cleanup_task = asyncio.create_task(
+            checkpoint_cleanup_loop(
+                checkpointer,
+                ttl_hours=settings.CHECKPOINT_RETENTION_TTL_HOURS,
+                interval_seconds=settings.CHECKPOINT_CLEANUP_INTERVAL_SECONDS,
+                batch_size=settings.CHECKPOINT_CLEANUP_BATCH_SIZE,
+            )
+        )
+        try:
+            yield
+        finally:
+            cleanup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await cleanup_task
 
 
 def create_app(

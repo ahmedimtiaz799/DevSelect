@@ -168,12 +168,19 @@ behavior and policies in staging.
 
 ## Retention Cleanup
 
-Retention cleanup is future work. `messages` can contain sensitive CV/report
-content, and LangGraph checkpoints can contain extracted CV/evaluation state.
+Raw uploaded PDF files are processed from bounded memory and temporary files;
+they are not stored in Supabase Storage or chat messages. Temporary PDF files
+are removed after parsing, including failure paths.
 
-Before public deployment, define retention rules for:
+Extracted CV text is transient evaluation state. Preview text is capped before
+entering LangGraph state. Completed, failed, stopped, and deleted-chat threads
+are purged from LangGraph checkpoint tables. Abandoned checkpoint threads are
+removed by the configured TTL cleanup task; the default TTL is 24 hours.
 
-- chat messages
-- generated reports
-- checkpoint state
-- temporary or derived CV content
+Chat messages may retain the uploaded filename, recruiter text, generated
+report, and follow-up answers until the chat is deleted. Existing chat/message
+retention policy remains a separate product and compliance decision.
+
+LlamaParse and AI providers receive CV-derived content during evaluation.
+Before deployment, verify and document their retention, training, and deletion
+settings in the relevant provider dashboards and current provider policies.
