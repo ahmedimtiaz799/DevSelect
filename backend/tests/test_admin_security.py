@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 os.environ["SENTRY_DSN"] = ""
+os.environ["APP_ENV"] = "development"
 
 from app.config import Settings
 from app.main import create_app
@@ -112,8 +113,11 @@ class AdminRouteSecurityTests(unittest.TestCase):
 
 
 class Gate3ConfigurationTests(unittest.TestCase):
-    def test_unset_environment_uses_production_safe_defaults(self):
-        settings = _settings()
+    def test_production_uses_safe_defaults(self):
+        settings = _settings(
+            APP_ENV="production",
+            FRONTEND_URL="https://app.example.test",
+        )
 
         self.assertTrue(settings.is_production)
         self.assertFalse(settings.api_docs_enabled)
@@ -127,7 +131,11 @@ class Gate3ConfigurationTests(unittest.TestCase):
                     _settings(ADMIN_ROUTES_ENABLED=True, ADMIN_SECRET=value)
 
     def test_production_docs_are_disabled_by_default(self):
-        settings = _settings(APP_ENV="production", API_DOCS_ENABLED=None)
+        settings = _settings(
+            APP_ENV="production",
+            API_DOCS_ENABLED=None,
+            FRONTEND_URL="https://app.example.test",
+        )
 
         with _client(settings) as client:
             self.assertEqual(client.get("/docs").status_code, 404)
@@ -135,7 +143,11 @@ class Gate3ConfigurationTests(unittest.TestCase):
             self.assertEqual(client.get("/openapi.json").status_code, 404)
 
     def test_production_docs_can_be_enabled_explicitly(self):
-        settings = _settings(APP_ENV="production", API_DOCS_ENABLED=True)
+        settings = _settings(
+            APP_ENV="production",
+            API_DOCS_ENABLED=True,
+            FRONTEND_URL="https://app.example.test",
+        )
 
         with _client(settings) as client:
             self.assertEqual(client.get("/docs").status_code, 200)

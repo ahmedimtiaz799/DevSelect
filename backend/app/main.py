@@ -47,6 +47,13 @@ def create_app(
     initialize_observability: bool = True,
 ) -> FastAPI:
     docs_enabled = app_settings.api_docs_enabled
+    allowed_origins = [app_settings.frontend_origin]
+    if app_settings.is_local_development:
+        allowed_origins.extend(
+            ["http://localhost:5173", "http://127.0.0.1:5173"]
+        )
+    allowed_origins = list(dict.fromkeys(allowed_origins))
+
     app_kwargs = {
         "title": "DevSelect API",
         "description": "CV and GitHub evaluator for tech recruiters",
@@ -70,7 +77,7 @@ def create_app(
     app.add_middleware(CircuitBreakerMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[app_settings.FRONTEND_URL, "http://localhost:5173"],
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],

@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlsplit
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s — %(message)s"
@@ -17,6 +18,7 @@ ADMIN_SECRET_PLACEHOLDER_MARKERS = (
     "placeholder",
     "example",
 )
+LOCAL_APP_ENVS = {"development", "dev", "local", "test"}
 
 class Settings(BaseSettings):
     """
@@ -95,10 +97,43 @@ class Settings(BaseSettings):
         return self.APP_ENV.strip().lower() in {"production", "prod"}
 
     @property
+    def is_local_development(self) -> bool:
+        return self.APP_ENV.strip().lower() in LOCAL_APP_ENVS
+
+    @property
     def api_docs_enabled(self) -> bool:
         if self.API_DOCS_ENABLED is not None:
             return self.API_DOCS_ENABLED
         return not self.is_production
+
+    @property
+    def frontend_origin(self) -> str:
+        value = self.FRONTEND_URL.strip()
+        parsed = urlsplit(value)
+        try:
+            parsed.port
+        except ValueError as exc:
+            raise ValueError("FRONTEND_URL contains an invalid port") from exc
+
+        if (
+            not value
+            or "*" in value
+            or parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.hostname is None
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(
+                "FRONTEND_URL must be a single origin without path, query, "
+                "fragment, credentials, or wildcard"
+            )
+        if self.is_production and parsed.scheme != "https":
+            raise ValueError("FRONTEND_URL must use HTTPS in production")
+        return f"{parsed.scheme}://{parsed.netloc}"
 
     @model_validator(mode="after")
     def validate_gate3_security(self):
