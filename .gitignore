@@ -1,31 +1,121 @@
-# ─── Environment variables (NEVER commit these) ──────────────────────────────
+# Environment variables and local secrets
 .env
-.env.local
-.env.staging
-.env.staging.local
-.env.production
-.env.*.local
+.env.*
+*.env
+*.env.*
+!.env.example
+!**/.env.example
+!.env.*.example
+!**/.env.*.example
 
-# ─── Python backend ──────────────────────────────────────────────────────────
+# Environment backups
+.env*.bak
+.env*.backup
+.env*.old
+*.env.bak
+*.env.backup
+*.env.old
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Database dumps, exports, and backups
+dumps/
+backups/
+*.dump
+*.dump.*
+*.backup
+*.bak
+*.sql.gz
+*.sql.zip
+*.sql.bak
+*_dump.sql
+*_backup.sql
+database-export*
+db-export*
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+*.der
+id_rsa*
+id_ed25519*
+
+# Uploaded candidate files and generated reports
+uploads/
+upload/
+uploaded/
+reports/
+generated-reports/
+report-output/
+*.pdf
+*.doc
+*.docx
+*.rtf
+
+# Screenshots and test captures
+screenshots/
+screenshot*.png
+screenshot*.jpg
+screenshot*.jpeg
+screenshot*.webp
+Screenshot*.png
+Screenshot*.jpg
+
+# Archives
+*.zip
+*.tar
+*.tgz
+*.tar.gz
+*.7z
+*.rar
+
+# Python
 venv/
 .venv/
 __pycache__/
 *.py[cod]
 *$py.class
-*.pyc
-uploads/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
 
-# ─── React frontend ──────────────────────────────────────────────────────────
+# React / Node
 node_modules/
 dist/
 build/
+.vite/
+.parcel-cache/
+.turbo/
+.next/
 
-# ─── Testing ─────────────────────────────────────────────────────────────────
-.pytest_cache/
-.coverage
-htmlcov/
+# Local temporary and cache artifacts
+.cache/
+.tmp/
+tmp/
+temp/
+*.tmp
+*.temp
+*.cache
+*~
 
-# ─── IDEs & OS files ─────────────────────────────────────────────────────────
+# IDE and OS files
 .vscode/
 .idea/
 *.swp
