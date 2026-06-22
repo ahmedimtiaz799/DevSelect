@@ -1,9 +1,11 @@
 import logging
 from urllib.parse import urlsplit
+from app.utils.logging_hygiene import configure_logging_hygiene
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s — %(message)s"
 )
+configure_logging_hygiene()
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict

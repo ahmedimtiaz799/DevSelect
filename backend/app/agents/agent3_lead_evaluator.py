@@ -622,11 +622,10 @@ async def agent3_lead_evaluator(state: DevSelectState) -> dict:
 
     detected_role, role_source, role_family = _detect_candidate_role(candidate, state.get("raw_cv_text"))
     logger.info(
-        "Agent 3 candidate role context : thread=%s keys=%s candidate_name=%s role=%s role_source=%s candidate_domain=%s candidate_domain_source=%s github_review_policy=%s",
+        "Agent 3 candidate role context : thread=%s keys=%s role_present=%s role_source=%s candidate_domain=%s candidate_domain_source=%s github_review_policy=%s",
         thread_id,
         _candidate_keys(candidate),
-        _field(candidate, "full_name") or "not_found",
-        detected_role or "not_detected",
+        bool(detected_role),
         role_source,
         candidate_domain or "unknown",
         candidate_domain_source or "unknown",
@@ -666,17 +665,14 @@ async def agent3_lead_evaluator(state: DevSelectState) -> dict:
         for key in ("skills", "projects", "education", "certifications")
     )
     logger.info(
-        "Agent 3 prompt evidence : thread=%s candidate_name=%s role=%s skills=%s projects=%s experience=%s education_present=%s certifications=%s has_devselect=%s has_casex=%s parsed_cv_chars=%s raw_has_skills=%s raw_has_projects=%s raw_has_education=%s raw_has_certifications=%s github_status=%s github_scenario=%s github_original_repos=%s github_profile_contributions=%s github_repository_commits=%s candidate_evidence_chars=%s github_evidence_chars=%s",
+        "Agent 3 prompt evidence : thread=%s role_present=%s skills=%s projects=%s experience=%s education_present=%s certifications=%s parsed_cv_chars=%s raw_has_skills=%s raw_has_projects=%s raw_has_education=%s raw_has_certifications=%s github_status=%s github_scenario=%s github_original_repos=%s github_profile_contributions=%s github_repository_commits=%s candidate_evidence_chars=%s github_evidence_chars=%s",
         thread_id,
-        _field(candidate, "full_name") or "not_found",
-        detected_role or "not_detected",
+        bool(detected_role),
         len(candidate_skills),
         len(candidate_projects),
         len(candidate_experience),
         bool(candidate_education),
         len(candidate_certifications),
-        "devselect" in candidate_section.lower(),
-        "casex" in candidate_section.lower(),
         raw_cv_evidence["text_chars"],
         raw_cv_evidence["skills"],
         raw_cv_evidence["projects"],
@@ -762,10 +758,10 @@ Evidence handling rules:
     try:
         report_text = await _stream_with_fallback(messages, thread_id=thread_id)
     except GeminiQuotaExceededError as e:
-        logger.exception(f"Agent 3 quota exhausted for thread {thread_id}: {e}")
+        logger.warning("Agent 3 quota exhausted : thread=%s error_type=%s", thread_id, type(e).__name__)
         raise
     except Exception as e:
-        logger.exception(f"Agent 3 failed for thread {thread_id}: {e}")
+        logger.error("Agent 3 failed : thread=%s error_type=%s", thread_id, type(e).__name__)
         raise
 
     unsupported_claims = _unsupported_report_claims(report_text, candidate, github)

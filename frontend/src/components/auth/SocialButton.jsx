@@ -1,6 +1,16 @@
 import { supabase } from '../../lib/supabase'
 import { getAuthErrorMessage } from '../../lib/authErrors'
 
+const DEBUG_AUTH_LOGS = import.meta.env.DEV
+
+function logAuthWarning(error) {
+  if (!DEBUG_AUTH_LOGS) return
+  console.warn('Supabase OAuth sign-in failed', {
+    code: error?.code ?? null,
+    name: error?.name ?? null,
+  })
+}
+
 export function SocialButton({ provider, label, icon, onError, primary }) {
   async function handleClick() {
     onError?.(null)
@@ -13,11 +23,11 @@ export function SocialButton({ provider, label, icon, onError, primary }) {
         },
       })
       if (error) {
-        console.warn('Supabase OAuth sign-in failed:', error.message)
+        logAuthWarning(error)
         onError?.(getAuthErrorMessage(error))
       }
     } catch (error) {
-      console.warn('Supabase OAuth sign-in failed:', error?.message)
+      logAuthWarning(error)
       onError?.(getAuthErrorMessage(error))
     }
   }

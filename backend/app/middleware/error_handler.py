@@ -8,6 +8,7 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 
 from app.config import settings
+from app.utils.logging_hygiene import scrub_sentry_event
 
 logger = logging.getLogger("devselect")
 USER_INPUT_TOO_LONG_MESSAGE = f"Message is too long. Please keep it under {settings.MAX_USER_INPUT_CHARS} characters."
@@ -27,12 +28,18 @@ def init_sentry() -> None:
             FastApiIntegration(),
         ],
         send_default_pii=False,
+        before_send=scrub_sentry_event,
     )
     logger.info("Sentry initialised.")
 
 
 async def handle_unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
-    logger.error(f"Unhandled exception on {request.method} {request.url.path} : {exc}")
+    logger.error(
+        "Unhandled exception : method=%s path=%s error_type=%s",
+        request.method,
+        request.url.path,
+        type(exc).__name__,
+    )
     sentry_sdk.capture_exception(exc)
 
     return JSONResponse(
@@ -44,7 +51,12 @@ async def handle_unhandled_exception(request: Request, exc: Exception) -> JSONRe
 
 
 async def handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
-    logger.warning(f"HTTP {exc.status_code} on {request.method} {request.url.path} : {exc.detail}")
+    logger.warning(
+        "HTTP exception : status=%s method=%s path=%s",
+        exc.status_code,
+        request.method,
+        request.url.path,
+    )
 
     return JSONResponse(
         status_code=exc.status_code,
@@ -70,7 +82,12 @@ async def handle_validation_exception(request: Request, exc: RequestValidationEr
         }
         for error in exc.errors()
     ]
-    logger.warning(f"Validation error on {request.method} {request.url.path}: {errors}")
+    logger.warning(
+        "Validation error : method=%s path=%s fields=%s",
+        request.method,
+        request.url.path,
+        len(errors),
+    )
 
     return JSONResponse(
         status_code=422,

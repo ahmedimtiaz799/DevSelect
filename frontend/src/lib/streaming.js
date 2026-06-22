@@ -1,6 +1,14 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 const BASE_URL = import.meta.env.VITE_API_URL;
+const DEBUG_STREAM_LOGS = import.meta.env.DEV;
+
+function logUnknownEvent(scope, eventType) {
+  if (!DEBUG_STREAM_LOGS) return;
+  console.warn(`[DevSelect] Unknown ${scope} SSE event`, {
+    eventType: typeof eventType === 'string' ? eventType.slice(0, 40) : 'unknown',
+  });
+}
 
 function isAbortError(err) {
   return (
@@ -154,7 +162,7 @@ export function streamChatResponse(
         abortStream();
         return;
       }
-      console.warn('Unknown SSE event type:', event.event);
+      logUnknownEvent('evaluation', event.event);
     },
     onerror(err) {
       if (intentionalAbort || controller.signal.aborted || isAbortError(err)) {
@@ -228,7 +236,7 @@ export function streamFollowUpResponse(chatId, question, token, handlers) {
         abortStream();
         return;
       }
-      console.warn('Unknown follow-up SSE event type:', event.event);
+      logUnknownEvent('follow-up', event.event);
     },
     onerror(err) {
       if (intentionalAbort || controller.signal.aborted || isAbortError(err)) {

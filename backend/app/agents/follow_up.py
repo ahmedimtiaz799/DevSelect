@@ -211,14 +211,12 @@ Untrusted recruiter follow-up question:
 
     if _requires_three_interview_questions(question) and not _has_complete_three_question_answer(answer):
         logger.warning(
-            "Follow-up interview answer incomplete : chat=%s provider=%s model=%s response_chars=%s finish_reason=%s first_200=%r last_200=%r",
+            "Follow-up interview answer incomplete : chat=%s provider=%s model=%s response_chars=%s finish_reason=%s",
             chat_id or "unknown",
             provider,
             model_name,
             len(answer),
             finish_reason,
-            answer[:200],
-            answer[-200:] if answer else "",
         )
         raise FollowUpAnswerIncompleteError()
 

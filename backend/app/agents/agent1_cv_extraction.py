@@ -80,11 +80,6 @@ class Agent1StructuredOutputError(Exception):
     pass
 
 
-def _safe_cv_preview(text: str) -> str:
-    preview = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[email]", text or "")
-    preview = re.sub(r"https?://\S+|www\.\S+", "[url]", preview)
-    preview = re.sub(r"\b(?:\+?\d[\d\s().-]{7,}\d)\b", "[phone]", preview)
-    return re.sub(r"\s+", " ", preview).strip()[:100]
 
 
 def _cv_evidence_flags(text: str) -> dict[str, bool]:
@@ -148,7 +143,7 @@ async def _parse_pdf_with_llamaparse(pdf_path: str) -> str:
     except LlamaParseEmptyResultError:
         raise
     except Exception as e:
-        logger.error(f"LlamaParse error: {e}")
+        logger.error("LlamaParse error : error_type=%s", type(e).__name__)
         raise LlamaParseTransientError(f"LlamaParse transient error: {e}")
 
 
@@ -651,10 +646,9 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
             )
         parsed_flags = _cv_evidence_flags(raw_cv_text)
         logger.info(
-            "Agent 1: Parsed CV evidence thread=%s parsed_cv_text_length=%s first_100=%r has_skills=%s has_projects=%s has_education=%s has_certifications=%s has_devselect=%s has_casex=%s",
+            "Agent 1: Parsed CV evidence thread=%s parsed_cv_text_length=%s has_skills=%s has_projects=%s has_education=%s has_certifications=%s has_devselect=%s has_casex=%s",
             state["thread_id"],
             len(raw_cv_text),
-            _safe_cv_preview(raw_cv_text),
             parsed_flags["skills"],
             parsed_flags["projects"],
             parsed_flags["education"],
@@ -692,7 +686,7 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
             "error_code": "PDF_PROCESSING_FAILED",
         }
     except Exception as e:
-        logger.error(f"Agent 1 failed in Step A: {e}")
+        logger.error("Agent 1 failed in Step A : error_type=%s", type(e).__name__)
         return {
             "pdf_bytes": None,
             "pdf_temp_path": None,
@@ -756,7 +750,7 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
             "error_code": "CV_EXTRACTION_INVALID",
         }
     except Exception as e:
-        logger.error(f"Agent 1 failed in Step B: {e}")
+        logger.error("Agent 1 failed in Step B : error_type=%s", type(e).__name__)
         return {
             "pdf_bytes": None,
             "pdf_temp_path": None,
@@ -786,11 +780,10 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         )
     )
     logger.info(
-        "Agent 1: Extracted candidate thread=%s keys=%s candidate_name=%s role=%s role_source=%s candidate_domain=%s candidate_domain_source=%s github_review_policy=%s skills=%s languages=%s frameworks=%s projects=%s experience=%s education_present=%s certifications=%s has_devselect=%s has_casex=%s candidate_state_chars=%s parsed_cv_chars=%s",
+        "Agent 1: Extracted candidate thread=%s keys=%s role_present=%s role_source=%s candidate_domain=%s candidate_domain_source=%s github_review_policy=%s skills=%s languages=%s frameworks=%s projects=%s experience=%s education_present=%s certifications=%s candidate_state_chars=%s parsed_cv_chars=%s",
         state["thread_id"],
         ",".join(candidate_log_state.keys()),
-        candidate.full_name or "not_found",
-        candidate.current_title or "not_detected",
+        bool(candidate.current_title),
         role_source,
         candidate_domain,
         candidate_domain_source,
@@ -802,8 +795,6 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
         len(candidate.work_experience or []),
         bool(candidate.education),
         len(candidate.certifications or []),
-        "devselect" in candidate_state_text,
-        "casex" in candidate_state_text,
         len(candidate_state_text),
         len(raw_cv_text),
     )
@@ -887,7 +878,7 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
     elif len(github_urls) == 1:
         url = normalize_github_url(github_urls[0])
         if is_valid_github_url(url):
-            logger.info(f"Agent 1: One valid URL found — {url}")
+            logger.info("Agent 1: One valid GitHub profile URL found")
             resume_value = interrupt({
                 "github_url": url,
                 "scenario": "ACCESSIBLE",
@@ -900,7 +891,7 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
             selected_url = resume_value.get("github_url") if isinstance(resume_value, dict) else url
             candidate = candidate.model_copy(update={"github_url": selected_url})
         else:
-            logger.warning(f"Agent 1: Malformed URL found — {url}")
+            logger.warning("Agent 1: Malformed GitHub profile URL found")
             resume_value = interrupt({
                 "github_url": url,
                 "scenario": "COULD_NOT_BE_ACCESSED",
@@ -916,7 +907,7 @@ async def agent1_cv_extraction(state: DevSelectState) -> dict[str, Any]:
 
     else:
         normalised = [normalize_github_url(u) for u in github_urls]
-        logger.info(f"Agent 1: Multiple URLs found — {normalised}")
+        logger.info("Agent 1: Multiple GitHub profile URLs found : count=%s", len(normalised))
         resume_value = interrupt({
             "profiles": normalised,
             "scenario": "MULTIPLE_FOUND",

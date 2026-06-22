@@ -31,6 +31,28 @@ const PRE_CV_GUIDANCE_MESSAGE = 'Please upload a candidate CV to begin an evalua
 const MESSAGE_SAVE_FAILED_MESSAGE = 'Message could not be saved. Please check your connection and try again.';
 const GENERATING_STATUS_MIN_DISPLAY_MS = 400;
 const DEBUG_STREAM_LOGS = import.meta.env.DEV;
+
+function diagnosticId(value) {
+  return typeof value === 'string' && value ? value.slice(0, 8) : null;
+}
+
+function safeDiagnosticDetails(details = {}) {
+  return Object.fromEntries(
+    Object.entries(details).map(([key, value]) => [
+      key,
+      key.toLowerCase().endsWith('id') ? diagnosticId(value) : value,
+    ])
+  );
+}
+
+function logClientWarning(event, error) {
+  if (!DEBUG_STREAM_LOGS) return;
+  console.warn(`[DevSelect] ${event}`, {
+    code: error?.code ?? null,
+    status: error?.status ?? null,
+    name: error?.name ?? null,
+  });
+}
 const ACTIVITY_MODE_EVALUATION = 'evaluation';
 const ACTIVITY_MODE_FOLLOW_UP = 'follow_up';
 const FOLLOW_UP_STATUS_MESSAGE = 'Thinking...';
@@ -63,7 +85,7 @@ function isGeneratingRecommendationStatus(text) {
 
 function logRunEvent(event, details) {
   if (!DEBUG_STREAM_LOGS) return;
-  console.info(`[DevSelect] ${event}`, details);
+  console.info(`[DevSelect] ${event}`, safeDiagnosticDetails(details));
 }
 
 export function useChat(chatId) {
@@ -118,7 +140,7 @@ export function useChat(chatId) {
     });
 
     if (error) {
-      console.warn('Failed to persist user upload message:', error.message);
+      logClientWarning('persist:user-upload-message-failed', error);
       addMessageSaveWarning(targetId);
     }
   }
@@ -135,7 +157,7 @@ export function useChat(chatId) {
     );
 
     if (error) {
-      console.warn('Failed to persist chat guidance messages:', error.message);
+      logClientWarning('persist:guidance-messages-failed', error);
       addMessageSaveWarning(targetId);
     }
   }
@@ -1009,7 +1031,7 @@ export function useChat(chatId) {
         });
 
         if (error) {
-          console.warn('Failed to persist assistant message:', error.message);
+          logClientWarning('persist:assistant-message-failed', error);
           addMessageSaveWarning(targetId);
         }
       },

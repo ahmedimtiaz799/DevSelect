@@ -325,12 +325,10 @@ def _log_structured_output_failure(
 ) -> None:
     text = _response_text(raw_response)
     logger.error(
-        "Agent 2 structured GitHub analysis failed : thread=%s model=%s response_chars=%s first_200=%r last_200=%r finish_reason=%s usage=%s validation=%s error_type=%s",
+        "Agent 2 structured GitHub analysis failed : thread=%s model=%s response_chars=%s finish_reason=%s usage=%s validation=%s error_type=%s",
         thread_id or "unknown",
         llm_model_name("agent2"),
         len(text),
-        text[:200],
-        text[-200:] if text else "",
         _response_finish_reason(raw_response),
         _response_usage_summary(raw_response),
         _validation_summary(error),
@@ -371,8 +369,7 @@ async def _query_github_graphql(username: str) -> dict:
             )
 
         logger.info(
-            "Agent 2 GitHub GraphQL response : username=%s status_code=%s rate_remaining=%s",
-            username,
+            "Agent 2 GitHub GraphQL response : status_code=%s rate_remaining=%s",
             response.status_code,
             response.headers.get("X-RateLimit-Remaining", "unknown"),
         )
@@ -407,8 +404,7 @@ async def _query_github_graphql(username: str) -> dict:
             message = str(first_error.get("message") or "")
             lowered = message.lower()
             logger.warning(
-                "Agent 2 GitHub GraphQL errors : username=%s error_type=%s",
-                username,
+                "Agent 2 GitHub GraphQL errors : error_type=%s",
                 error_type,
             )
             if "rate limit" in lowered or "rate_limit" in error_type.lower():
@@ -697,14 +693,13 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
         return {"error": "We could not read the GitHub profile URL. Please check the URL and try again."}
 
     try:
-        logger.info(f"Agent 2: Querying GitHub GraphQL for '{username}'...")
+        logger.info("Agent 2: Querying GitHub GraphQL")
         raw_data = await _query_github_graphql(username)
         logger.info("Agent 2: GitHub GraphQL responded")
     except GitHubRateLimitError as e:
         logger.warning(
-            "Agent 2 GitHub rate limit : thread=%s username=%s status_code=%s provider_status=%s retry_after_seconds=%s",
+            "Agent 2 GitHub rate limit : thread=%s status_code=%s provider_status=%s retry_after_seconds=%s",
             thread_id,
-            username,
             e.status_code or "unknown",
             e.provider_status,
             e.retry_after_seconds or "unknown",
@@ -716,9 +711,8 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
         }
     except GitHubTransientError as e:
         logger.warning(
-            "Agent 2 GitHub unavailable : thread=%s username=%s status_code=%s provider_status=%s",
+            "Agent 2 GitHub unavailable : thread=%s status_code=%s provider_status=%s",
             thread_id,
-            username,
             e.status_code or "unknown",
             e.provider_status,
         )
@@ -728,9 +722,8 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
         }
     except Exception as e:
         logger.error(
-            "Agent 2 Step A failed : thread=%s username=%s error_type=%s",
+            "Agent 2 Step A failed : thread=%s error_type=%s",
             thread_id,
-            username,
             type(e).__name__,
         )
         return {
@@ -740,7 +733,7 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
 
     user_data = raw_data.get("data", {}).get("user")
     if user_data is None:
-        logger.warning(f"Agent 2: GitHub user '{username}' not found.")
+        logger.warning("Agent 2: GitHub user not found")
         return {
             "github_analysis": _github_analysis_state(GitHubAnalysis(
                 scenario="COULD_NOT_BE_ACCESSED",
@@ -773,7 +766,7 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
     repos = user_data.get("repositories", {}).get("nodes", [])
     total_repo_count = user_data.get("repositories", {}).get("totalCount", 0)
     if total_repo_count > 0 and len(repos) == 0:
-        logger.warning(f"Agent 2: GitHub profile '{username}' appears private.")
+        logger.warning("Agent 2: GitHub profile appears private")
         return {
             "github_analysis": _github_analysis_state(GitHubAnalysis(
                 scenario="PRIVATE",
@@ -873,9 +866,8 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
             }
         )
         logger.info(
-            "Agent 2: Analysis complete thread=%s username=%s status=%s scenario=%s original_repos=%s profile_contributions=%s repository_commits=%s commit_message_samples=%s repos_with_readme=%s recent_activity_days=%s overall_score=%s",
+            "Agent 2: Analysis complete thread=%s status=%s scenario=%s original_repos=%s profile_contributions=%s repository_commits=%s commit_message_samples=%s repos_with_readme=%s recent_activity_days=%s overall_score=%s",
             thread_id,
-            username,
             github_analysis.analysis_status,
             github_analysis.scenario,
             github_analysis.original_repo_count,
@@ -894,7 +886,7 @@ async def agent2_github_analysis(state: DevSelectState) -> dict[str, Any]:
             "retry_after_seconds": e.retry_after_seconds,
         }
     except Agent2StructuredOutputError as e:
-        logger.error(f"Agent 2 Step D structured output error: {e}")
+        logger.error("Agent 2 Step D structured output error : error_type=%s", type(e).__name__)
         if current_ai_provider() == GROQ_PROVIDER:
             return {
                 "error": GROQ_VALIDATION_FAILED_MESSAGE,

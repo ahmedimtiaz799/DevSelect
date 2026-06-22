@@ -601,7 +601,7 @@ async def _get_owned_chat(chat_id: str, user_id: str, raise_on_missing: bool = T
             .execute()
         )
     except Exception as e:
-        logger.exception("Chat ownership lookup failed : chat=%s user=%s error=%s", chat_id, user_id, type(e).__name__)
+        logger.error("Chat ownership lookup failed : chat=%s user=%s error_type=%s", chat_id, user_id, type(e).__name__)
         raise HTTPException(status_code=500, detail="Chat access could not be verified. Please try again.") from e
 
     rows = getattr(chat_result, "data", None) or []
@@ -657,7 +657,7 @@ async def _save_chat_thread_id(chat_id: str, user_id: str, thread_id: str) -> di
             .execute()
         )
     except Exception as e:
-        logger.exception("Chat thread binding failed : chat=%s user=%s error=%s", chat_id, user_id, type(e).__name__)
+        logger.error("Chat thread binding failed : chat=%s user=%s error_type=%s", chat_id, user_id, type(e).__name__)
         raise HTTPException(status_code=500, detail="Evaluation session could not be prepared. Please try again.") from e
 
     rows = getattr(verify_result, "data", None) or []
@@ -792,7 +792,7 @@ async def _set_graph_evaluation_status(graph, thread_id: str, status: str) -> No
             {"evaluation_status": status},
         )
     except Exception as e:
-        logger.warning(f"Evaluation status update failed : thread={thread_id} status={status} error={e}")
+        logger.warning("Evaluation status update failed : thread=%s status=%s error_type=%s", thread_id, status, type(e).__name__)
 
 
 def _is_checkpoint_connection_error(error: Exception) -> bool:
@@ -839,7 +839,6 @@ async def _read_graph_state_with_retry(graph, thread_id: str, operation_name: st
                 type(e).__name__,
                 retryable,
                 should_retry,
-                exc_info=True,
             )
             if not should_retry:
                 break
@@ -856,7 +855,7 @@ async def _graph_thread_has_state(graph, thread_id: str) -> bool:
             "checkpoint_existence_check",
         )
     except Exception as e:
-        logger.exception(
+        logger.error(
             "Checkpoint existence check failed : thread=%s error_type=%s",
             thread_id,
             type(e).__name__,
@@ -1111,7 +1110,11 @@ async def upload_cv(
 
     if result.get("error"):
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
-        logger.warning(f"Upload evaluation failed before interrupt : thread={thread_id} error={result['error']}")
+        logger.warning(
+            "Upload evaluation failed before interrupt : thread=%s error_code=%s",
+            thread_id,
+            result.get("error_code") or "unknown",
+        )
         if result.get("error_code") in UPLOAD_SECURITY_MESSAGES:
             return _upload_security_response(result["error_code"])
 
@@ -1213,7 +1216,7 @@ async def follow_up_question(
     try:
         answer = await _generate_follow_up_answer(chat_id, question, report_context)
     except GeminiQuotaExceededError as e:
-        logger.warning(f"Follow-up quota failure : chat={chat_id} error={e}", exc_info=True)
+        logger.warning("Follow-up quota failure : chat=%s error_type=%s", chat_id, type(e).__name__)
         return JSONResponse(
             status_code=429,
             content={
@@ -1250,7 +1253,7 @@ async def follow_up_question(
             },
         )
     except Exception as e:
-        logger.exception(f"Follow-up failed : chat={chat_id} error={e}")
+        logger.error("Follow-up failed : chat=%s error_type=%s", chat_id, type(e).__name__)
         return JSONResponse(
             status_code=500,
             content={
@@ -1310,7 +1313,7 @@ async def follow_up_stream_generator(
         yield f"event: done\ndata: {json.dumps({})}\n\n"
         logger.info("Follow-up SSE stream completed : chat=%s", chat_id)
     except GeminiQuotaExceededError as e:
-        logger.warning("Follow-up SSE quota failure : chat=%s error=%s", chat_id, e, exc_info=True)
+        logger.warning("Follow-up SSE quota failure : chat=%s error_type=%s", chat_id, type(e).__name__)
         payload = {
             "error": e.user_message,
             "code": e.code,
@@ -1341,7 +1344,7 @@ async def follow_up_stream_generator(
         logger.info("Follow-up SSE stream cancelled : chat=%s", chat_id)
         return
     except Exception as e:
-        logger.exception("Follow-up SSE failed : chat=%s error=%s", chat_id, e)
+        logger.error("Follow-up SSE failed : chat=%s error_type=%s", chat_id, type(e).__name__)
         yield f"event: error\ndata: {json.dumps({'error': 'Follow-up answer failed. Please try again.', 'code': 'FOLLOW_UP_FAILED'})}\n\n"
 
 
@@ -1401,7 +1404,12 @@ async def evaluation_stream_generator(
 
     try:
         yield f"event: meta\ndata: {json.dumps(meta)}\n\n"
-        logger.info(f"SSE stream started : thread={thread_id} meta={meta}")
+        logger.info(
+            "SSE stream started : thread=%s candidate_name_present=%s role_present=%s",
+            thread_id,
+            bool(meta.get("candidate_name")),
+            bool(meta.get("role")),
+        )
         last_meta = meta
         config = {"configurable": {"thread_id": thread_id}}
 
@@ -1429,7 +1437,11 @@ async def evaluation_stream_generator(
             if state_snapshot.get("error"):
                 error = state_snapshot["error"]
                 await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
-                logger.warning(f"SSE pipeline state error : thread={thread_id} error={error}")
+                logger.warning(
+                    "SSE pipeline state error : thread=%s error_code=%s",
+                    thread_id,
+                    state_snapshot.get("error_code") or "unknown",
+                )
                 payload = {
                     "error": error,
                     "code": state_snapshot.get("error_code") or "EVALUATION_PIPELINE_ERROR",
@@ -1486,7 +1498,7 @@ async def evaluation_stream_generator(
 
     except GeminiQuotaExceededError as e:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
-        logger.warning(f"SSE pipeline quota failure : thread={thread_id} error={e}", exc_info=True)
+        logger.warning("SSE pipeline quota failure : thread=%s error_type=%s", thread_id, type(e).__name__)
         payload = {
             "error": e.user_message,
             "code": e.code,
@@ -1517,7 +1529,7 @@ async def evaluation_stream_generator(
         return
     except Exception as e:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
-        logger.exception(f"SSE pipeline failed : thread={thread_id} error={e}")
+        logger.error("SSE pipeline failed : thread=%s error_type=%s", thread_id, type(e).__name__)
         yield f"event: error\ndata: {json.dumps({'error': 'Evaluation failed'})}\n\n"
     finally:
         await _release_stream_thread(thread_id, reason="stream_generator_finally")
@@ -1600,7 +1612,7 @@ async def stream_evaluation(
         )
     except Exception as e:
         await _release_stream_thread(thread_id, reason="checkpoint_read_failed", chat_id=chat_id)
-        logger.exception(
+        logger.error(
             "Failed to read checkpoint : thread=%s error_type=%s",
             thread_id,
             type(e).__name__,

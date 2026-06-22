@@ -44,7 +44,7 @@ async def _get_jwks() -> dict:
                 _jwks_cache = response.json()
                 logger.info("JWKS fetched and cached from Supabase")
         except Exception as e:
-            logger.error(f"Failed to fetch JWKS from Supabase: {e}")
+            logger.error("Failed to fetch JWKS from Supabase : error_type=%s", type(e).__name__)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Authentication service temporarily unavailable",
