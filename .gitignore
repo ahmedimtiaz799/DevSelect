@@ -27,6 +27,7 @@ pnpm-debug.log*
 # Database dumps, exports, and backups
 dumps/
 backups/
+*.sql
 *.dump
 *.dump.*
 *.backup
@@ -38,6 +39,10 @@ backups/
 *_backup.sql
 database-export*
 db-export*
+
+# Reviewed Supabase SQL sources
+!supabase/migrations/*.sql
+!supabase/rls_manual_tests.sql
 
 # Private keys and certificates
 *.pem
@@ -66,12 +71,30 @@ report-output/
 
 # Screenshots and test captures
 screenshots/
+captures/
+capture/
 screenshot*.png
 screenshot*.jpg
 screenshot*.jpeg
 screenshot*.webp
 Screenshot*.png
 Screenshot*.jpg
+capture*.png
+capture*.jpg
+capture*.jpeg
+capture*.webp
+
+# Browser automation and local browser profiles
+playwright-report/
+test-results/
+playwright/.auth/
+browser-profile/
+browser-profiles/
+browser-data/
+chrome-profile/
+chrome-profiles/
+chrome-user-data/
+user-data-dir/
 
 # Archives
 *.zip
@@ -104,6 +127,10 @@ build/
 .parcel-cache/
 .turbo/
 .next/
+
+# Local deployment metadata
+.vercel/
+.render/
 
 # Local temporary and cache artifacts
 .cache/

@@ -39,6 +39,7 @@
 **/logs
 **/dumps
 **/backups
+**/*.sql
 **/*.dump
 **/*.dump.*
 **/*.backup
@@ -48,6 +49,10 @@
 **/*.sql.bak
 **/*_dump.sql
 **/*_backup.sql
+
+# Reviewed Supabase SQL sources
+!supabase/migrations/*.sql
+!supabase/rls_manual_tests.sql
 
 # Private keys and certificates
 **/*.pem
@@ -70,10 +75,16 @@
 **/generated-reports
 **/report-output
 **/screenshots
+**/captures
+**/capture
 **/screenshot*.png
 **/screenshot*.jpg
 **/screenshot*.jpeg
 **/screenshot*.webp
+**/capture*.png
+**/capture*.jpg
+**/capture*.jpeg
+**/capture*.webp
 **/*.pdf
 **/*.doc
 **/*.docx
@@ -84,6 +95,22 @@
 **/*.tar.gz
 **/*.7z
 **/*.rar
+
+# Browser automation and local browser profiles
+**/playwright-report
+**/test-results
+**/playwright/.auth
+**/browser-profile
+**/browser-profiles
+**/browser-data
+**/chrome-profile
+**/chrome-profiles
+**/chrome-user-data
+**/user-data-dir
+
+# Local deployment metadata
+**/.vercel
+**/.render
 
 # Local temporary and editor artifacts
 **/.cache
