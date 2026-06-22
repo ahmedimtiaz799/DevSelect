@@ -189,6 +189,7 @@ class CheckpointRetentionTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value={"id": "chat-1", "user_id": "user-1", "thread_id": "thread-1"}),
             ),
             patch("app.routers.evaluation.get_supabase", new=AsyncMock(return_value=supabase)),
+            patch("app.routers.evaluation.clear_evaluation_follow_up_usage", new=AsyncMock()),
         ):
             response = await delete_chat_with_checkpoint_cleanup(
                 "chat-1",
@@ -211,15 +212,18 @@ class CheckpointRetentionTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("app.routers.evaluation._set_graph_evaluation_status", new=AsyncMock()),
             patch("app.routers.evaluation._release_stream_thread", new=AsyncMock()),
+            patch("app.routers.evaluation.release_evaluation_lock", new=AsyncMock()),
         ):
             events = [
                 event
                 async for event in evaluation_stream_generator(
                     request,
+                    "chat-1",
                     "thread-1",
                     {"scenario": "SKIPPED"},
                     {"candidate_name": "Candidate", "role": "Role"},
                     graph,
+                    "lock-token",
                 )
             ]
 

@@ -7,6 +7,7 @@ from starlette.responses import JSONResponse
 
 from app.config import settings
 from app.dependencies import verify_supabase_token
+from app.utils.api_responses import rate_limit_response
 
 logger = logging.getLogger("devselect")
 
@@ -116,7 +117,7 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         try:
             status, value = await _run_lua_on_upstash(key, now)
         except Exception as e:
-            if settings.RATE_LIMIT_FAIL_OPEN:
+            if settings.RATE_LIMIT_FAIL_OPEN and not settings.is_production:
                 logger.warning("Rate limiter Redis unavailable; failing open : key=%s error=%s", key, type(e).__name__)
                 return await call_next(request)
 
@@ -125,18 +126,14 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
 
         if status == "denied":
             logger.warning(f"Rate limit exceeded : key={key} retry_after={value}s")
-            return JSONResponse(
-                status_code=429,
-                content={
-                    "error": "Too many requests. Please slow down.",
-                    "retry_after_seconds": value,
-                },
-                headers={
-                    "Retry-After": str(value),
-                    "X-RateLimit-Limit": str(BUCKET_CAPACITY),
-                    "X-RateLimit-Remaining": "0",
-                },
+            response = rate_limit_response(
+                error="Too many requests. Please slow down.",
+                code="RATE_LIMIT_EXCEEDED",
+                retry_after_seconds=value,
             )
+            response.headers["X-RateLimit-Limit"] = str(BUCKET_CAPACITY)
+            response.headers["X-RateLimit-Remaining"] = "0"
+            return response
 
         response = await call_next(request)
         response.headers["X-RateLimit-Limit"] = str(BUCKET_CAPACITY)

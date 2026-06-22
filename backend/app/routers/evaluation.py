@@ -26,16 +26,24 @@ from app.db.supabase_client import get_supabase
 from app.dependencies import verify_token
 from app.models.requests import FollowUpRequest, ResumeRequest
 from app.utils.budget_limits import (
-    budget_error_payload,
-    budget_error_status_code,
+    budget_response,
+    clear_evaluation_follow_up_usage,
     estimate_evaluation_budget,
-    record_budget_usage,
+    record_evaluation_usage,
+    record_follow_up_usage,
 )
 from app.utils.cv_likeness import assess_cv_likeness
 from app.utils.candidate_domain import resolve_candidate_display_role
 from app.utils.llm_observability import cap_text_for_llm
-from app.utils.llm_provider import LLMProviderUnavailableError
+from app.utils.llm_provider import LLMProviderUnavailableError, llm_rate_limit_code
 from app.utils.checkpoint_retention import purge_graph_thread
+from app.utils.api_responses import rate_limit_response
+from app.utils.evaluation_lock import (
+    EVALUATION_LOCK_UNAVAILABLE,
+    acquire_evaluation_lock,
+    claim_evaluation_stream,
+    release_evaluation_lock,
+)
 
 
 logger = logging.getLogger("devselect")
@@ -759,6 +767,8 @@ async def _cached_report_stream_generator(
     meta: dict,
     report: str,
     graph=None,
+    chat_id: str | None = None,
+    evaluation_lock_token: str | None = None,
 ) -> AsyncGenerator[str, None]:
     try:
         if await request.is_disconnected():
@@ -792,6 +802,8 @@ async def _cached_report_stream_generator(
                     "Cached checkpoint purge failed : error_type=%s",
                     type(error).__name__,
                 )
+        if chat_id:
+            await release_evaluation_lock(chat_id, evaluation_lock_token)
 
 
 async def _claim_stream_thread(thread_id: str, chat_id: str | None = None) -> bool:
@@ -1083,11 +1095,24 @@ async def upload_cv(
         thread_id = str(uuid4())
         logger.info(f"Upload requested existing thread : old={old_thread_id} new={thread_id}")
 
-    await _save_chat_thread_id(chat_id, user_id, thread_id)
+    lock_decision = await acquire_evaluation_lock(chat_id)
+    if not lock_decision.allowed:
+        if lock_decision.code == EVALUATION_LOCK_UNAVAILABLE:
+            return JSONResponse(
+                status_code=503,
+                content={"error": lock_decision.error, "code": lock_decision.code},
+            )
+        return rate_limit_response(
+            error=lock_decision.error or "An evaluation is already in progress.",
+            code=lock_decision.code or "EVALUATION_ALREADY_IN_PROGRESS",
+            retry_after_seconds=lock_decision.retry_after_seconds,
+        )
 
+    evaluation_lock_token = lock_decision.token
     estimated_budget_tokens = estimate_evaluation_budget(len(pdf_bytes))
-    budget_decision = await record_budget_usage(user_id, estimated_budget_tokens)
+    budget_decision = await record_evaluation_usage(user_id, estimated_budget_tokens)
     if not budget_decision.allowed:
+        await release_evaluation_lock(chat_id, evaluation_lock_token)
         logger.warning(
             "Evaluation budget blocked before start : user=%s thread=%s code=%s estimated_tokens=%s",
             user_id,
@@ -1095,53 +1120,62 @@ async def upload_cv(
             budget_decision.code,
             budget_decision.estimated_tokens,
         )
-        return JSONResponse(
-            status_code=budget_error_status_code(budget_decision),
-            content=budget_error_payload(budget_decision),
-        )
-
-    pdf_temp_path = _write_temp_pdf(pdf_bytes)
-    evaluation_context = _evaluation_datetime_context(evaluation_timezone)
-    logger.info(
-        "Evaluation date context : thread=%s date=%s timezone=%s source=%s",
-        thread_id,
-        evaluation_context["evaluation_date"],
-        evaluation_context["evaluation_timezone"],
-        evaluation_context["evaluation_timezone_source"],
-    )
-
-    initial_state = {
-        "pdf_bytes": None,
-        "pdf_temp_path": pdf_temp_path,
-        "pdf_preview_text": pdf_preview_text,
-        "thread_id": thread_id,
-        "raw_cv_text": "",
-        "recruiter_instruction": normalized_recruiter_instruction,
-        "evaluation_date": evaluation_context["evaluation_date"],
-        "evaluation_timezone": evaluation_context["evaluation_timezone"],
-        "evaluation_datetime_iso": evaluation_context["evaluation_datetime_iso"],
-        "evaluation_timezone_source": evaluation_context["evaluation_timezone_source"],
-        "candidate": None,
-        "candidate_domain": None,
-        "candidate_domain_source": None,
-        "github_review_policy": None,
-        "github_analysis": None,
-        "report": None,
-        "error": None,
-        "error_code": None,
-        "retry_after_seconds": None,
-        "evaluation_status": EVALUATION_PENDING,
-    }
+        return budget_response(budget_decision)
 
     try:
+        await _save_chat_thread_id(chat_id, user_id, thread_id)
+    except Exception:
+        await release_evaluation_lock(chat_id, evaluation_lock_token)
+        raise
+
+    pdf_temp_path = None
+    try:
+        pdf_temp_path = _write_temp_pdf(pdf_bytes)
+        evaluation_context = _evaluation_datetime_context(evaluation_timezone)
+        logger.info(
+            "Evaluation date context : thread=%s date=%s timezone=%s source=%s",
+            thread_id,
+            evaluation_context["evaluation_date"],
+            evaluation_context["evaluation_timezone"],
+            evaluation_context["evaluation_timezone_source"],
+        )
+
+        initial_state = {
+            "pdf_bytes": None,
+            "pdf_temp_path": pdf_temp_path,
+            "pdf_preview_text": pdf_preview_text,
+            "thread_id": thread_id,
+            "evaluation_lock_token": evaluation_lock_token,
+            "raw_cv_text": "",
+            "recruiter_instruction": normalized_recruiter_instruction,
+            "evaluation_date": evaluation_context["evaluation_date"],
+            "evaluation_timezone": evaluation_context["evaluation_timezone"],
+            "evaluation_datetime_iso": evaluation_context["evaluation_datetime_iso"],
+            "evaluation_timezone_source": evaluation_context["evaluation_timezone_source"],
+            "candidate": None,
+            "candidate_domain": None,
+            "candidate_domain_source": None,
+            "github_review_policy": None,
+            "github_analysis": None,
+            "report": None,
+            "error": None,
+            "error_code": None,
+            "retry_after_seconds": None,
+            "evaluation_status": EVALUATION_PENDING,
+        }
+
         result = await graph.ainvoke(
             initial_state,
             config={"configurable": {"thread_id": thread_id}},
         )
+    except Exception:
+        await release_evaluation_lock(chat_id, evaluation_lock_token)
+        raise
     finally:
         _delete_temp_file(pdf_temp_path)
 
     if result.get("error"):
+        await release_evaluation_lock(chat_id, evaluation_lock_token)
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         try:
             await purge_graph_thread(graph, thread_id, reason="upload_failed")
@@ -1158,6 +1192,14 @@ async def upload_cv(
         if result.get("error_code") in UPLOAD_SECURITY_MESSAGES:
             return _upload_security_response(result["error_code"])
 
+        error_code = result.get("error_code") or "EVALUATION_UPLOAD_FAILED"
+        if "RATE_LIMIT" in error_code or error_code == "GEMINI_QUOTA_EXCEEDED":
+            return rate_limit_response(
+                error=result["error"],
+                code=error_code,
+                retry_after_seconds=result.get("retry_after_seconds"),
+            )
+
         return JSONResponse(
             status_code=503,
             content={
@@ -1173,6 +1215,7 @@ async def upload_cv(
 
     if not isinstance(interrupt_payload, dict) or "scenario" not in interrupt_payload:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
+        await release_evaluation_lock(chat_id, evaluation_lock_token)
         try:
             await purge_graph_thread(graph, thread_id, reason="upload_interrupt_missing")
         except Exception as error:
@@ -1258,6 +1301,7 @@ async def delete_chat_with_checkpoint_cleanup(
             detail="Chat could not be deleted. Please try again.",
         ) from error
 
+    await clear_evaluation_follow_up_usage(chat_id)
     return Response(status_code=204)
 
 
@@ -1305,6 +1349,10 @@ async def follow_up_question(
             },
         )
 
+    follow_up_decision = await record_follow_up_usage(user_id, chat_id)
+    if not follow_up_decision.allowed:
+        return budget_response(follow_up_decision)
+
     logger.info(
         "Follow-up request accepted : chat=%s user=%s question_chars=%s report_context_chars=%s mock=%s",
         chat_id,
@@ -1318,13 +1366,10 @@ async def follow_up_question(
         answer = await _generate_follow_up_answer(chat_id, question, report_context)
     except GeminiQuotaExceededError as e:
         logger.warning("Follow-up quota failure : chat=%s error_type=%s", chat_id, type(e).__name__)
-        return JSONResponse(
-            status_code=429,
-            content={
-                "error": e.user_message,
-                "code": e.code,
-                "retry_after_seconds": e.retry_after_seconds,
-            },
+        return rate_limit_response(
+            error=e.user_message,
+            code=e.code,
+            retry_after_seconds=e.retry_after_seconds,
         )
     except LLMProviderUnavailableError as e:
         logger.warning(
@@ -1336,6 +1381,12 @@ async def follow_up_question(
             e.provider_status,
             exc_info=True,
         )
+        if e.status_code == 429:
+            return rate_limit_response(
+                error=e.user_message,
+                code=llm_rate_limit_code(e.provider),
+                retry_after_seconds=e.retry_after_seconds,
+            )
         return JSONResponse(
             status_code=503,
             content={
@@ -1433,7 +1484,11 @@ async def follow_up_stream_generator(
         )
         payload = {
             "error": e.user_message,
-            "code": e.error_code,
+            "code": (
+                llm_rate_limit_code(e.provider)
+                if e.status_code == 429
+                else e.error_code
+            ),
         }
         if e.retry_after_seconds:
             payload["retry_after_seconds"] = e.retry_after_seconds
@@ -1470,6 +1525,10 @@ async def stream_follow_up(
             },
         )
 
+    follow_up_decision = await record_follow_up_usage(user_id, chat_id)
+    if not follow_up_decision.allowed:
+        return budget_response(follow_up_decision)
+
     logger.info(
         "Follow-up SSE request accepted : chat=%s user=%s question_chars=%s report_context_chars=%s mock=%s",
         chat_id,
@@ -1491,10 +1550,12 @@ async def stream_follow_up(
 
 async def evaluation_stream_generator(
     request: Request,
+    chat_id: str,
     thread_id: str,
     resume_payload: dict,
     meta: dict,
     graph,
+    evaluation_lock_token: str | None,
 ) -> AsyncGenerator[str, None]:
 
     if await request.is_disconnected():
@@ -1508,6 +1569,7 @@ async def evaluation_stream_generator(
                 type(error).__name__,
             )
         await _release_stream_thread(thread_id, reason="prestart_disconnect")
+        await release_evaluation_lock(chat_id, evaluation_lock_token)
         return
 
     purge_reason = None
@@ -1634,7 +1696,11 @@ async def evaluation_stream_generator(
         )
         payload = {
             "error": e.user_message,
-            "code": e.error_code,
+            "code": (
+                llm_rate_limit_code(e.provider)
+                if e.status_code == 429
+                else e.error_code
+            ),
         }
         if e.retry_after_seconds:
             payload["retry_after_seconds"] = e.retry_after_seconds
@@ -1659,6 +1725,7 @@ async def evaluation_stream_generator(
                     "Terminal checkpoint purge deferred to TTL : error_type=%s",
                     type(error).__name__,
                 )
+        await release_evaluation_lock(chat_id, evaluation_lock_token)
 
 
 @router.get("/{chat_id}/stream")
@@ -1757,6 +1824,7 @@ async def stream_evaluation(
 
     meta = _candidate_meta(snapshot.values, snapshot.tasks)
     evaluation_status = _evaluation_status(snapshot.values)
+    evaluation_lock_token = snapshot.values.get("evaluation_lock_token")
 
     if evaluation_status == EVALUATION_COMPLETED and snapshot.values.get("report"):
         await _release_stream_thread(thread_id, reason="cached_report_stream", chat_id=chat_id)
@@ -1767,6 +1835,8 @@ async def stream_evaluation(
                 meta,
                 snapshot.values["report"],
                 graph,
+                chat_id,
+                evaluation_lock_token,
             )
         )
 
@@ -1777,10 +1847,34 @@ async def stream_evaluation(
         EVALUATION_FAILED,
     }:
         await _release_stream_thread(thread_id, reason=f"terminal_status:{evaluation_status}", chat_id=chat_id)
+        await release_evaluation_lock(chat_id, evaluation_lock_token)
         return _sse_response(
             _single_error_stream(_thread_terminal_error_payload(evaluation_status))
         )
 
+    stream_lock_token = await claim_evaluation_stream(
+        chat_id,
+        evaluation_lock_token,
+    )
+    if not stream_lock_token:
+        await _release_stream_thread(thread_id, reason="evaluation_lock_claim_failed", chat_id=chat_id)
+        await release_evaluation_lock(chat_id, evaluation_lock_token)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "Evaluation admission is temporarily unavailable. Please try again later.",
+                "code": EVALUATION_LOCK_UNAVAILABLE,
+            },
+        )
+
     return _sse_response(
-        evaluation_stream_generator(request, thread_id, resume_payload, meta, graph),
+        evaluation_stream_generator(
+            request,
+            chat_id,
+            thread_id,
+            resume_payload,
+            meta,
+            graph,
+            stream_lock_token,
+        ),
     )

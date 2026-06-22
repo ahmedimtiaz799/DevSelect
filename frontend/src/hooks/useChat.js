@@ -58,7 +58,12 @@ const ACTIVITY_MODE_FOLLOW_UP = 'follow_up';
 const FOLLOW_UP_STATUS_MESSAGE = 'Thinking...';
 const ANALYZING_CV_STATUS_MESSAGE = 'Analyzing CV...';
 const BUDGET_LIMIT_MESSAGES = {
-  DAILY_EVALUATION_LIMIT_REACHED: 'Daily evaluation limit reached. Please try again tomorrow.',
+  GLOBAL_DAILY_EVALUATION_LIMIT_REACHED: 'DevSelect has reached its evaluation capacity for today. Please try again tomorrow.',
+  GLOBAL_MONTHLY_EVALUATION_LIMIT_REACHED: 'DevSelect has reached its evaluation capacity for this month.',
+  USER_DAILY_EVALUATION_LIMIT_REACHED: 'Your daily evaluation limit has been reached. Please try again tomorrow.',
+  USER_LIFETIME_EVALUATION_LIMIT_REACHED: 'Your portfolio evaluation allowance has been used.',
+  FOLLOWUP_EVALUATION_LIMIT_REACHED: 'This evaluation has reached its follow-up limit.',
+  FOLLOWUP_USER_DAILY_LIMIT_REACHED: 'Your daily follow-up limit has been reached. Please try again tomorrow.',
   DAILY_USER_TOKEN_LIMIT_REACHED: 'Daily AI usage limit reached. Please try again tomorrow.',
   DAILY_GLOBAL_TOKEN_LIMIT_REACHED: 'Daily AI budget limit reached. Please try again tomorrow.',
   DAILY_AI_BUDGET_LIMIT_REACHED: 'Daily AI budget limit reached. Please try again tomorrow.',

@@ -91,7 +91,7 @@ class CircuitBreakerMiddleware(BaseHTTPMiddleware):
         try:
             flag = await _get_flag()
         except Exception as e:
-            if settings.CIRCUIT_BREAKER_FAIL_OPEN:
+            if settings.CIRCUIT_BREAKER_FAIL_OPEN and not settings.is_production:
                 logger.warning("Circuit breaker Redis unavailable; failing open : error=%s", type(e).__name__)
                 return await call_next(request)
 

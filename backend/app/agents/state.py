@@ -23,3 +23,4 @@ class DevSelectState(TypedDict):
     error_code: str | None
     retry_after_seconds: int | None
     evaluation_status: str | None
+    evaluation_lock_token: str | None
