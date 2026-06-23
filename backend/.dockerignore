@@ -1,0 +1,73 @@
+# Secrets and environment files
+.env
+.env.*
+*.env
+*.env.*
+
+# Local Python environments and caches
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Tests and local test output
+tests/
+test-results/
+playwright-report/
+
+# Logs, database exports, and backups
+logs/
+*.log
+dumps/
+backups/
+exports/
+*.sql
+*.dump
+*.dump.*
+*.backup
+*.bak
+
+# Candidate uploads and generated output
+uploads/
+upload/
+uploaded/
+reports/
+generated-reports/
+report-output/
+captures/
+screenshots/
+*.pdf
+*.doc
+*.docx
+*.rtf
+
+# Archives and temporary files
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+.cache/
+.tmp/
+tmp/
+temp/
+*.tmp
+*.temp
+*~
+
+# Local tooling and deployment metadata
+.git/
+.github/
+.vscode/
+.idea/
+.vercel/
+.render/
+.DS_Store
+Thumbs.db
