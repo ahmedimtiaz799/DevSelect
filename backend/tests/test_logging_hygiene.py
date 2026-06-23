@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from starlette.requests import Request
+from uvicorn.logging import AccessFormatter
 
 os.environ["SENTRY_DSN"] = ""
 os.environ["APP_ENV"] = "development"
@@ -77,6 +78,37 @@ class LoggingHygieneUnitTests(unittest.TestCase):
         self.assertNotIn(FAKE_UUID, output)
         self.assertNotIn(FAKE_IP, output)
         self.assertIn("?[Filtered]", output)
+
+    def test_access_log_filter_preserves_uvicorn_formatter_arguments(self):
+        logger = logging.getLogger("uvicorn.access")
+        request_target = (
+            f"/api/chat/{FAKE_UUID}/stream?thread_id={FAKE_UUID}"
+            f"&resume_payload={PROMPT_SENTINEL}"
+        )
+        record = logging.LogRecord(
+            "uvicorn.access",
+            logging.INFO,
+            __file__,
+            1,
+            '%s - "%s %s HTTP/%s" %d',
+            (FAKE_IP, "GET", request_target, "1.1", 200),
+            None,
+        )
+
+        for log_filter in logger.filters:
+            log_filter.filter(record)
+
+        self.assertEqual(len(record.args), 5)
+        output = AccessFormatter(
+            '%(client_addr)s - "%(request_line)s" %(status_code)s',
+            use_colors=False,
+        ).format(record)
+
+        self.assertNotIn(PROMPT_SENTINEL, output)
+        self.assertNotIn(FAKE_UUID, output)
+        self.assertNotIn(FAKE_IP, output)
+        self.assertIn("?[Filtered]", output)
+        self.assertIn("200 OK", output)
 
     def test_redact_log_text_never_returns_secret_material(self):
         output = redact_log_text(

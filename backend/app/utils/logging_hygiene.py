@@ -75,6 +75,8 @@ def redact_log_text(value: Any) -> str:
 
 class SensitiveDataFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
+        if record.name == "uvicorn.access":
+            return True
         try:
             record.msg = redact_log_text(record.getMessage())
             record.args = ()
@@ -84,14 +86,38 @@ class SensitiveDataFilter(logging.Filter):
         return True
 
 
+class UvicornAccessLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            if isinstance(record.args, dict):
+                record.args = {
+                    key: redact_log_text(value) if isinstance(value, str) else value
+                    for key, value in record.args.items()
+                }
+            elif record.args:
+                record.args = tuple(
+                    redact_log_text(value) if isinstance(value, str) else value
+                    for value in record.args
+                )
+            else:
+                record.msg = redact_log_text(record.msg)
+        except Exception:
+            record.msg = "Access log message redacted after formatting failure"
+            record.args = ()
+        return True
+
+
 def configure_logging_hygiene() -> None:
     for handler in logging.getLogger().handlers:
         if not any(isinstance(item, SensitiveDataFilter) for item in handler.filters):
             handler.addFilter(SensitiveDataFilter())
 
+    access_logger = logging.getLogger("uvicorn.access")
+    if not any(isinstance(item, UvicornAccessLogFilter) for item in access_logger.filters):
+        access_logger.addFilter(UvicornAccessLogFilter())
+
     for logger_name in (
         "devselect",
-        "uvicorn.access",
         "uvicorn.error",
         "httpx",
         "httpcore",
