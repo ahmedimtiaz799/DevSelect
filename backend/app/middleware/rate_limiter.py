@@ -1,3 +1,4 @@
+import hashlib
 import time
 import logging
 import httpx
@@ -80,9 +81,13 @@ def _extract_bearer_token(request: Request) -> str | None:
     return auth_header.removeprefix("Bearer ").strip() or None
 
 
+def _hash_rate_limit_identifier(value: str) -> str:
+    return hashlib.sha256(str(value).encode("utf-8", errors="replace")).hexdigest()
+
+
 def _anonymous_rate_limit_key(request: Request) -> str:
     client_host = request.client.host if request.client else "unknown"
-    return f"rate_limit:anonymous:{client_host}"
+    return f"rate_limit:anonymous:{_hash_rate_limit_identifier(client_host)}"
 
 
 async def _rate_limit_key_for_request(request: Request) -> str:
@@ -92,7 +97,7 @@ async def _rate_limit_key_for_request(request: Request) -> str:
 
     try:
         user_id = await verify_supabase_token(token)
-        return f"rate_limit:{user_id}"
+        return f"rate_limit:user:{_hash_rate_limit_identifier(user_id)}"
     except Exception as e:
         logger.warning("Rate limiter using anonymous bucket for unverified token : error=%s", type(e).__name__)
         return _anonymous_rate_limit_key(request)

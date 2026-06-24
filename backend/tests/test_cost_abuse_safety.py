@@ -8,7 +8,11 @@ from starlette.requests import Request
 from app.agents.agent3_lead_evaluator import GeminiQuotaExceededError
 from app.config import settings
 from app.middleware.circuit_breaker import CircuitBreakerMiddleware
-from app.middleware.rate_limiter import RateLimiterMiddleware
+from app.middleware.rate_limiter import (
+    RateLimiterMiddleware,
+    _anonymous_rate_limit_key,
+    _rate_limit_key_for_request,
+)
 from app.models.requests import FollowUpRequest
 from app.routers.evaluation import follow_up_question, upload_cv
 from app.utils import budget_limits, evaluation_lock
@@ -34,7 +38,7 @@ from app.utils.evaluation_lock import (
 from app.utils.llm_provider import LLMProviderUnavailableError
 
 
-def _request(path="/api/chat/chat-1/upload"):
+def _request(path="/api/chat/chat-1/upload", *, headers=None, client_host="127.0.0.1"):
     return Request(
         {
             "type": "http",
@@ -44,8 +48,8 @@ def _request(path="/api/chat/chat-1/upload"):
             "path": path,
             "raw_path": path.encode(),
             "query_string": b"",
-            "headers": [],
-            "client": ("127.0.0.1", 50000),
+            "headers": headers or [],
+            "client": (client_host, 50000),
             "server": ("testserver", 80),
         }
     )
@@ -250,6 +254,57 @@ class EvaluationLockTests(unittest.IsolatedAsyncioTestCase):
 
 
 class MiddlewareSafetyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_authenticated_rate_limit_key_hashes_user_id(self):
+        user_id = "123e4567-e89b-42d3-a456-426614174000"
+        request = _request(headers=[(b"authorization", b"Bearer test-token")])
+
+        with patch(
+            "app.middleware.rate_limiter.verify_supabase_token",
+            new=AsyncMock(return_value=user_id),
+        ):
+            key = await _rate_limit_key_for_request(request)
+
+        digest = key.removeprefix("rate_limit:user:")
+        self.assertTrue(key.startswith("rate_limit:user:"))
+        self.assertNotIn(user_id, key)
+        self.assertEqual(len(digest), 64)
+        self.assertRegex(digest, r"^[0-9a-f]{64}$")
+
+    async def test_anonymous_rate_limit_key_hashes_client_ip(self):
+        client_ip = "203.0.113.42"
+        key = _anonymous_rate_limit_key(_request(client_host=client_ip))
+
+        digest = key.removeprefix("rate_limit:anonymous:")
+        self.assertTrue(key.startswith("rate_limit:anonymous:"))
+        self.assertNotIn(client_ip, key)
+        self.assertEqual(len(digest), 64)
+        self.assertRegex(digest, r"^[0-9a-f]{64}$")
+
+    async def test_rate_limiter_denial_keeps_429_retry_after_behavior(self):
+        middleware = RateLimiterMiddleware(lambda scope, receive, send: None)
+        call_next = AsyncMock()
+
+        with (
+            patch(
+                "app.middleware.rate_limiter._rate_limit_key_for_request",
+                new=AsyncMock(return_value="rate_limit:user:" + "a" * 64),
+            ),
+            patch(
+                "app.middleware.rate_limiter._run_lua_on_upstash",
+                new=AsyncMock(return_value=("denied", 17)),
+            ),
+        ):
+            response = await middleware.dispatch(_request(), call_next)
+
+        payload = json.loads(response.body)
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers["Retry-After"], "17")
+        self.assertEqual(response.headers["X-RateLimit-Limit"], "10")
+        self.assertEqual(response.headers["X-RateLimit-Remaining"], "0")
+        self.assertEqual(payload["code"], "RATE_LIMIT_EXCEEDED")
+        self.assertEqual(payload["retry_after_seconds"], 17)
+        call_next.assert_not_awaited()
+
     async def test_rate_limiter_redis_failure_fails_closed_in_production(self):
         middleware = RateLimiterMiddleware(lambda scope, receive, send: None)
         call_next = AsyncMock()
