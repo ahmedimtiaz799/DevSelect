@@ -99,7 +99,9 @@ export function Landing() {
                 <div className="min-w-0 flex flex-col bg-ds-surface">
                   <div className="h-14 border-b border-ds-border-subtle bg-ds-surface px-4 sm:px-6 flex items-center">
                     <h3 className="truncate text-logo-chat text-ds-text-strong font-extrabold">
-                      Ali Hamza — Full Stack AI Engineer
+                      <span>Ali Hamza</span>
+                      <span className="text-ds-text-muted"> · </span>
+                      <span className="text-ds-text-muted">Full Stack AI Engineer</span>
                     </h3>
                   </div>
 
