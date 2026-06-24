@@ -2,6 +2,10 @@ import { supabase } from './supabase'
 import { normalizeUserInput } from './textLimits'
 
 const BASE_URL = import.meta.env.VITE_API_URL
+const UPLOAD_CONNECTION_FAILED_MESSAGE =
+  'Upload connection failed before report streaming started. Please check your connection and try once later.'
+const UPLOAD_RESPONSE_INVALID_MESSAGE =
+  'Upload response could not be read. Please try again later.'
 
 function getBrowserTimezone() {
   try {
@@ -48,15 +52,28 @@ export async function uploadCV(chatId, file, threadId, recruiterInstruction) {
   if (instruction) formData.append('recruiter_instruction', instruction)
   if (evaluationTimezone) formData.append('evaluation_timezone', evaluationTimezone)
 
-  const response = await fetch(`${BASE_URL}/api/chat/${chatId}/upload`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${data.session.access_token}`,
-    },
-    body: formData,
-  })
+  let response
+  try {
+    response = await fetch(`${BASE_URL}/api/chat/${chatId}/upload`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${data.session.access_token}`,
+      },
+      body: formData,
+    })
+  } catch {
+    throw new Error(UPLOAD_CONNECTION_FAILED_MESSAGE)
+  }
 
-  const result = await response.json()
+  let result
+  try {
+    result = await response.json()
+  } catch {
+    result = {
+      error: UPLOAD_RESPONSE_INVALID_MESSAGE,
+      code: 'UPLOAD_RESPONSE_INVALID',
+    }
+  }
   return { status: response.status, data: result }
 }
 

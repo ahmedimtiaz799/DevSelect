@@ -44,12 +44,62 @@ from app.utils.evaluation_lock import (
     claim_evaluation_stream,
     release_evaluation_lock,
 )
+from app.utils.logging_hygiene import safe_log_id
 from app.utils.public_errors import public_error_payload
 
 
 logger = logging.getLogger("devselect")
 
 router = APIRouter(prefix="/api/chat", tags=["evaluation"])
+
+
+def _safe_upload_extension(filename: str | None) -> str:
+    extension = os.path.splitext(filename or "")[1].lower().lstrip(".")
+    if not extension or not re.fullmatch(r"[a-z0-9]{1,12}", extension):
+        return "unknown"
+    return extension
+
+
+def _safe_log_value(value: str | None, pattern: str, fallback: str = "unknown") -> str:
+    text = str(value or "").strip()
+    return text if re.fullmatch(pattern, text) else fallback
+
+
+def _log_evaluation_marker(
+    marker: str,
+    *,
+    chat_id: str | None = None,
+    user_id: str | None = None,
+    thread_id: str | None = None,
+    status: int | str | None = None,
+    error_type: str | None = None,
+    error_code: str | None = None,
+    file_ext: str | None = None,
+    file_size_bytes: int | None = None,
+    scenario: str | None = None,
+) -> None:
+    details = [
+        f"marker={_safe_log_value(marker, r'[a-z0-9_.:-]{1,80}', 'unknown')}",
+        f"chat={safe_log_id(chat_id, 'chat')}",
+        f"user={safe_log_id(user_id, 'user')}",
+        f"thread={safe_log_id(thread_id, 'thread')}",
+    ]
+    if status is not None:
+        details.append(f"status={status}")
+    if error_type:
+        details.append(
+            f"error_type={_safe_log_value(error_type, r'[A-Za-z_][A-Za-z0-9_.]{0,80}', 'Exception')}"
+        )
+    if error_code:
+        details.append(f"error_code={_safe_log_value(error_code, r'[A-Z0-9_]{1,80}', 'UNKNOWN')}")
+    if file_ext:
+        details.append(f"file_ext={_safe_log_value(file_ext, r'[a-z0-9]{1,12}', 'unknown')}")
+    if file_size_bytes is not None:
+        details.append(f"file_size_bytes={file_size_bytes}")
+    if scenario:
+        details.append(f"scenario={_safe_log_value(scenario, r'[A-Z0-9_]{1,80}', 'UNKNOWN')}")
+
+    logger.info("evaluation_flow %s", " ".join(details))
 
 EVALUATION_PENDING = "pending"
 EVALUATION_IN_PROGRESS = "in_progress"
@@ -1060,11 +1110,32 @@ async def upload_cv(
     evaluation_timezone: Optional[str] = Form(None),
     user_id: str = Depends(verify_token),
 ):
+    _log_evaluation_marker(
+        "upload:start",
+        chat_id=chat_id,
+        user_id=user_id,
+        file_ext=_safe_upload_extension(getattr(file, "filename", None)),
+        file_size_bytes=getattr(file, "size", None),
+    )
     owned_chat = await _get_owned_chat(chat_id, user_id)
 
     try:
         pdf_bytes, pdf_preview_text = await _read_validated_pdf_upload(file)
     except UploadSecurityError as e:
+        _log_evaluation_marker(
+            "upload:error",
+            chat_id=chat_id,
+            user_id=user_id,
+            status=400,
+            error_code=e.code,
+        )
+        _log_evaluation_marker(
+            "upload:returning_response",
+            chat_id=chat_id,
+            user_id=user_id,
+            status=400,
+            error_code=e.code,
+        )
         return _upload_security_response(e.code)
 
     normalized_recruiter_instruction = _normalize_recruiter_instruction(recruiter_instruction)
@@ -1096,9 +1167,18 @@ async def upload_cv(
         thread_id = str(uuid4())
         logger.info(f"Upload requested existing thread : old={old_thread_id} new={thread_id}")
 
+    _log_evaluation_marker("upload:lock_acquire_start", chat_id=chat_id, user_id=user_id, thread_id=thread_id)
     lock_decision = await acquire_evaluation_lock(chat_id)
     if not lock_decision.allowed:
         if lock_decision.code == EVALUATION_LOCK_UNAVAILABLE:
+            _log_evaluation_marker(
+                "upload:returning_response",
+                chat_id=chat_id,
+                user_id=user_id,
+                thread_id=thread_id,
+                status=503,
+                error_code=lock_decision.code,
+            )
             return JSONResponse(
                 status_code=503,
                 content=public_error_payload(
@@ -1106,6 +1186,14 @@ async def upload_cv(
                     default_code=EVALUATION_LOCK_UNAVAILABLE,
                 ),
             )
+        _log_evaluation_marker(
+            "upload:returning_response",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            status=429,
+            error_code=lock_decision.code,
+        )
         return rate_limit_response(
             code=lock_decision.code or "EVALUATION_ALREADY_IN_PROGRESS",
             retry_after_seconds=lock_decision.retry_after_seconds,
@@ -1113,6 +1201,7 @@ async def upload_cv(
 
     evaluation_lock_token = lock_decision.token
     estimated_budget_tokens = estimate_evaluation_budget(len(pdf_bytes))
+    _log_evaluation_marker("upload:budget_check_start", chat_id=chat_id, user_id=user_id, thread_id=thread_id)
     budget_decision = await record_evaluation_usage(user_id, estimated_budget_tokens)
     if not budget_decision.allowed:
         await release_evaluation_lock(chat_id, evaluation_lock_token)
@@ -1122,6 +1211,14 @@ async def upload_cv(
             thread_id,
             budget_decision.code,
             budget_decision.estimated_tokens,
+        )
+        _log_evaluation_marker(
+            "upload:returning_response",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            status=429,
+            error_code=budget_decision.code,
         )
         return budget_response(budget_decision)
 
@@ -1167,11 +1264,26 @@ async def upload_cv(
             "evaluation_status": EVALUATION_PENDING,
         }
 
+        _log_evaluation_marker("upload:graph_start", chat_id=chat_id, user_id=user_id, thread_id=thread_id)
         result = await graph.ainvoke(
             initial_state,
             config={"configurable": {"thread_id": thread_id}},
         )
-    except Exception:
+        _log_evaluation_marker(
+            "upload:graph_done",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            error_code=result.get("error_code") if isinstance(result, dict) else None,
+        )
+    except Exception as error:
+        _log_evaluation_marker(
+            "upload:error",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            error_type=type(error).__name__,
+        )
         await release_evaluation_lock(chat_id, evaluation_lock_token)
         raise
     finally:
@@ -1193,6 +1305,14 @@ async def upload_cv(
             result.get("error_code") or "unknown",
         )
         if result.get("error_code") in UPLOAD_SECURITY_MESSAGES:
+            _log_evaluation_marker(
+                "upload:returning_response",
+                chat_id=chat_id,
+                user_id=user_id,
+                thread_id=thread_id,
+                status=400,
+                error_code=result["error_code"],
+            )
             return _upload_security_response(result["error_code"])
 
         error_code = result.get("error_code") or "EVALUATION_UPLOAD_FAILED"
@@ -1202,11 +1322,27 @@ async def upload_cv(
                 default_code="EVALUATION_UPLOAD_FAILED",
                 retry_after_seconds=result.get("retry_after_seconds"),
             )
+            _log_evaluation_marker(
+                "upload:returning_response",
+                chat_id=chat_id,
+                user_id=user_id,
+                thread_id=thread_id,
+                status=429,
+                error_code=payload["code"],
+            )
             return rate_limit_response(
                 code=payload["code"],
                 retry_after_seconds=payload.get("retry_after_seconds"),
             )
 
+        _log_evaluation_marker(
+            "upload:returning_response",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            status=503,
+            error_code=error_code,
+        )
         return JSONResponse(
             status_code=503,
             content=public_error_payload(
@@ -1231,6 +1367,22 @@ async def upload_cv(
                 type(error).__name__,
             )
         logger.error(f"Upload evaluation returned no resume scenario : thread={thread_id}")
+        _log_evaluation_marker(
+            "upload:error",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            status=500,
+            error_code="UPLOAD_INTERRUPT_MISSING",
+        )
+        _log_evaluation_marker(
+            "upload:returning_response",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            status=500,
+            error_code="UPLOAD_INTERRUPT_MISSING",
+        )
         return JSONResponse(
             status_code=500,
             content={"error": "Evaluation could not be started. Please try again."},
@@ -1239,6 +1391,14 @@ async def upload_cv(
     scenario = interrupt_payload.get("scenario")
 
     if scenario == "MULTIPLE_FOUND":
+        _log_evaluation_marker(
+            "upload:returning_response",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            status=202,
+            scenario=scenario,
+        )
         return JSONResponse(
             status_code=202,
             content={
@@ -1247,6 +1407,14 @@ async def upload_cv(
             },
         )
 
+    _log_evaluation_marker(
+        "upload:returning_response",
+        chat_id=chat_id,
+        user_id=user_id,
+        thread_id=thread_id,
+        status=200,
+        scenario=scenario,
+    )
     return JSONResponse(
         status_code=200,
         content={
@@ -1572,6 +1740,7 @@ async def evaluation_stream_generator(
 
     purge_reason = None
     try:
+        _log_evaluation_marker("stream:first_event_sent", chat_id=chat_id, thread_id=thread_id)
         yield f"event: meta\ndata: {json.dumps(meta)}\n\n"
         logger.info(
             "SSE stream started : thread=%s candidate_name_present=%s role_present=%s",
@@ -1582,6 +1751,7 @@ async def evaluation_stream_generator(
         last_meta = meta
         config = {"configurable": {"thread_id": thread_id}}
 
+        _log_evaluation_marker("stream:pipeline_start", chat_id=chat_id, thread_id=thread_id)
         result_stream = graph.astream(
             Command(resume=resume_payload),
             config=config,
@@ -1607,6 +1777,12 @@ async def evaluation_stream_generator(
             if state_snapshot.get("error"):
                 await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
                 purge_reason = "pipeline_state_error"
+                _log_evaluation_marker(
+                    "stream:error",
+                    chat_id=chat_id,
+                    thread_id=thread_id,
+                    error_code=state_snapshot.get("error_code") or "unknown",
+                )
                 logger.warning(
                     "SSE pipeline state error : thread=%s error_code=%s",
                     thread_id,
@@ -1666,11 +1842,19 @@ async def evaluation_stream_generator(
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_COMPLETED)
         purge_reason = "evaluation_completed"
         yield f"event: done\ndata: {json.dumps({})}\n\n"
+        _log_evaluation_marker("stream:done", chat_id=chat_id, thread_id=thread_id)
         logger.info(f"SSE stream completed : thread={thread_id}")
 
     except GeminiQuotaExceededError as e:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         purge_reason = "provider_quota_failure"
+        _log_evaluation_marker(
+            "stream:error",
+            chat_id=chat_id,
+            thread_id=thread_id,
+            error_type=type(e).__name__,
+            error_code=e.code,
+        )
         logger.warning("SSE pipeline quota failure : thread=%s error_type=%s", thread_id, type(e).__name__)
         payload = public_error_payload(
             e.code,
@@ -1681,6 +1865,13 @@ async def evaluation_stream_generator(
     except LLMProviderUnavailableError as e:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         purge_reason = "provider_unavailable"
+        _log_evaluation_marker(
+            "stream:error",
+            chat_id=chat_id,
+            thread_id=thread_id,
+            error_type=type(e).__name__,
+            error_code=e.error_code,
+        )
         logger.warning(
             "SSE pipeline provider unavailable : thread=%s provider=%s model=%s status_code=%s provider_status=%s",
             thread_id,
@@ -1708,6 +1899,12 @@ async def evaluation_stream_generator(
     except Exception as e:
         await _set_graph_evaluation_status(graph, thread_id, EVALUATION_FAILED)
         purge_reason = "pipeline_exception"
+        _log_evaluation_marker(
+            "stream:error",
+            chat_id=chat_id,
+            thread_id=thread_id,
+            error_type=type(e).__name__,
+        )
         logger.error("SSE pipeline failed : thread=%s error_type=%s", thread_id, type(e).__name__)
         yield f"event: error\ndata: {json.dumps(public_error_payload('EVALUATION_FAILED'))}\n\n"
     finally:
@@ -1749,6 +1946,7 @@ async def stream_evaluation(
             detail=EVALUATION_RESTORE_FAILED_MESSAGE,
         )
 
+    _log_evaluation_marker("stream:start", chat_id=chat_id, user_id=user_id, thread_id=thread_id)
     owned_chat = await _get_owned_chat(chat_id, user_id)
     _assert_chat_thread(owned_chat, thread_id)
 
@@ -1777,7 +1975,15 @@ async def stream_evaluation(
         }:
             return _sse_response(_single_error_stream(_thread_terminal_error_payload(mock_status)))
 
+        _log_evaluation_marker("stream:claim_lock_start", chat_id=chat_id, user_id=user_id, thread_id=thread_id)
         if not await _claim_stream_thread(thread_id, chat_id=chat_id):
+            _log_evaluation_marker(
+                "stream:error",
+                chat_id=chat_id,
+                user_id=user_id,
+                thread_id=thread_id,
+                error_code=EVALUATION_IN_PROGRESS,
+            )
             return _sse_response(
                 _single_error_stream(_thread_terminal_error_payload(EVALUATION_IN_PROGRESS))
             )
@@ -1786,8 +1992,16 @@ async def stream_evaluation(
 
     graph = request.app.state.graph
 
+    _log_evaluation_marker("stream:claim_lock_start", chat_id=chat_id, user_id=user_id, thread_id=thread_id)
     if not await _claim_stream_thread(thread_id, chat_id=chat_id):
         logger.info("Duplicate SSE stream rejected : chat=%s thread=%s", chat_id, thread_id)
+        _log_evaluation_marker(
+            "stream:error",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            error_code=EVALUATION_IN_PROGRESS,
+        )
         return _sse_response(
             _single_error_stream(_thread_terminal_error_payload(EVALUATION_IN_PROGRESS))
         )
@@ -1800,6 +2014,15 @@ async def stream_evaluation(
         )
     except Exception as e:
         await _release_stream_thread(thread_id, reason="checkpoint_read_failed", chat_id=chat_id)
+        _log_evaluation_marker(
+            "stream:error",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            status=503,
+            error_type=type(e).__name__,
+            error_code="EVALUATION_STATE_TEMPORARILY_UNAVAILABLE",
+        )
         logger.error(
             "Failed to read checkpoint : thread=%s error_type=%s",
             thread_id,
@@ -1815,6 +2038,14 @@ async def stream_evaluation(
 
     if snapshot is None or not snapshot.values:
         await _release_stream_thread(thread_id, reason="checkpoint_missing", chat_id=chat_id)
+        _log_evaluation_marker(
+            "stream:error",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            status=404,
+            error_code="checkpoint_missing",
+        )
         raise HTTPException(status_code=404, detail=EVALUATION_SESSION_UNAVAILABLE_MESSAGE)
 
     meta = _candidate_meta(snapshot.values, snapshot.tasks)
@@ -1843,6 +2074,13 @@ async def stream_evaluation(
     }:
         await _release_stream_thread(thread_id, reason=f"terminal_status:{evaluation_status}", chat_id=chat_id)
         await release_evaluation_lock(chat_id, evaluation_lock_token)
+        _log_evaluation_marker(
+            "stream:error",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            error_code=evaluation_status,
+        )
         return _sse_response(
             _single_error_stream(_thread_terminal_error_payload(evaluation_status))
         )
@@ -1854,6 +2092,14 @@ async def stream_evaluation(
     if not stream_lock_token:
         await _release_stream_thread(thread_id, reason="evaluation_lock_claim_failed", chat_id=chat_id)
         await release_evaluation_lock(chat_id, evaluation_lock_token)
+        _log_evaluation_marker(
+            "stream:error",
+            chat_id=chat_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            status=503,
+            error_code=EVALUATION_LOCK_UNAVAILABLE,
+        )
         return JSONResponse(
             status_code=503,
             content=public_error_payload(EVALUATION_LOCK_UNAVAILABLE),

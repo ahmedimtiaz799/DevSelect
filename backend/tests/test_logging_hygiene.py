@@ -14,6 +14,7 @@ os.environ["APP_ENV"] = "development"
 
 from app.agents.agent2_github_analysis import _log_structured_output_failure
 from app.middleware.error_handler import handle_unhandled_exception, init_sentry
+from app.routers.evaluation import _log_evaluation_marker
 from app.utils.logging_hygiene import (
     configure_logging_hygiene,
     redact_log_text,
@@ -231,6 +232,34 @@ class LoggingHygieneUnitTests(unittest.TestCase):
         for forbidden in ("first_100", "first_200", "last_200", "meta={meta}"):
             self.assertNotIn(forbidden, combined)
         self.assertNotIn("_safe_cv_preview", sources["agent1"])
+
+    def test_evaluation_flow_markers_use_safe_diagnostics_only(self):
+        logger = logging.getLogger("devselect")
+
+        with self.assertLogs(logger, level="INFO") as captured:
+            _log_evaluation_marker(
+                "upload:start",
+                chat_id=FAKE_UUID,
+                user_id=FAKE_UUID,
+                thread_id=FAKE_UUID,
+                file_ext=CV_SENTINEL,
+                file_size_bytes=12345,
+                error_type=f"RuntimeError {FAKE_JWT}",
+                error_code=FAKE_JWT,
+            )
+
+        output = "\n".join(captured.output)
+        self.assertIn("evaluation_flow", output)
+        self.assertIn("marker=upload:start", output)
+        self.assertIn("chat=chat:", output)
+        self.assertIn("user=user:", output)
+        self.assertIn("thread=thread:", output)
+        self.assertIn("file_size_bytes=12345", output)
+        self.assertIn("file_ext=unknown", output)
+        self.assertIn("error_type=Exception", output)
+        self.assertIn("error_code=UNKNOWN", output)
+        for sentinel in (FAKE_UUID, FAKE_JWT, CV_SENTINEL, FAKE_IP):
+            self.assertNotIn(sentinel, output)
 
 
 class ErrorHandlerLoggingTests(unittest.IsolatedAsyncioTestCase):

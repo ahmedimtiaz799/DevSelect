@@ -3,6 +3,8 @@ import { safeErrorPayload, safeUserErrorMessage } from './errorSafety';
 
 const BASE_URL = import.meta.env.VITE_API_URL;
 const DEBUG_STREAM_LOGS = import.meta.env.DEV;
+const STREAM_CONNECTION_INTERRUPTED_MESSAGE =
+  'Report stream connection was interrupted. Please try again later.';
 
 function logUnknownEvent(scope, eventType) {
   if (!DEBUG_STREAM_LOGS) return;
@@ -162,7 +164,7 @@ export function streamChatResponse(
       }
       settled = true;
       onError({
-        error: 'Evaluation stopped unexpectedly. Please try again.',
+        error: STREAM_CONNECTION_INTERRUPTED_MESSAGE,
         code: 'UNEXPECTED_STREAM_END',
       });
     },
@@ -172,10 +174,8 @@ export function streamChatResponse(
     }
     settled = true;
     onError({
-      error: safeUserErrorMessage(
-        err?.message,
-        'Stream connection failed. Please try again.'
-      ),
+      error: STREAM_CONNECTION_INTERRUPTED_MESSAGE,
+      code: 'STREAM_CONNECTION_INTERRUPTED',
     });
   });
 

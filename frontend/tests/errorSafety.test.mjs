@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -7,6 +8,12 @@ import {
 } from '../src/lib/errorSafety.js';
 
 const fallback = 'Safe fallback message.';
+const apiSource = readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8');
+const streamingSource = readFileSync(
+  new URL('../src/lib/streaming.js', import.meta.url),
+  'utf8'
+);
+const chatStreamSource = streamingSource.split('export function streamFollowUpResponse')[0];
 const sentinels = [
   'raw_cv_text=CANDIDATE_PRIVATE_CV_TEXT',
   'system prompt: INTERNAL_RECRUITER_PROMPT',
@@ -59,4 +66,16 @@ test('unsafe or identifier-like error codes are discarded', () => {
     fallback
   );
   assert.equal('code' in payload, false);
+});
+
+test('upload and stream transport failures use stage-specific safe messages', () => {
+  assert.match(
+    apiSource,
+    /Upload connection failed before report streaming started\. Please check your connection and try once later\./
+  );
+  assert.match(
+    streamingSource,
+    /Report stream connection was interrupted\. Please try again later\./
+  );
+  assert.doesNotMatch(chatStreamSource, /safeUserErrorMessage\(\s*err\?\.message/);
 });
