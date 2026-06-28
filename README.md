@@ -31,16 +31,23 @@ DevSelect explores a safer first-pass workflow: extract evidence, review relevan
 
 ## Screenshots
 
-Screenshots are planned. To avoid exposing real candidate data, the repository currently includes a privacy-focused screenshot checklist rather than unpublished or placeholder images.
+The screenshots below use the dark theme and show the main DevSelect recruiter workflow. The generated report screenshot uses approved owner portfolio data and does not include private contact details, secrets, or dashboard information.
 
-Recommended captures:
+### Landing Page
 
-1. Landing page in light mode.
-2. Chat and generated report in dark mode using a fake CV.
-3. A structured report section with all personal data removed.
-4. A simple architecture diagram.
+![DevSelect landing page](assets/screenshots/landing-dark.png)
 
-See [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) for the safe capture checklist and final file names.
+### Chat Workspace
+
+![DevSelect chat workspace before CV upload](assets/screenshots/chat-workspace-dark.png)
+
+### Generated Candidate Report
+
+![DevSelect generated candidate evaluation report](assets/screenshots/generated-report-dark.png)
+
+Future screenshots should avoid secrets, tokens, private dashboards, raw logs, and sensitive candidate contact details.
+
+See [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) for the screenshot inventory and safe capture checklist.
 
 ## Architecture Overview
 

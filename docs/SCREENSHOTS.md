@@ -1,36 +1,32 @@
 # DevSelect Screenshot Guide
 
-The repository does not currently include recruiter-ready product screenshots. Add no more than four carefully reviewed images before sharing the project widely.
+The repository includes three recruiter-ready screenshots. They use the same dark theme for a consistent presentation.
 
-## Recommended Set
+## Current Screenshot Set
 
-1. `assets/screenshots/landing-light.png`
-   - Landing page in light mode.
-   - Show the product name and primary workflow clearly.
-   - Alt text: `DevSelect candidate evaluation landing page in light mode`.
+1. `assets/screenshots/landing-dark.png`
+   - DevSelect landing page in dark mode.
+   - README alt text: `DevSelect landing page`.
 
-2. `assets/screenshots/chat-dark.png`
-   - Authenticated chat page in dark mode.
-   - Use an empty state or fake candidate data.
-   - Alt text: `DevSelect recruiter chat workspace in dark mode`.
+2. `assets/screenshots/chat-workspace-dark.png`
+   - Authenticated recruiter workspace before CV upload.
+   - README alt text: `DevSelect chat workspace before CV upload`.
 
-3. `assets/screenshots/report-light.png`
-   - Structured hiring report generated from a synthetic CV.
-   - Show useful report sections without exposing personal data.
-   - Alt text: `DevSelect structured AI hiring report generated from sample data`.
+3. `assets/screenshots/generated-report-dark.png`
+   - Structured candidate report using approved owner portfolio data.
+   - It contains no private contact details, secrets, or dashboard information.
+   - README alt text: `DevSelect generated candidate evaluation report`.
 
-4. `assets/diagrams/architecture.png`
-   - Export of the architecture diagram in `docs/ARCHITECTURE.md`.
-   - Alt text: `DevSelect frontend, backend, database, Redis, and AI workflow architecture`.
+Future screenshots should use sample data or data explicitly approved for public portfolio use.
 
 ## Privacy Checklist
 
-Before adding an image:
+Before adding or replacing an image:
 
-- use only fake or intentionally public sample candidate data
-- remove or blur email addresses, phone numbers, locations, user IDs, chat IDs, and filenames
-- remove tokens, private query parameters, project references, admin controls, and browser developer tools
-- remove real CV content and provider/dashboard details
+- use only sample data or owner-approved portfolio data
+- remove or blur email addresses, phone numbers, home addresses, user IDs, chat IDs, and sensitive filenames
+- remove tokens, private query parameters, project references, admin controls, private dashboards, and browser developer tools
+- remove secrets, raw logs, provider payloads, and unapproved CV content
 - check sidebar history for unrelated candidate names
 - check the browser address bar for sensitive paths or parameters
 - confirm no notification, profile menu, or background window exposes personal data
@@ -44,17 +40,3 @@ Before adding an image:
 - Store diagrams under `assets/diagrams/`.
 - Use descriptive lowercase filenames.
 - Add useful alt text for every image.
-
-## Optional Light/Dark Pair
-
-If both report themes are stable, use GitHub's theme-aware markup:
-
-```html
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/report-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="assets/screenshots/report-light.png">
-  <img alt="DevSelect generated hiring report screen" src="assets/screenshots/report-light.png">
-</picture>
-```
-
-Do not add this block to the root README until both referenced files exist.

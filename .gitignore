@@ -84,6 +84,13 @@ capture*.jpg
 capture*.jpeg
 capture*.webp
 
+# Approved README screenshots
+!assets/
+!assets/screenshots/
+!assets/screenshots/landing-dark.png
+!assets/screenshots/chat-workspace-dark.png
+!assets/screenshots/generated-report-dark.png
+
 # Browser automation and local browser profiles
 playwright-report/
 test-results/
