@@ -31,7 +31,7 @@ DevSelect explores a safer first-pass workflow: extract evidence, review relevan
 
 ## Screenshots
 
-Screenshots still need to be added before the repository is shared widely. This avoids publishing candidate data or inventing image links that do not exist.
+Screenshots are planned. To avoid exposing real candidate data, the repository currently includes a privacy-focused screenshot checklist rather than unpublished or placeholder images.
 
 Recommended captures:
 
@@ -278,19 +278,19 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for configuration and rollback guid
 - Introduce object storage only if product requirements justify it and retention is defined.
 - Add privacy-safe recruiter demo analytics and funnel metrics.
 
-## Interview Talking Points
+## Engineering Highlights
 
-- I separated browser-safe Supabase access from privileged backend operations and enforced both JWT ownership checks and RLS.
-- I chose SSE because report generation is a one-way stream and does not require WebSocket complexity.
-- I designed a conditional LangGraph flow that skips GitHub analysis when it is not relevant to the candidate domain.
-- I used Redis for atomic portfolio quotas, follow-up limits, duplicate-evaluation locks, token-bucket rate limiting, and circuit control.
-- I hardened uploads with layered validation and removed raw PDFs and transient checkpoint evidence after processing.
-- I treated logging and public errors as data-loss surfaces, adding identifier hashing, Sentry scrubbing, and sentinel leakage tests.
-- I diagnosed production upload failures by separating CORS/preflight, upload acceptance, and SSE startup into safe diagnostic stages.
-- I validated database changes in staging before main, with backups, RLS tests, backend health checks, frontend smoke tests, and UI cleanup.
-- I packaged the backend as a non-root, one-worker Docker service and configured production-specific CORS, docs, and admin-route behavior.
-- I can explain the current scaling limit clearly: long AI jobs belong in durable workers before the product serves high concurrency.
+- Separates browser-safe Supabase access from privileged backend operations, with JWT ownership checks and RLS as independent authorization layers.
+- Uses SSE for efficient one-way delivery of evaluation progress and incremental report content without unnecessary WebSocket complexity.
+- Routes candidates through a conditional LangGraph workflow that skips GitHub analysis when it is not relevant to the candidate domain.
+- Applies atomic Redis quotas, follow-up limits, duplicate-evaluation locks, token-bucket rate limiting, and circuit controls to protect provider cost and availability.
+- Validates uploads in layers and removes raw PDFs and transient checkpoint evidence after processing.
+- Treats logging and public errors as data-loss surfaces through identifier hashing, Sentry scrubbing, and sentinel leakage tests.
+- Diagnoses production network failures through separate CORS/preflight, upload-acceptance, and SSE-startup signals without logging sensitive payloads.
+- Validates database changes in staging before main using backups, RLS tests, backend health checks, frontend smoke tests, and UI cleanup.
+- Packages FastAPI as a non-root, one-worker Docker service with production-specific CORS, API-doc, and admin-route controls.
+- Documents the main scaling boundary clearly: long-running AI evaluation should move to durable workers before serving high concurrency.
 
 ## License
 
-License not specified.
+No open-source license has been added yet. All rights reserved by default.
